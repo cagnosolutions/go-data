@@ -1,0 +1,39 @@
+{
+  "id": "42",
+  "name": [
+    "Leonid",
+    "Bugaev"
+  ],
+  "email": "leonsbox@gmail.com",
+  "gender": "male",
+  "active": true,
+  "nested-object": {
+    "secret-sauce": "the number is 42!"
+  },
+  "orders": {
+    "N-0032": {
+      "name": "cane",
+      "desc": "disabilities",
+      "qty": 3,
+      "total": 24.58
+    },
+    "N-0012": {
+      "name": "AK-47",
+      "desc": "automatic rifle/firearm",
+      "qty": 1,
+      "total": 1933.58
+    },
+    "N-0086": {
+      "name": "dog food",
+      "desc": "N/A",
+      "qty": 1,
+      "total": 54.00
+    },
+    "ids": [
+      "N-0012",
+      "N-0032",
+      "N-0086"
+    ]
+  },
+  "hello": "world"
+}
