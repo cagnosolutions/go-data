@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/cagnosolutions/go-perform/cmd/puredb/matcher"
-	"github.com/cagnosolutions/go-perform/cmd/puredb/ndjson"
-	"github.com/cagnosolutions/go-perform/cmd/puredb/ndjson/tools/jsonv1/scanner"
+	"github.com/cagnosolutions/go-data/pkg/db/matcher"
+	"github.com/cagnosolutions/go-data/pkg/json/ndjson"
+	"github.com/cagnosolutions/go-data/pkg/json/ndjson/tools/jsonv1/scanner"
 )
 
 var name = "small_file.json"

@@ -3,7 +3,7 @@ package tools
 import (
 	"testing"
 
-	"github.com/cagnosolutions/go-perform/cmd/puredb/ndjson/tools/jsonv1/scanner"
+	"github.com/cagnosolutions/go-data/pkg/json/ndjson/tools/jsonv1/scanner"
 )
 
 var fileName = "small_file.json"
