@@ -20,20 +20,11 @@ func NewAPIServer(base string) *RESTApiServer {
 	return srv
 }
 
-func (srv *RESTApiServer) RegisterResourceHandler(name string, re ResourceHandler) {
-	r := &resourceHandler{
+func (srv *RESTApiServer) RegisterResource(name string, re ResourceCollection) {
+	r := &resource{
 		name: name,
 		path: clean(srv.base + name),
-		re:   re,
-	}
-	srv.h.Handle(r.path, r)
-}
-
-func (srv *RESTApiServer) RegisterResource(name string, re Resource) {
-	r := &resource{
-		name:     name,
-		path:     clean(srv.base + name),
-		Resource: re,
+		col:  re,
 	}
 	srv.h.Handle(r.path, r)
 }
