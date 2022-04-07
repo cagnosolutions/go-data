@@ -44,23 +44,24 @@ func (t *Table) FillTable(ptr interface{}) {
 	typ := val.Type()
 	// fill out the table name, and instantiate the fields
 	t.Name = typ.Name()
-	t.Fields = make([]Field, val.NumField())
+	t.Fields = make([]Field, 0, val.NumField())
 	// loop over each field in the struct
 	for i := 0; i < val.NumField(); i++ {
 		// return an instance of struct field at this position
 		sf := typ.Field(i)
 		// check to make sure the field is exported
-		if sf.Anonymous {
+		if !sf.IsExported() {
 			// if it's not, skip it
-			i--
 			continue
 		}
 		// otherwise, fill out the table field
-		t.Fields[i] = Field{
-			Name:  sf.Name,
-			Kind:  sf.Type.Kind(),
-			Value: val.Field(i).Interface(),
-		}
+		t.Fields = append(
+			t.Fields, Field{
+				Name:  sf.Name,
+				Kind:  sf.Type.Kind(),
+				Value: val.Field(i).Interface(),
+			},
+		)
 	}
 }
 

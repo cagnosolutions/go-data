@@ -5,11 +5,11 @@ package format
 func ToSnakeCase(s string) string {
 	var b []byte
 	for i := range s {
-		if isAlphaUpper(s[i]) {
-			if i > 0 && isAlphaLower(s[i-1]) {
+		if IsAlphaUpper(s[i]) {
+			if i > 0 && IsAlphaLower(s[i-1]) {
 				b = append(b, '_')
 			}
-			b = append(b, upperToLower(s[i]))
+			b = append(b, UpperToLower(s[i]))
 			continue
 		}
 		b = append(b, s[i])

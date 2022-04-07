@@ -1,7 +1,6 @@
 package table
 
 import (
-	"fmt"
 	"log"
 	"reflect"
 	"strings"
@@ -31,7 +30,7 @@ func StructToMap(ptr interface{}) map[string]interface{} {
 		// return an instance of struct field at this position
 		sf := typ.Field(i)
 		// check to make sure the field is exported
-		if sf.Anonymous {
+		if !sf.IsExported() {
 			// if it's not, skip it
 			i--
 			continue
@@ -49,61 +48,44 @@ func StructToMap(ptr interface{}) map[string]interface{} {
 // within the map. Any map keys that do not match the struct field
 // names, or values that are not able to be aligned will be ignored.
 func MapToStruct(m map[string]interface{}, ptr interface{}) {
-	// get the value of the map
-	mval := reflect.ValueOf(m)
-	if mval.Kind() == reflect.Ptr {
-		// if it is a pointer to a map then
-		// dereference the pointer (maybe we
-		// should panic in this instance)
-		mval = mval.Elem()
-		// since we got a pointer, better
-		// make sure it was in fact a map
-		// check the type to ensure it is actually a struct
-		if mval.Kind() != reflect.Map {
-			log.Panicf("%v type can't have attributes inspected\n", mval.Kind())
-		}
+	// get a value to inspect the map and make sure it is not
+	// nil and has at least one entry.
+	if reflect.ValueOf(m).IsNil() || reflect.ValueOf(m).Len() < 1 {
+		log.Panicln("supplied map cannot be nil, or empty")
 	}
 	// next, let's ensure we have the correct receiver type
 	// which should be a pointer to a struct
-	sval := reflect.ValueOf(ptr)
-	if sval.Kind() == reflect.Ptr {
+	val := reflect.ValueOf(ptr)
+	if val.Kind() == reflect.Ptr {
 		// dereference the pointer
-		sval = sval.Elem()
+		val = val.Elem()
 	}
 	// check the type to ensure it is actually a struct
-	if sval.Kind() != reflect.Struct {
-		log.Panicf("%v type can't have attributes inspected\n", sval.Kind())
+	if val.Kind() != reflect.Struct {
+		log.Panicf("%v type can't have attributes inspected\n", val.Kind())
 	}
 	// get a type for the struct
-	styp := sval.Type()
-	// now that we have ensured that we have a map along
-	// with the correct receiver type, we can begin to
-	// loop over each field in the struct and attempt to
-	// look up the map key with the same struct field name
-	// and assign the value of the struct field using the
-	// value from the map.
-	for i := 0; i < sval.NumField(); i++ {
-		// get the struct field value at this index
-		sfv := styp.Field(i)
-		// sfv := sval.Field(i)
-		// check to make sure the value can be set
-		if !sfv.IsExported() {
-			// if not, skip it
+	typ := val.Type()
+	// loop over each field of the struct
+	for i := 0; i < val.NumField(); i++ {
+		// return the value for the field in this position
+		fld := val.Field(i)
+		// check to make sure we can set this field
+		if !fld.CanSet() {
+			// if it's not, skip it
 			continue
 		}
-		// now, we should look to see if we can find
-		// a map value for the supplied struct field
-		// value that we are on.
-		mkv := mval.MapIndex(reflect.ValueOf(sfv.Name))
-		fmt.Printf("mkv=%#v\n", mkv)
-		// finally, we should set the struct field value
-		// to the value found at this map key
-		switch mkv.Kind() {
-		case reflect.Int:
-			sval.Field(i).SetInt(mkv.Int())
-		case reflect.String:
-			sval.Field(i).Set(mkv.Elem())
+		// get the key (name of current field in struct)
+		key := typ.Field(i).Name
+		// attempt to look this field up in the map
+		v, found := m[key]
+		if !found {
+			// if this key was not in the map, skip
+			continue
 		}
+		// otherwise, attempt to set the struct field using
+		// the value that was mapped via the key
+		fld.Set(reflect.ValueOf(v))
 	}
 }
 
