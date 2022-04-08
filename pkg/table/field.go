@@ -12,6 +12,14 @@ type Field struct {
 	Value interface{}
 }
 
+func (f *Field) NameSize() int {
+	return len(f.Name)
+}
+
+func (f *Field) ValueSize() int {
+	return reflect.ValueOf(f.Value).Len()
+}
+
 // ValueString returns the interface value as a string
 func (f *Field) ValueString() string {
 	switch f.Value.(type) {

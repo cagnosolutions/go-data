@@ -32,7 +32,7 @@ func TestMapToStruct(t *testing.T) {
 
 func TestStructToTable(t *testing.T) {
 	tbl := NewTable()
-	tbl.FillTable(&Person{Name: "Darth Vader", Age: 56, IsActive: true})
+	tbl.Fill(&Person{Name: "Darth Vader", Age: 56, IsActive: true})
 	if len(tbl.Name) == 0 {
 		t.Error("empty table")
 	}
@@ -65,17 +65,6 @@ func BenchmarkMapToStruct(b *testing.B) {
 		}
 	}
 	res = p
-}
-
-func BenchmarkStructToTable(b *testing.B) {
-	b.ReportAllocs()
-	tbl := NewTable()
-	for i := 0; i < b.N; i++ {
-		tbl.FillTable(&Person{Name: "Darth Vader", Age: 56, IsActive: true})
-		if len(tbl.Name) == 0 {
-			b.Error("empty table")
-		}
-	}
 }
 
 func TestSprintAny(t *testing.T) {

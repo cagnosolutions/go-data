@@ -5,12 +5,27 @@ import (
 	"log"
 	"reflect"
 	"strings"
+	"unsafe"
 )
 
 // Table represents a generic table structure
 type Table struct {
 	Name   string
 	Fields []Field
+}
+
+func (t *Table) Size() int {
+	if t.Name == "" || t.Fields == nil || len(t.Fields) < 1 {
+		return 0
+	}
+	var size int
+	size += len(t.Name)
+	size += len(t.Fields)
+	for i := range t.Fields {
+		size += len(t.Fields[i].Name)
+		size += int(unsafe.Sizeof(t.Fields[i].Value))
+	}
+	return size
 }
 
 // NewTable creates and returns a new empty *Table
@@ -23,13 +38,13 @@ func (t *Table) String() string {
 	var ss []string
 	ss = append(ss, fmt.Sprintf("Name: %q", t.Name))
 	for _, fld := range t.Fields {
-		ss = append(ss, fmt.Sprintf("%s", fld))
+		ss = append(ss, fmt.Sprintf("%v", fld))
 	}
 	return strings.Join(ss, ", ")
 }
 
-// FillTable fills out a table using a *struct as input
-func (t *Table) FillTable(ptr interface{}) {
+// Fill fills out a table using a *struct as input
+func (t *Table) Fill(ptr interface{}) {
 	// get the value of the struct
 	val := reflect.ValueOf(ptr)
 	if val.Kind() == reflect.Ptr {
@@ -69,6 +84,6 @@ func (t *Table) FillTable(ptr interface{}) {
 // struct pointer and returns the newly created *Table.
 func MakeTable(ptr interface{}) *Table {
 	t := NewTable()
-	t.FillTable(ptr)
+	t.Fill(ptr)
 	return t
 }
