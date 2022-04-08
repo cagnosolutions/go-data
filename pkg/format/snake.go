@@ -71,7 +71,7 @@ func ToSnakeCase(s string) string {
 	return dist.String()
 }
 
-func ToSnakeCaseCopy(s string) string {
+func _ToSnakeCaseCopy(s string) string {
 	if s == "" {
 		return s
 	}

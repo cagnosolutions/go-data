@@ -6,14 +6,14 @@ import (
 )
 
 type Person struct {
-	Name   string
-	foo    int
-	Age    int
-	Active bool
+	Name     string
+	foo      int
+	Age      int
+	IsActive bool
 }
 
 func TestStructToMap(t *testing.T) {
-	m := StructToMap(&Person{Name: "Darth Vader", Age: 56, Active: true})
+	m := StructToMap(&Person{Name: "Darth Vader", Age: 56, IsActive: true})
 	if m == nil {
 		t.Error("got nil map")
 	}
@@ -21,7 +21,7 @@ func TestStructToMap(t *testing.T) {
 }
 
 func TestMapToStruct(t *testing.T) {
-	m := map[string]interface{}{"Age": 56, "Name": "Darth Vader", "Active": true}
+	m := map[string]interface{}{"Age": 56, "foo": 234, "Name": "Darth Vader", "Active": true}
 	var p Person
 	MapToStruct(m, &p)
 	if p == *new(Person) || &p == nil {
@@ -32,43 +32,73 @@ func TestMapToStruct(t *testing.T) {
 
 func TestStructToTable(t *testing.T) {
 	tbl := NewTable()
-	tbl.FillTable(&Person{Name: "Darth Vader", Age: 56, Active: true})
+	tbl.FillTable(&Person{Name: "Darth Vader", Age: 56, IsActive: true})
 	if len(tbl.Name) == 0 {
 		t.Error("empty table")
 	}
 	fmt.Printf("%#v\n", tbl)
 }
 
+var res interface{}
+
 func BenchmarkStructToMap(b *testing.B) {
 	b.ReportAllocs()
-	p := &Person{Name: "Darth Vader", Age: 56, Active: true}
+	p := &Person{Name: "Darth Vader", Age: 56, IsActive: true}
+	var m map[string]interface{}
 	for i := 0; i < b.N; i++ {
-		m := StructToMap(p)
+		m = StructToMap(p)
 		if m == nil {
 			b.Error("got nil map")
 		}
 	}
+	res = m
 }
 
 func BenchmarkMapToStruct(b *testing.B) {
 	b.ReportAllocs()
 	m := map[string]interface{}{"Name": "Darth Vader", "Age": 56, "Active": true}
+	var p Person
 	for i := 0; i < b.N; i++ {
-		var p Person
 		MapToStruct(m, &p)
 		if p == *new(Person) || &p == nil {
 			b.Error("got empty struct")
 		}
 	}
+	res = p
 }
 
 func BenchmarkStructToTable(b *testing.B) {
 	b.ReportAllocs()
 	tbl := NewTable()
 	for i := 0; i < b.N; i++ {
-		tbl.FillTable(&Person{Name: "Darth Vader", Age: 56, Active: true})
+		tbl.FillTable(&Person{Name: "Darth Vader", Age: 56, IsActive: true})
 		if len(tbl.Name) == 0 {
 			b.Error("empty table")
 		}
 	}
+}
+
+func TestSprintAny(t *testing.T) {
+	var out string
+	out = SprintAny(
+		"My name is $name, I am $age and I am $is_active",
+		&Person{Name: "Darth Vader", Age: 56, IsActive: true},
+	)
+	fmt.Println(out)
+	res = out
+}
+
+func BenchmarkSprintAny(b *testing.B) {
+	b.ReportAllocs()
+	var out string
+	for i := 0; i < b.N; i++ {
+		out = SprintAny(
+			"My name is $name, I am $age and I am $is_active",
+			&Person{Name: "Darth Vader", Age: 56, IsActive: true},
+		)
+		if len(out) == 0 {
+			b.Error("fail")
+		}
+	}
+	res = out
 }

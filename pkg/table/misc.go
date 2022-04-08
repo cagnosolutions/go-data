@@ -1,9 +1,13 @@
 package table
 
 import (
+	"fmt"
 	"log"
+	"os"
 	"reflect"
 	"strings"
+
+	"github.com/cagnosolutions/go-data/pkg/format"
 )
 
 // StructToMap takes a struct or struct pointer and transforms it
@@ -32,7 +36,6 @@ func StructToMap(ptr interface{}) map[string]interface{} {
 		// check to make sure the field is exported
 		if !sf.IsExported() {
 			// if it's not, skip it
-			i--
 			continue
 		}
 		// attempt to add it to the map
@@ -175,4 +178,71 @@ func ParseTagString(tag string) (string, string) {
 		return tag[:idx], tag[idx+1:]
 	}
 	return tag, ""
+}
+
+func SprintAny(s string, v interface{}) string {
+	// get the value of the interface
+	val := reflect.ValueOf(v)
+	if val.Kind() == reflect.Ptr {
+		// dereference the pointer
+		val = val.Elem()
+	}
+	// check the type to ensure it is actually a struct
+	if val.Kind() != reflect.Struct {
+		log.Panicf(
+			"%v type can't have attributes inspected, expected a struct.\n",
+			val.Kind(),
+		)
+	}
+	// get the underlying type from the reflected value
+	typ := val.Type()
+	return os.Expand(
+		s, func(attr string) string {
+			// loop over each field in the struct
+			for i := 0; i < val.NumField(); i++ {
+				// return an instance of struct field at this position
+				sf := typ.Field(i)
+				// check to make sure the field is exported
+				if !sf.IsExported() {
+					// if it's not, skip it
+					continue
+				}
+				// go to next one if no match is found
+				if !LooseMatch(attr, sf.Name, format.ToSnakeCase) {
+					continue
+				}
+				// get the struct field value
+				sfv := val.Field(i)
+				// return field value
+				switch sfv.Kind() {
+				case reflect.String:
+					return fmt.Sprintf("'%s'", sfv.String())
+				default:
+					return fmt.Sprintf("%v", sfv.Interface())
+				}
+			}
+			return ""
+		},
+	)
+}
+
+func LooseMatch(s1, s2 string, fn func(s string) string) bool {
+	// first do direct match
+	if s1 == s2 {
+		return true
+	}
+	// next try case folding match
+	if strings.EqualFold(s1, s2) {
+		return true
+	}
+	// check for fn
+	if fn == nil {
+		return false
+	}
+	// next try formatting function match
+	if strings.EqualFold(s1, fn(s2)) {
+		return true
+	}
+	// otherwise, no match
+	return false
 }
