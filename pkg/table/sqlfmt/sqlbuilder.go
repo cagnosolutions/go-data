@@ -8,14 +8,22 @@ import (
 )
 
 const (
-	stmtCreate = `CREATE TABLE IF NOT EXISTS (
-	id INTEGER NOT NULL PRIMARY KEY,
-	$field $type NOT NULL DEFAULT $default,
-);`
+	stmtShowTables = `SELECT 'tbl_name' FROM sqlite_master WHERE 'type'='table' AND 'tbl_name' NOT LIKE 'sqlite_%';`
+	stmtCreate     = `CREATE TABLE IF NOT EXISTS (
+id INTEGER NOT NULL PRIMARY KEY,
+$field $type NOT NULL DEFAULT $default);`
 	stmtCreateSize = 125 // rough estimate of stmt size without table info
 )
 
 type SQLBuilder struct {
+}
+
+func (sql *SQLBuilder) ShowTables() string {
+	return ""
+}
+
+func (sql *SQLBuilder) DropTable() string {
+	return ""
 }
 
 func (sql *SQLBuilder) CreateStmt(t *table.Table) string {

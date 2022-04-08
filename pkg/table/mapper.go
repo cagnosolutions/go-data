@@ -23,12 +23,6 @@ func Mapper(args ...interface{}) *TableLite {
 	return s
 }
 
-type Entry struct {
-	Key string
-	Val interface{}
-	Typ byte
-}
-
 const (
 	INVALID byte = iota
 	INTEGER
@@ -62,6 +56,13 @@ func typeOf(v interface{}) byte {
 	}
 }
 
+type Entry struct {
+	Key string
+	Val interface{}
+	Typ byte
+}
+
 type TableLite struct {
+	Name   string
 	Fields []Entry
 }
