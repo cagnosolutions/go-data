@@ -95,6 +95,24 @@ func TestTable_Drop(t *testing.T) {
 	fmt.Println(stmt)
 }
 
+func TestTable_Select(t *testing.T) {
+	var tb *Table
+	AssertExpected(t, (*Table)(nil), tb)
+	tb = NewTable(&UserTable1{})
+	AssertExpected(t, true, tb != nil)
+	var stmt string
+	stmt = tb.Select(
+		"is_active=$active and age < $age", map[string]interface{}{
+			"active": true,
+			"age":    3,
+		},
+	)
+	if stmt == "" {
+		t.Error("bad statement")
+	}
+	fmt.Println(stmt)
+}
+
 func TestWithTimeOut(t *testing.T) {
 	timeout := time.After(10 * time.Second)
 	done := make(chan bool)

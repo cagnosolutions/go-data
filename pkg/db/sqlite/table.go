@@ -104,15 +104,32 @@ func (t *Table) Create() string {
 
 func (t *Table) Drop() string {
 	var sb strings.Builder
-	sb.Grow(t.Size + 23)
+	sb.Grow(len(t.Name) + 23)
 	sb.WriteString("DROP TABLE IF EXISTS ")
 	sb.WriteString(t.Name)
 	sb.WriteString(";")
 	return sb.String()
 }
 
-func (t *Table) Select(args ...string) string {
-	return ""
+func (t *Table) Select(where string, data map[string]interface{}) string {
+	var sb strings.Builder
+	var hasWhere bool
+	var whereStr string
+	if len(where) > 0 && data != nil {
+		hasWhere = true
+		whereStr = format.Mprintf(where, data)
+	}
+	sb.Grow(t.Size + 32 + len(whereStr))
+	sb.WriteString("SELECT * FROM ")
+	sb.WriteString(t.Name)
+	if !hasWhere {
+		sb.WriteString(";")
+		return sb.String()
+	}
+	sb.WriteString(" WHERE ")
+	sb.WriteString(whereStr)
+	sb.WriteString(";")
+	return sb.String()
 }
 
 func (t *Table) Insert(args ...string) string {
