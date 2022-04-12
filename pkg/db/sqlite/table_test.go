@@ -95,18 +95,50 @@ func TestTable_Drop(t *testing.T) {
 	fmt.Println(stmt)
 }
 
+func TestTable_Delete(t *testing.T) {
+	var tb *Table
+	AssertExpected(t, (*Table)(nil), tb)
+	tb = NewTable(&UserTable1{})
+	AssertExpected(t, true, tb != nil)
+	var stmt string
+	stmt = tb.Delete(`age > 25 and full_name like '%doe'`)
+	if stmt == "" {
+		t.Error("bad statement")
+	}
+	fmt.Println(stmt)
+}
+
 func TestTable_Select(t *testing.T) {
 	var tb *Table
 	AssertExpected(t, (*Table)(nil), tb)
 	tb = NewTable(&UserTable1{})
 	AssertExpected(t, true, tb != nil)
 	var stmt string
-	stmt = tb.Select(
-		"is_active=$active and age < $age", map[string]interface{}{
-			"active": true,
-			"age":    3,
+	stmt = tb.Select("*", "is_active=true and age < 25")
+	if stmt == "" {
+		t.Error("bad statement")
+	}
+	fmt.Println(stmt)
+}
+
+func TestTable_Insert(t *testing.T) {
+	var tb *Table
+	AssertExpected(t, (*Table)(nil), tb)
+	tb = NewTable(
+		&UserTable1{
+			ID:           24,
+			FName:        "Jon",
+			LName:        "Doe",
+			FullName:     "Jon Doe",
+			EmailAddress: "jdoe@example.com",
+			Age:          47,
+			RegisteredOn: time.Now(),
+			IsActive:     false,
 		},
 	)
+	AssertExpected(t, true, tb != nil)
+	var stmt string
+	stmt = tb.Insert()
 	if stmt == "" {
 		t.Error("bad statement")
 	}
@@ -129,10 +161,11 @@ func TestWithTimeOut(t *testing.T) {
 }
 
 func BenchmarkWithTimeOut(b *testing.B) {
-	timeout := time.After(10 * time.Second)
+	timeout := time.After(15 * time.Second)
 	done := make(chan bool)
 	go func() {
-		b.Run("BenchmarkTable_Create", BenchmarkTable_Create)
+		b.Run("NewTable", BenchmarkTable_NewTable)
+		b.Run("NewTable2", BenchmarkNewTable)
 		time.Sleep(5 * time.Second)
 		done <- true
 	}()
@@ -141,6 +174,26 @@ func BenchmarkWithTimeOut(b *testing.B) {
 		b.Fatal("Test didn't finish in time")
 	case <-done:
 	}
+}
+
+func BenchmarkNewTable(b *testing.B) {
+	b.ReportAllocs()
+	var tbl *Table
+	for i := 0; i < b.N; i++ {
+		tbl = NewTable(
+			&UserTable1{
+				ID:           23,
+				FName:        "Jon",
+				LName:        "Doe",
+				FullName:     "Jon Doe",
+				EmailAddress: "jdoe@example.com",
+				Age:          48,
+				RegisteredOn: time.Now(),
+				IsActive:     true,
+			},
+		)
+	}
+	res = tbl
 }
 
 var res interface{}
@@ -161,6 +214,19 @@ func BenchmarkTable_Create(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		stmt = tb.Create()
+		if stmt == "" {
+			b.Error("bad statement")
+		}
+	}
+	res = stmt
+}
+
+func BenchmarkTable_Delete(b *testing.B) {
+	var stmt string
+	tb := NewTable(&UserTable1{})
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		stmt = tb.Delete(`age > 25 and full_name like '%doe'`)
 		if stmt == "" {
 			b.Error("bad statement")
 		}

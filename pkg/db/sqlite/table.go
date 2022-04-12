@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 	"strings"
@@ -40,7 +41,6 @@ func NewTable(ptr interface{}) *Table {
 		Name:   format.ToSnakeCase(typ.Name()),
 		Fields: make([]Field, 0, val.NumField()),
 	}
-	t.Size = len(t.Name) + len(t.Fields)
 	t.Name = format.ToSnakeCase(typ.Name())
 	t.Fields = make([]Field, 0, val.NumField())
 	t.Size = len(t.Name)
@@ -111,37 +111,74 @@ func (t *Table) Drop() string {
 	return sb.String()
 }
 
-func (t *Table) Select(where string, data map[string]interface{}) string {
+func (t *Table) Select(selector, condition string) string {
 	var sb strings.Builder
-	var hasWhere bool
-	var whereStr string
-	if len(where) > 0 && data != nil {
-		hasWhere = true
-		whereStr = format.Mprintf(where, data)
+	var hasCond bool
+	if len(condition) > 0 {
+		hasCond = true
 	}
-	sb.Grow(t.Size + 32 + len(whereStr))
-	sb.WriteString("SELECT * FROM ")
+	sb.Grow(t.Size + 32 + len(selector) + len(condition))
+	sb.WriteString("SELECT ")
+	sb.WriteString(selector)
+	sb.WriteString(" FROM ")
 	sb.WriteString(t.Name)
-	if !hasWhere {
+	if !hasCond {
 		sb.WriteString(";")
 		return sb.String()
 	}
 	sb.WriteString(" WHERE ")
-	sb.WriteString(whereStr)
+	sb.WriteString(condition)
 	sb.WriteString(";")
 	return sb.String()
 }
 
-func (t *Table) Insert(args ...string) string {
-	return ""
+func (t *Table) Insert() string {
+	var sb strings.Builder
+	sb.Grow(t.Size + 32)
+	sb.WriteString("INSERT INTO ")
+	sb.WriteString(t.Name)
+	sb.WriteString(" (")
+	for i, col := range t.Fields {
+		if col.Name == "id" {
+			continue
+		}
+		sb.WriteString(col.Name)
+		if i < len(t.Fields)-1 {
+			sb.WriteString(", ")
+		}
+	}
+	sb.WriteString(") VALUES (")
+	for i, col := range t.Fields {
+		if col.Name == "id" {
+			continue
+		}
+		switch col.Value.(type) {
+		case string:
+			sb.WriteString(fmt.Sprintf("'%s'", col.Value))
+		default:
+			sb.WriteString(fmt.Sprintf("%v", col.Value))
+		}
+		if i < len(t.Fields)-1 {
+			sb.WriteString(", ")
+		}
+	}
+	sb.WriteString(");")
+	return sb.String()
 }
 
 func (t *Table) Update(args ...string) string {
 	return ""
 }
 
-func (t *Table) Delete(args ...string) string {
-	return ""
+func (t *Table) Delete(condition string) string {
+	var sb strings.Builder
+	sb.Grow(len(t.Name) + len(condition) + 25)
+	sb.WriteString("DELETE FROM ")
+	sb.WriteString(t.Name)
+	sb.WriteString(" WHERE ")
+	sb.WriteString(condition)
+	sb.WriteString(";")
+	return sb.String()
 }
 
 func (f *Field) Kind() string {
