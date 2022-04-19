@@ -1,0 +1,25 @@
+package gen
+
+{{range .DataModels}}
+    {{ . }}
+    func (c *Client) {{.Name}}(ctx context.Context, req api.{{.Name}}Model) (*api.{{.Name}}Model, error) {
+    r, err := http.NewRequest(req.Method(), fmt.Sprintf("%s/%s", c.endpoint, EncodeVars(req, api.{{.Name}}DataModel)), nil)
+    if err != nil {
+    return nil, err
+    }
+    resp, err := c.conn.Do(r)
+    if err != nil {
+    return nil, err
+    }
+    if resp.StatusCode != http.StatusOK {
+    return nil, errors.New(resp.Status)
+    }
+    var result api.{{.Name}}Model
+    decoder := json.NewDecoder(resp.Body)
+    err = decoder.Decode(&result)
+    if err != nil {
+    return nil, err
+    }
+    return &result, err
+    }
+{{end}}
