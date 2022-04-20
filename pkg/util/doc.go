@@ -43,7 +43,6 @@ func IndexAll(data, find []byte, chars int) []span {
 		}
 		left -= i
 		if chars < left {
-			// fmt.Println(i + j)
 			spans = append(spans, span{beg: i + j, end: i + j + chars})
 			i += chars
 		}
