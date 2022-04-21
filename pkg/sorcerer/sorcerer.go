@@ -250,7 +250,6 @@ func (s *Sorcerer) RenderWithStruct(w io.Writer, tname, sname string) error {
 		return ErrLoadingTemplate
 	}
 	for _, st := range s.Structs[sname] {
-		fmt.Println("executing", sname)
 		err := tmpl.Execute(
 			w, struct {
 				Struct       StructType
