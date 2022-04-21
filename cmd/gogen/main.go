@@ -3,25 +3,35 @@ package main
 import (
 	"fmt"
 	"log"
-	"time"
+	"os"
 
 	"github.com/cagnosolutions/go-data/pkg/sorcerer"
 )
 
 func main() {
-	// get new source file wizard
-	s := sorcerer.NewSorcerer()
-	RunParseExpression(s)
-	RunParseFile(s)
-	RunParseFile(s)
-	RunParseFile(s)
-	// RunParseFile2(s, "files/one.go")
-	// RunParseFile2(s, "files/two.go")
-	// RunParseFile2(s, "files/three.go")
-	// RunParseDir(s)
 
-	time.Sleep(5 * time.Second)
-	fmt.Println(s.Structs)
+	s := sorcerer.NewSorcerer()
+	err := s.ParseFile("files/person.go")
+	if err != nil {
+		panic(err)
+	}
+	err = s.RenderWithStruct(
+		os.Stdout,
+		"setter",
+		"files/person.go",
+	)
+	if err != nil {
+		panic(err)
+	}
+	err = s.RenderWithStruct(
+		os.Stdout,
+		"getter",
+		"files/person.go",
+	)
+	if err != nil {
+		panic(err)
+	}
+
 }
 
 func RunParseExpression(s *sorcerer.Sorcerer) {

@@ -8,12 +8,17 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"io"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"text/template"
 )
+
+import _ "embed"
 
 const (
 	srcDir = 1 << iota
@@ -27,6 +32,7 @@ var (
 	ErrPkgNotSpecified = errors.New("package name not specified")
 	ErrPkgNotFound     = errors.New("package not found")
 	ErrFileNotFound    = errors.New("file not found")
+	ErrLoadingTemplate = errors.New("error loading template")
 )
 
 // Sorcerer is a source code wizard. It parses go source code and
@@ -34,10 +40,12 @@ var (
 // methods, functions and clear methods to access, transform and
 // generate new output from any of this data.
 type Sorcerer struct {
-	fs        *token.FileSet          // A FileSet represents a set of source files.
-	Files     map[string]*File        // Contains Go source files and raw source.
-	Structs   map[string]StructType   // Contains the structs in the source file.
-	Functions map[string]FunctionType // Contains the functions in the source file.
+	lock      sync.Mutex
+	fs        *token.FileSet            // A FileSet represents a set of source files.
+	Files     map[string]*File          // Contains Go source files and raw source.
+	Structs   map[string][]StructType   // Contains the structs in the source file.
+	Functions map[string][]FunctionType // Contains the functions in the source file.
+	Templates map[string]*template.Template
 }
 
 // NewSorcerer instantiates a new source code wizard that can do magical things with
@@ -45,12 +53,18 @@ type Sorcerer struct {
 // or directly parse it as a raw statement. If there is an error it will be returned.
 func NewSorcerer() *Sorcerer {
 	// Create and return new *Sorcerer, so we can start our wizardry.
-	return &Sorcerer{
+	s := &Sorcerer{
 		fs:        token.NewFileSet(),
 		Files:     make(map[string]*File),
-		Structs:   make(map[string]StructType),
-		Functions: make(map[string]FunctionType),
+		Structs:   make(map[string][]StructType),
+		Functions: make(map[string][]FunctionType),
+		Templates: make(map[string]*template.Template),
 	}
+	err := s.LoadTemplates()
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 // GetFile loads and returns the source file along with the raw source code. If
@@ -70,6 +84,9 @@ func (s *Sorcerer) GetFile(filename string) (*File, error) {
 // expression. If successful, the parsed expression is added to the files
 // map with "expr" set as the key for that file entry.
 func (s *Sorcerer) ParseExpression(source string) error {
+	// Locker
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	// Attempt to parse the source provided as an expression.
 	astf, err := parser.ParseFile(s.fs, "", source, srcModeFlags)
 	if err != nil {
@@ -83,9 +100,7 @@ func (s *Sorcerer) ParseExpression(source string) error {
 	}
 	// Run our struct collector and add collected
 	// structs to our structs map.
-	for _, st := range file.collectStructs() {
-		s.Structs[st.Name] = st
-	}
+	s.Structs["expr"] = s.collectStructs(file)
 	// Add the parsed file to the files map.
 	s.Files["expr"] = file
 	// return
@@ -95,6 +110,9 @@ func (s *Sorcerer) ParseExpression(source string) error {
 // ParseFile parses a single source code file specified by filename. A
 // successfully parsed file is added to the files map.
 func (s *Sorcerer) ParseFile(filename string) error {
+	// Locker
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	// Attempt to parse the source provided as a single file.
 	astf, err := parser.ParseFile(s.fs, filename, nil, srcModeFlags)
 	if err != nil {
@@ -115,9 +133,7 @@ func (s *Sorcerer) ParseFile(filename string) error {
 	}
 	// Run our struct collector and add collected
 	// structs to our structs map.
-	for _, st := range file.collectStructs() {
-		s.Structs[st.Name] = st
-	}
+	s.Structs[filename] = s.collectStructs(file)
 	// Add the parsed file to the files map.
 	s.Files[filename] = file
 	// return
@@ -130,6 +146,9 @@ func (s *Sorcerer) ParseFile(filename string) error {
 // ending in ".go" in the directory specified by dir. All files that are
 // successfully parsed are added to the files map.
 func (s *Sorcerer) ParseDir(dir string, filter func(fs.FileInfo) bool) error {
+	// Locker
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	// Attempt to parse the source files provided by dir and filtered
 	// through the filter, if one exists.
 	pkgs, err := parser.ParseDir(s.fs, dir, filter, srcModeFlags)
@@ -157,13 +176,13 @@ func (s *Sorcerer) ParseDir(dir string, filter func(fs.FileInfo) bool) error {
 			File:   astf,
 			Source: src,
 		}
+		// Sanitize filename
+		filename = filepath.Base(filename)
 		// Run our struct collector and add collected
 		// structs to our structs map.
-		for _, st := range file.collectStructs() {
-			s.Structs[st.Name] = st
-		}
+		s.Structs[filename] = s.collectStructs(file)
 		// Add the parsed file to the files map.
-		s.Files[filepath.Base(filename)] = file
+		s.Files[filename] = file
 	}
 	// And finally, we return
 	return nil
@@ -171,7 +190,7 @@ func (s *Sorcerer) ParseDir(dir string, filter func(fs.FileInfo) bool) error {
 
 // collectStructs attempts to collect all the struct types located the supplied
 // *File. It parses them into a map of struct types.
-func collectStructs(file *File) []StructType {
+func (s *Sorcerer) collectStructs(file *File) []StructType {
 	// instantiate return type
 	var ret []StructType
 	// parsing function
@@ -199,9 +218,11 @@ func collectStructs(file *File) []StructType {
 				// First, instantiate new field type for this field. We
 				// can add the field name, and derive the type using the
 				// positional markers and reading from the original source.
+				beg := s.fs.Position(field.Type.Pos())
+				end := s.fs.Position(field.Type.End())
 				fieldType := FieldType{
 					Name: field.Names[0].Name,
-					Type: string(file.Source[field.Type.Pos()-1 : field.Type.End()-1]),
+					Type: string(file.Source[beg.Offset:end.Offset]),
 				}
 				// Check to see if there is a tag, and if so, add it.
 				if field.Tag != nil {
@@ -221,6 +242,67 @@ func collectStructs(file *File) []StructType {
 	ast.Inspect(file.File, parseFunc)
 	// Finally, return
 	return ret
+}
+
+func (s *Sorcerer) RenderWithStruct(w io.Writer, tname, sname string) error {
+	tmpl, found := s.Templates[tname]
+	if !found {
+		return ErrLoadingTemplate
+	}
+	for _, st := range s.Structs[sname] {
+		fmt.Println("executing", sname)
+		err := tmpl.Execute(
+			w, struct {
+				Struct       StructType
+				StructName   string
+				StructFields []FieldType
+			}{
+				Struct:       st,
+				StructName:   st.Name,
+				StructFields: st.Fields,
+			},
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Sorcerer) Tmpl(name string) (*template.Template, bool) {
+	tmpl, found := s.Templates[name]
+	if !found {
+		return nil, false
+	}
+	return tmpl, true
+}
+
+func (s *Sorcerer) LoadTemplates() error {
+	tmpls, err := template.New("*").Funcs(
+		template.FuncMap{
+			"method": func(s string) string {
+				// Foo
+				return fmt.Sprintf("%c *%s", strings.ToLower(s)[0], strings.Title(s))
+			},
+			"single": func(s string) string {
+				return string(strings.ToLower(s)[0])
+			},
+			"lower": strings.ToLower,
+			"upper": strings.ToUpper,
+			"title": strings.Title,
+		},
+	).ParseFS(tmplFiles, "templates/*.tmpl")
+	if err != nil {
+		return err
+	}
+	for _, t := range tmpls.Templates() {
+		s.Templates[DropExt(t.Name())] = t
+	}
+	return nil
+}
+
+func (s *Sorcerer) Conjure() {
+
 }
 
 func (s *Sorcerer) Summon(f *ast.File) {

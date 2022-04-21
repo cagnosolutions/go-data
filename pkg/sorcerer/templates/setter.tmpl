@@ -1,0 +1,11 @@
+// DO NOT EDIT: file has been automatically generated
+
+{{- $stName := .Struct.Name }}
+{{- $stMethRecv := method .Struct.Name }}
+{{- $stDotAttr := single .Struct.Name }}
+{{- range .Struct.Fields }}
+func ({{ $stMethRecv }}) Set{{ title .Name }}({{ single .Type }} {{ .Type }}) {
+	{{ $stDotAttr }}.{{ .Name}} = {{ single .Type }}
+}
+
+{{- end }}

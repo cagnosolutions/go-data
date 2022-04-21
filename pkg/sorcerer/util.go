@@ -5,7 +5,13 @@ import (
 	"go/ast"
 	"go/token"
 	"os"
+	"path/filepath"
+	"strings"
 )
+
+func DropExt(s string) string {
+	return strings.ReplaceAll(s, filepath.Ext(s), "")
+}
 
 // isDirectory determines if a file represented
 // by `path` is a directory or not

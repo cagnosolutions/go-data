@@ -1,0 +1,15 @@
+// DO NOT EDIT: file has been automatically generated
+
+{{- $stName := .Struct.Name }}
+{{- $stMethRecv := method .Struct.Name }}
+{{- $stDotAttr := single .Struct.Name }}
+{{- range .Struct.Fields }}
+func ({{ $stMethRecv }}) Get{{ title .Name }}() {{ .Type }} {
+	return {{ $stDotAttr }}.{{ .Name }}
+}
+
+{{- end }}
+
+
+
+

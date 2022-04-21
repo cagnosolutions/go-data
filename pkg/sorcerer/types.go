@@ -3,11 +3,9 @@ package sorcerer
 import (
 	"fmt"
 	"go/ast"
-	"sync"
 )
 
 type File struct {
-	lock   sync.Mutex
 	Name   string
 	File   *ast.File
 	Source []byte
@@ -22,14 +20,6 @@ func (f *File) String() string {
 		len(f.File.Decls),
 		f.File.Scope.Objects,
 	)
-}
-
-func (f *File) collectStructs() []StructType {
-	// Run our struct collector and return any
-	// structs collected from this file.
-	f.lock.Lock()
-	defer f.lock.Unlock()
-	return collectStructs(f)
 }
 
 type CommentType struct {
