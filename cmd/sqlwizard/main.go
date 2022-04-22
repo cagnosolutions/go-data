@@ -32,7 +32,7 @@ const (
 	flagFilterDefault = "(.+)(_test.go)"
 	flagFilterUsage   = "ignore anything that matches supplied regex pattern"
 
-	flagCreateDefault = true
+	flagCreateDefault = false
 	flagCreateUsage   = "generate create statement"
 
 	flagInsertDefault = false
@@ -368,16 +368,73 @@ func Create{{ .Name }}Table(db *sql.DB) error {
 `
 
 var insertStmt = `// AUTO GENERATED; DO NOT EDIT! (INSERT)
-{{ printf "%s" . }}`
+
+package {{ .Package }}
+
+import (
+	"database/sql"
+	"log"
+)
+{{ $fields := .GetFields }}
+const insert{{ .Name }}Stmt = {{ tick }}INSERT INTO '{{ .NameLower }}' (
+	{{- range $i, $field := $fields }}
+	'{{- $field.NameLower }}'{{- if notEnd $i $fields }},{{- end }}
+	{{- end }}
+) VALUES ({{- range $i, $field := $fields }}?{{- if notEnd $i $fields }},{{ end }}{{- end }});{{ tick }}
+
+func Insert{{ .Name }}Table(db *sql.DB, data ...interface{}) error {
+	// prepare to protect against sql-injection
+	stmt, err := db.Prepare(insert{{ .Name }}Stmt)
+	if err != nil {
+		log.Fatalf("preparing(%q): %s", insert{{ .Name }}Stmt, err)
+	}
+	// execute
+	_, err = stmt.Exec(data...)
+	if err != nil {
+		log.Fatalf("executing prepared statement: %s", err)
+	}
+	return nil
+}
+`
 
 var updateStmt = `// AUTO GENERATED; DO NOT EDIT! (UPDATE)
-{{ printf "%s" . }}`
+
+package {{ .Package }}
+
+import (
+	"database/sql"
+	"log"
+)
+
+const update{{ .Name }}Stmt = {{ tick }}
+{{ tick }}
+`
 
 var deleteStmt = `// AUTO GENERATED; DO NOT EDIT! (DELETE)
-{{ printf "%s" . }}`
+
+package {{ .Package }}
+
+import (
+	"database/sql"
+	"log"
+)
+
+const delete{{ .Name }}Stmt = {{ tick }}
+{{ tick }}
+`
 
 var selectStmt = `// AUTO GENERATED; DO NOT EDIT! (SELECT)
-{{ printf "%s" . }}`
+
+package {{ .Package }}
+
+import (
+	"database/sql"
+	"log"
+)
+
+const select{{ .Name }}Stmt = {{ tick }}
+{{ tick }}
+`
 
 var fm = template.FuncMap{
 	"notEnd": func(index int, set []fieldType) bool { return index < len(set)-1 },
