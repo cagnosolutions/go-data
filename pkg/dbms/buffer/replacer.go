@@ -1,7 +1,4 @@
-package replacement
-
-// FrameID represents a page frame.
-type FrameID uint32
+package buffer
 
 // Replacer represents a page replacement strategy.
 type Replacer interface {

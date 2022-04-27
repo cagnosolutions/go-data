@@ -1,4 +1,4 @@
-package replacement
+package prp
 
 import (
 	"errors"

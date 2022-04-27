@@ -1,4 +1,4 @@
-package replacement
+package prp
 
 // ClockReplacer represents the clock replacer algorithm
 type ClockReplacer struct {
