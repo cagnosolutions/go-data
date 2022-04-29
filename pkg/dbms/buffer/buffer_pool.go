@@ -202,7 +202,7 @@ func (b *BufferPoolManager) FlushAllPages() {
 // replacement policy if the free list is full along with a boolean
 // indicating true if the frame ID was returned using the free list
 // and false if it was returned by using the replacement policy.
-func (b *BufferPoolManager) _getFrameID() (*prp.FrameID, bool) {
+func (b *BufferPoolManager) getFrameID() (*prp.FrameID, bool) {
 	// Check the free list. If there is no room use the replacement
 	// policy to return the next victim.
 	if len(b.free) < 1 {
@@ -215,7 +215,7 @@ func (b *BufferPoolManager) _getFrameID() (*prp.FrameID, bool) {
 	return &fid, true
 }
 
-func (b *BufferPoolManager) getFrameID() (*prp.FrameID, bool) {
+func (b *BufferPoolManager) _getFrameID() (*prp.FrameID, bool) {
 	if len(b.free) > 0 {
 		fid, newFree := b.free[0], b.free[1:]
 		b.free = newFree
