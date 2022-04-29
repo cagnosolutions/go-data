@@ -1,8 +1,6 @@
 package disk
 
 import (
-	"errors"
-
 	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
 
@@ -25,11 +23,11 @@ func NewMemoryDiskManager() DiskManager {
 
 // ReadPage reads a page from pages
 func (d *MemoryDiskManager) ReadPage(id page.PageID, data []byte) error {
-	if page, ok := d.pages[id]; ok {
-		copy(data, (*page).Data()[:])
+	if pg, ok := d.pages[id]; ok {
+		copy(data, (*pg).Data()[:])
 		return nil
 	}
-	return errors.New("Page not found")
+	return ErrPageNotFound
 }
 
 // WritePage writes a page in memory to pages
@@ -44,9 +42,9 @@ func (d *MemoryDiskManager) WritePage(id page.PageID, data []byte) error {
 
 // AllocatePage allocates one more page
 func (d *MemoryDiskManager) AllocatePage() page.PageID {
-	if d.numPage == DiskMaxNumPages-1 {
-		return -1
-	}
+	// if d.numPage == DiskMaxNumPages-1 {
+	// 	return -1
+	// }
 	d.numPage = d.numPage + 1
 	pageID := page.PageID(d.numPage)
 	return pageID
@@ -66,5 +64,6 @@ func (d *MemoryDiskManager) ShutDown() {
 }
 
 func (d *MemoryDiskManager) Size() int64 {
-	return int64(len(d.pages))
+	return int64((d.writes + 1) * page.PageSize)
+	// return int64(len(d.pages) * page.PageSize)
 }

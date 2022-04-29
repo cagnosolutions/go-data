@@ -1,5 +1,8 @@
 package prp
 
+// FrameID represents a page frame.
+type FrameID uint32
+
 // ClockReplacer represents the clock replacer algorithm
 type ClockReplacer struct {
 	cList     *circularList
@@ -19,7 +22,7 @@ func (c *ClockReplacer) Victim() *FrameID {
 	}
 
 	var victimFrameID *FrameID
-	currentNode := (*c.clockHand)
+	currentNode := *(*c.clockHand)
 	for {
 		if currentNode.value.(bool) {
 			currentNode.value = false
@@ -48,12 +51,12 @@ func (c *ClockReplacer) Unpin(id FrameID) {
 
 // Pin pins a frame, indicating that it should not be victimized until it is unpinned
 func (c *ClockReplacer) Pin(id FrameID) {
-	node := c.cList.find(id)
-	if node == nil {
+	n := c.cList.find(id)
+	if n == nil {
 		return
 	}
 
-	if (*c.clockHand) == node {
+	if (*c.clockHand) == n {
 		c.clockHand = &(*c.clockHand).next
 	}
 	c.cList.remove(id)

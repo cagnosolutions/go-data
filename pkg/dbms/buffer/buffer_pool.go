@@ -3,34 +3,31 @@ package buffer
 import (
 	"errors"
 
+	"github.com/cagnosolutions/go-data/pkg/dbms/buffer/prp"
 	"github.com/cagnosolutions/go-data/pkg/dbms/disk"
 	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
 
-// FrameID represents a page frame.
-type FrameID uint32
-
 // BufferPoolManager represents the buffer pool manager
 type BufferPoolManager struct {
-	dm       disk.DiskManager        // manages I/O for pages on disk
-	pages    []*page.Page            // list of pages in memory
-	replacer Replacer                // page replacement policy interface
-	free     []FrameID               // free list of page frames
-	pt       map[page.PageID]FrameID // page table mapping
+	dm       disk.DiskManager            // manages I/O for pages on disk
+	pages    []*page.Page                // list of pages in memory
+	replacer *prp.ClockReplacer          // page replacement policy interface
+	free     []prp.FrameID               // free list of page frames
+	pt       map[page.PageID]prp.FrameID // page table mapping
 }
 
 // NewBufferPoolManager returns a empty buffer pool manager
-func NewBufferPoolManager(size uint32, dm disk.DiskManager, replacer Replacer) *BufferPoolManager {
+func NewBufferPoolManager(size uint32, dm disk.DiskManager) *BufferPoolManager {
 	b := &BufferPoolManager{
 		dm:       dm,
 		pages:    make([]*page.Page, size),
-		replacer: replacer,
-		free:     make([]FrameID, size),
-		pt:       make(map[page.PageID]FrameID),
+		replacer: prp.NewClockReplacer(size),
+		free:     make([]prp.FrameID, size),
+		pt:       make(map[page.PageID]prp.FrameID),
 	}
-	b.replacer.SetSize(size)
 	for i := uint32(0); i < size; i++ {
-		b.free[i] = FrameID(i)
+		b.free[i] = prp.FrameID(i)
 		b.pages[i] = nil
 	}
 	return b
@@ -44,7 +41,7 @@ func (b *BufferPoolManager) FetchPage(pid page.PageID) *page.Page {
 	if fid, found := b.pt[pid]; found {
 		pg := b.pages[fid]
 		pg.IncPinCount()
-		b.replacer.Pin(fid)
+		(*b.replacer).Pin(fid)
 		return pg
 	}
 	// Otherwise, we will request a new page fame that we can use to load the page into.
@@ -106,7 +103,7 @@ func (b *BufferPoolManager) UnpinPage(pid page.PageID, isDirty bool) error {
 	pg.DecPinCount()
 	// If the pin count is less than one, we can simply unpin the frame.
 	if pg.PinCount() <= 0 {
-		b.replacer.Unpin(fid)
+		(*b.replacer).Unpin(fid)
 	}
 	// Set the dirty status on the page. NOTE: potentially refactor this dirty call.
 	if pg.IsDirty() || isDirty {
@@ -174,10 +171,10 @@ func (b *BufferPoolManager) NewPage() *page.Page {
 }
 
 // DeletePage deletes a page from the buffer pool.
-func (b *BufferPoolManager) DeletePage(pageID page.PageID) error {
-	var frameID FrameID
+func (b *BufferPoolManager) DeletePage(pid page.PageID) error {
+	var frameID prp.FrameID
 	var ok bool
-	if frameID, ok = b.pt[pageID]; !ok {
+	if frameID, ok = b.pt[pid]; !ok {
 		return nil
 	}
 	page := b.pages[frameID]
@@ -185,8 +182,8 @@ func (b *BufferPoolManager) DeletePage(pageID page.PageID) error {
 		return errors.New("Pin count greater than 0")
 	}
 	delete(b.pt, page.ID())
-	b.replacer.Pin(frameID)
-	b.dm.DeallocatePage(pageID)
+	(*b.replacer).Pin(frameID)
+	b.dm.DeallocatePage(pid)
 
 	b.free = append(b.free, frameID)
 
@@ -205,15 +202,24 @@ func (b *BufferPoolManager) FlushAllPages() {
 // replacement policy if the free list is full along with a boolean
 // indicating true if the frame ID was returned using the free list
 // and false if it was returned by using the replacement policy.
-func (b *BufferPoolManager) getFrameID() (*FrameID, bool) {
+func (b *BufferPoolManager) _getFrameID() (*prp.FrameID, bool) {
 	// Check the free list. If there is no room use the replacement
 	// policy to return the next victim.
 	if len(b.free) < 1 {
-		return b.replacer.Victim(), false
+		return (*b.replacer).Victim(), false
 	}
 	// Otherwise, get the oldest frame in the list, and update list.
 	fid, newFree := b.free[0], b.free[1:]
 	b.free = newFree
 	// Finally, return the frame ID.
 	return &fid, true
+}
+
+func (b *BufferPoolManager) getFrameID() (*prp.FrameID, bool) {
+	if len(b.free) > 0 {
+		fid, newFree := b.free[0], b.free[1:]
+		b.free = newFree
+		return &fid, true
+	}
+	return (*b.replacer).Victim(), false
 }

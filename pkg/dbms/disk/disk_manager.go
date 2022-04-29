@@ -1,8 +1,12 @@
 package disk
 
 import (
+	"errors"
+
 	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
+
+var ErrPageNotFound = errors.New("page not found")
 
 // DiskManager is responsible for interacting with disk
 type DiskManager interface {

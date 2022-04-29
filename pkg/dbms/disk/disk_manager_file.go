@@ -40,7 +40,13 @@ func NewFileDiskManager(dbFilename string) DiskManager {
 		nextPageID = page.PageID(int32(nPages + 1))
 	}
 
-	return &FileDiskManager{file, dbFilename, nextPageID, 0, fileSize}
+	return &FileDiskManager{
+		db:         file,
+		fileName:   dbFilename,
+		nextPageID: nextPageID,
+		numWrites:  0,
+		size:       fileSize,
+	}
 }
 
 // ShutDown closes of the database file
@@ -97,7 +103,7 @@ func (d *FileDiskManager) ReadPage(pageID page.PageID, pageData []byte) error {
 	return nil
 }
 
-//  AllocatePage allocates a new page; for now just keep an increasing counter
+// AllocatePage allocates a new page; for now just keep an increasing counter
 func (d *FileDiskManager) AllocatePage() page.PageID {
 	ret := d.nextPageID
 	d.nextPageID++

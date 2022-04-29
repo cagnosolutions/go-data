@@ -1,4 +1,4 @@
-package buffer
+package prp
 
 // Replacer represents a page replacement strategy.
 type Replacer interface {
