@@ -5,8 +5,6 @@ import (
 	"sort"
 )
 
-// interesting.
-
 // pageSlot is a single index
 // entry for a record (held in
 // the *Page as a []*pageSlot)
