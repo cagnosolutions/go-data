@@ -33,6 +33,25 @@ func TestPage_AddRecord(t *testing.T) {
 	}
 }
 
+func TestPage_AddManyRecords(t *testing.T) {
+	const count = 128
+	pg := NewPageSize(4<<10, 1)
+	for i := 0; i < count; i++ {
+		rec := fmt.Sprintf("record-%.6x", i)
+		_, err := pg.AddRecord([]byte(rec))
+		if err != nil {
+			t.Errorf("[Page] adding record: %s", err)
+		}
+	}
+	// fmt.Printf(
+	// 	"lower_bounds=%d, upper_bounds=%d, slot_count=%d, free_space=%d\n",
+	// 	pg.header.freeSpaceLower, pg.header.freeSpaceUpper, pg.header.slotCount, pg.header.FreeSpace(),
+	// )
+	// fmt.Println(hex.Dump(pg.data))
+	fmt.Println(pg)
+
+}
+
 func TestPage_GetRecord(t *testing.T) {
 	pg := NewPage(1)
 	recs := addRecords(pg)

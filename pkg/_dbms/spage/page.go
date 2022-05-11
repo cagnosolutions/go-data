@@ -1,8 +1,98 @@
 package spage
 
 import (
+	"bytes"
 	"encoding/json"
+	"sort"
 )
+
+// pageSlot is a single index
+// entry for a record (held in
+// the *Page as a []*pageSlot)
+type pageSlot struct {
+	itemID     uint16
+	itemStatus uint16
+	itemOffset uint16
+	itemLength uint16
+}
+
+// itemBounds returns the beginning and ending offset
+// positions for the location of this item within the Page
+func (s *pageSlot) itemBounds() (uint16, uint16) {
+	return s.itemOffset, s.itemOffset + s.itemLength
+}
+
+// Len is here to satisfy the sort interface for
+// sorting the Page slots by the record prefix
+func (p *Page) Len() int {
+	return len(p.slots)
+}
+
+// Swap is here to satisfy the sort interface for
+// sorting the Page slots by the record prefix
+func (p *Page) Swap(i, j int) {
+	p.slots[i], p.slots[j] = p.slots[j], p.slots[i]
+}
+
+// Less is here to satisfy the sort interface for
+// sorting the Page slots by the record prefix
+func (p *Page) Less(i, j int) bool {
+	ipre, _ := p.slots[i].itemBounds()
+	jpre, _ := p.slots[j].itemBounds()
+	return bytes.Compare(p.data[ipre:ipre+8], p.data[jpre:jpre+8]) < 0
+}
+
+// recordPrefixBySlot returns the record prefix for
+// the given slot index (mainly here for sorting)
+// **the Less call has been refactored since writing
+// this method, so it might no longer be needed
+func (p *Page) recordPrefixBySlot(n int) []byte {
+	beg, _ := p.slots[n].itemBounds()
+	return p.data[beg : beg+8]
+}
+
+// sortSlotsByRecordPrefix is a wrapper for sorting
+// the Page slots by the record prefix
+func (p *Page) sortSlotsByRecordPrefix() {
+	sort.Stable(p)
+}
+
+// RecordID represents the
+// unique id for a single
+// data record held within
+// a Page
+type RecordID struct {
+	PageID uint32
+	SlotID uint16
+}
+
+// pageHeader is a header structure for a Page
+type pageHeader struct {
+	pageID         uint32
+	nextPageID     uint32
+	prevPageID     uint32
+	freeSpaceLower uint16
+	freeSpaceUpper uint16
+	slotCount      uint16
+	freeSlotCount  uint16
+	hasOverflow    uint16
+	reserved       uint16
+}
+
+// FreeSpace returns the total (contiguous) free
+// space in bytes that is left in this Page
+func (h *pageHeader) FreeSpace() uint16 {
+	if h.freeSpaceUpper > h.freeSpaceLower {
+		return h.freeSpaceUpper - h.freeSpaceLower
+	}
+	return h.freeSpaceUpper - h.freeSpaceLower // - (pageSlotSize * 1 * h.slotCount)
+}
+
+// PageIsFree reports if the Page has been allocated
+// but is now available and free to use
+func (h *pageHeader) PageIsFree() bool {
+	return h.freeSlotCount == h.slotCount
+}
 
 // Page is a pageSized data Page
 // structure that may contain
@@ -30,6 +120,26 @@ func NewPage(pid uint32) *Page {
 		},
 		slots: make([]*pageSlot, 0),
 		data:  make([]byte, pageSize),
+	}
+}
+
+// NewPage is a new Page constructor
+// that creates and returns a new *Page
+func NewPageSize(size uint, pid uint32) *Page {
+	return &Page{
+		header: &pageHeader{
+			pageID:         pid,
+			nextPageID:     0,
+			prevPageID:     0,
+			freeSpaceLower: pageHeaderSize,
+			freeSpaceUpper: uint16(size),
+			slotCount:      0,
+			freeSlotCount:  0,
+			hasOverflow:    0,
+			reserved:       0,
+		},
+		slots: make([]*pageSlot, 0),
+		data:  make([]byte, size),
 	}
 }
 
@@ -369,4 +479,5 @@ func (p *Page) String() string {
 		return err.Error()
 	}
 	return string(b)
+	// 01 00 00 00 00 00 0c 00 40 00 34 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 }

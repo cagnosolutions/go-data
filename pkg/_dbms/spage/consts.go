@@ -1,5 +1,7 @@
 package spage
 
+// https://go.dev/play/p/Oia48UwbIt8
+
 const (
 	// used in Page
 	pageSize       = 8 << 10 // 8 KB
