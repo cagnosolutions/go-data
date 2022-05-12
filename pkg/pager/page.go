@@ -1,7 +1,8 @@
 package pager
 
 type page struct {
-	pid pageID
+	pid  pageID
+	data []byte
 }
 
 func newPage(pid pageID) *page {

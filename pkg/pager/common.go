@@ -4,12 +4,20 @@ import (
 	"errors"
 )
 
+const (
+	pageSize = 4096
+)
+
 type pageID uint32
 type frameID uint32
 
 var (
-	ErrPageNotFound = errors.New("page could not be found")
-	ErrPageInUse    = errors.New("page is currently in use or has not been unpinned")
+	ErrPageNotFound      = errors.New("page could not be found")
+	ErrPageInUse         = errors.New("page is currently in use or has not been unpinned")
+	ErrNilPage           = errors.New("page is nil")
+	ErrOffsetOutOfBounds = errors.New("calculated offset is outside file bounds")
+	ErrPartialPageWrite  = errors.New("page write was not a full page")
+	ErrPartialPageRead   = errors.New("page read was not a full page")
 )
 
 type pageFrameManager interface {

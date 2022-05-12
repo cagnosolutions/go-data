@@ -4,8 +4,8 @@ import (
 	"sync"
 )
 
-// pageManager is our implementation of a pageFrameManager, which is also sometimes
-// called a buffer pool manager in a dbms system.
+// pageManager is our implementation of a pageFrameManager, which is
+// also sometimes called a buffer pool manager in a dbms system.
 type pageManager struct {
 	lock     sync.RWMutex
 	frames   []*frame           // list of loaded page frames
@@ -130,7 +130,8 @@ func (b *pageManager) flushPage(pid pageID) error {
 	return nil
 }
 
-// newPage allocates a new page in the pageFrameManager requesting it from the storage manager
+// newPage allocates a new page in the pageFrameManager requesting it
+// from the storage manager
 func (b *pageManager) newPage() *frame {
 	// First we need a frameID we can use to proceed. We will call
 	// getFrame which will first check our free list and if we do
