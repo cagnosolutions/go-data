@@ -5,28 +5,29 @@ import (
 	"testing"
 )
 
-const size = 128
+const size = 64
 
-func TestBitmap_Size(t *testing.T) {
-	// create new bitmap
-	bm := newBitmap(size)
-	// check the bitmap size
+func TestBitset_Size(t *testing.T) {
+	// create new bitset
+	bm := newBitset(size)
+	// check the bitset fsize
 	if bm.length != size {
-		t.Error("bitmap is the wrong size")
+		t.Error("bitset is the wrong fsize")
 	}
 
-	bm2 := newBitmap(32768)
+	bm2 := newBitset(32768)
 	if bm2.length != 32768 {
-		t.Error("bitmap is the wrong size")
+		t.Error("bitset is the wrong fsize")
 	}
 	if len(bm2.bits) != 512 {
-		t.Error("bitmap is the wrong size")
+		t.Error("bitset is the wrong fsize")
 	}
+	fmt.Println("bm2 size:", bm2.sizeof())
 }
 
-func TestBitmap_Has(t *testing.T) {
-	// create new bitmap
-	bm := newBitmap(size)
+func TestBitset_Has(t *testing.T) {
+	// create new bitset
+	bm := newBitset(size)
 	// set all the odds
 	for i := 0; i < size; i++ {
 		if i%2 == 0 {
@@ -51,9 +52,9 @@ func TestBitmap_Has(t *testing.T) {
 
 var buf []byte
 
-func TestBitmap_ToBytes(t *testing.T) {
-	// create new bitmap
-	bm := newBitmap(size)
+func TestBitset_WriteAndRead(t *testing.T) {
+	// create new bitset
+	bm := newBitset(size)
 	// set all the odds
 	for i := 0; i < size; i++ {
 		if i%2 == 0 {
@@ -73,7 +74,7 @@ func TestBitmap_ToBytes(t *testing.T) {
 
 	// make a new one from the bytes
 	// bm2 := newBitmapFromBytes(b)
-	bm2 := newBitmap(size * 3)
+	bm2 := newBitset(size * 3)
 	fmt.Println("before:", bm2)
 	// print out
 	n = bm2.read(b)
@@ -81,9 +82,9 @@ func TestBitmap_ToBytes(t *testing.T) {
 	fmt.Println("after:", bm2)
 }
 
-func TestBitmap_FindFirst(t *testing.T) {
-	// create new bitmap
-	bm := newBitmap(size)
+func TestBitset_FindFirst(t *testing.T) {
+	// create new bitset
+	bm := newBitset(size)
 	// set the first 72 bits
 	for i := 0; i < size; i++ {
 		// except for bit 32 and 56
@@ -93,19 +94,46 @@ func TestBitmap_FindFirst(t *testing.T) {
 	}
 	fmt.Println(bm)
 	// find first
-	at := bm.first()
+	at := bm.free()
 	fmt.Printf("free space found at: %d\n", at)
 	// set the found one
 	bm.set(uint(at))
 	fmt.Println(bm)
 	// find the next free one
-	at = bm.first()
+	at = bm.free()
 	fmt.Printf("free space found at: %d\n", at)
 	// set the found one
 	bm.set(uint(at))
 	fmt.Println(bm)
 	// find the next free one
-	at = bm.first()
+	at = bm.free()
 	fmt.Printf("free space found at: %d\n", at)
 	fmt.Println(bm)
+}
+
+func TestBitset_Resize(t *testing.T) {
+	bm := newBitset(64)
+	for i := 0; i < 128; i++ {
+		bm.set(uint(i))
+		if i%8 == 0 {
+			fmt.Printf("setting %.3d\t%s\n", i, bm)
+		}
+	}
+	bm.set(254)
+	fmt.Println(bm)
+}
+
+func TestBitset_Aligns(t *testing.T) {
+	for i := 0; i < 255; i += 16 {
+		b := roundTo(i, 2)
+		fmt.Printf("roundTo(%d, %d) produced %d\n", i, 64, b)
+		c := alignedSize(uint64(i))
+		fmt.Printf("alignedSize(%d) produced %d\n\n", i, c)
+	}
+}
+
+func TestBitset_RealSize(t *testing.T) {
+	bm := newBitset(127)
+	fmt.Println(bm)
+	fmt.Println("actual size in memory: ", bm.sizeof())
 }

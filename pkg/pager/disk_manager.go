@@ -8,11 +8,11 @@ import (
 // diskManager is a storage manager for working with files
 // on a long term storage medium, aka the hard drive.
 type diskManager struct {
-	path     string
-	file     *os.File
-	nextID   pageID
-	fileSize int64
-	index    *bitmap
+	path   string
+	file   *os.File
+	nextID pageID
+	index  *bitset
+	fsize  int64
 }
 
 // newDiskManager instantiates and returns a new diskManager.
@@ -36,27 +36,75 @@ func newDiskManager(path string) *diskManager {
 	}
 	// Create a new diskManager instance to return.
 	dm := &diskManager{
-		path:     path,
-		file:     file,
-		nextID:   nextID,
-		fileSize: size,
-		index:    newBitmap(pageSize * 8),
+		path:   path,
+		file:   file,
+		nextID: nextID,
+		fsize:  size,
+		index:  newBitset(32),
 	}
 	return dm
 }
 
-// allocate reads the header page and searches for a free index in
-// the bitmap that it can use. If none are found, it will simply
-// increment and return the next pageID.
-func (dm *diskManager) allocate() pageID {
+// getPageOffset is a helper method that checks to ensure the page is not nil
+// and also calculates, checks and returns the logical offset of the provided
+// page using the provided pageID.
+func (dm *diskManager) getPageOffset(pid pageID, p *page) (int64, error) {
+	// First we do a little error checking to ensure the provided page
+	// is not nil, and then we will check that the provided offset is
+	// not outsize of the bounds of the file.
+	if p == nil {
+		return -1, ErrNilPage
+	}
+	// We should now calculate the logical page offset address using the
+	// provided pageID.
+	offset := int64(pid * pageSize)
+	// Check to ensure that the calculated offset is not outsize the
+	// bounds of the file.
+	if offset > dm.fsize {
+		return -1, ErrOffsetOutOfBounds
+	}
+	// Otherwise, our page offset and our page are good, so return.
+	return offset, nil
+}
+
+// getNextID increments and returns the next pageID
+func (dm *diskManager) getNextID() pageID {
 	id := dm.nextID
 	dm.nextID++
 	return id
 }
 
+// allocate checks the underlying size of the file and grows it in
+// segment sized (2MB) chunks at a time once it reaches an 80% full
+// rate. After it checks the size, it will potentially grow the file,
+// and then it will return a valid pageID. It may not need to grow
+// very often, in which case it will simply increment and return the
+// next pageID. If there are a lot of "free" (otherwise deallocated)
+// pages in the file, it will attempt to reuse and return those pageID's
+// before continuing to increment and return new ones.
+func (dm *diskManager) allocate() pageID {
+	// First check the size of the underlying file in order to determine
+	// if we need to grow it or not.
+	sz := getFileSize(dm.path)
+	// Next, we will get the number of used un-used pages within the file.
+	fp := getFreePageCount(dm.path)
+	// Next, determine if the size of the file is close to the 80% full mark.
+	if int64(fp*pageSize) < sz-512*kb {
+		// I DON'T THINK THE ABOVE CALCULATION IS CORRECT...
+		// Grow the underlying file
+	}
+	// File is not full enough, check for and possibly return free page.
+	if fp > 0 {
+		// Get and return free page pageID
+	}
+	// Otherwise, we just increment and return our next pageID
+	return dm.getNextID()
+}
+
 // deallocate attempts to deallocate a page at the offset that is
-// calculated using the provided pageID. It reads the bitmap index
-// and unsets the bits for this page.
+// calculated using the provided pageID. It will mark the page status
+// as unused allowing it to be used later on. The page's prevPid and
+// nextPid will also get removed but the pid will stay there for re-use.
 func (dm *diskManager) deallocate(pid pageID) {
 	// TODO implement me
 	panic("implement me")
@@ -68,19 +116,11 @@ func (dm *diskManager) deallocate(pid pageID) {
 // Any errors encountered while calculating the logical page offset,
 // or while trying to read will be returned.
 func (dm *diskManager) read(pid pageID, p *page) error {
-	// First we do a little error checking to ensure the provided page
-	// is not nil, and then we will check that the provided offset is
-	// not outsize of the bounds of the file.
-	if p == nil {
-		return ErrNilPage
-	}
-	// We should now calculate the logical page offset address using the
-	// provided pageID.
-	offset := int64(pid * pageSize)
-	// Check to ensure that the calculated offset is not outsize the
-	// bounds of the file.
-	if offset > dm.fileSize {
-		return ErrOffsetOutOfBounds
+	// First we do a little error checking, and calculate what the page
+	// offset is supposed to be.
+	offset, err := dm.getPageOffset(pid, p)
+	if err != nil {
+		return err
 	}
 	// Next, we can attempt to read the contents of the page data
 	// directly from the calculated offset. **Using ReadAt makes one
@@ -108,19 +148,11 @@ func (dm *diskManager) read(pid pageID, p *page) error {
 // Any errors encountered while calculating the logical page offset or
 // while writing will be returned.
 func (dm *diskManager) write(pid pageID, p *page) error {
-	// First we do a little error checking to ensure the provided page
-	// is not nil, and then we will check that the provided offset is
-	// not outsize of the bounds of the file.
-	if p == nil {
-		return ErrNilPage
-	}
-	// We should now calculate the logical page offset address using the
-	// provided pageID.
-	offset := int64(pid * pageSize)
-	// Check to ensure that the calculated offset is not outsize the
-	// bounds of the file.
-	if offset > dm.fileSize {
-		return ErrOffsetOutOfBounds
+	// First we do a little error checking, and calculate what the page
+	// offset is supposed to be.
+	offset, err := dm.getPageOffset(pid, p)
+	if err != nil {
+		return err
 	}
 	// Next, we can attempt to write the contents of the page data
 	// directly to the calculated offset. **Using WriteAt makes one
@@ -136,8 +168,8 @@ func (dm *diskManager) write(pid pageID, p *page) error {
 		return ErrPartialPageWrite
 	}
 	// Update the diskManager file size if necessary.
-	if offset >= dm.fileSize {
-		dm.fileSize = offset + int64(n)
+	if offset >= dm.fsize {
+		dm.fsize = offset + int64(n)
 	}
 	// Before we are finished, we should call sync.
 	err = dm.file.Sync()
@@ -148,9 +180,7 @@ func (dm *diskManager) write(pid pageID, p *page) error {
 	return nil
 }
 
-// size returns the size of the file (in bytes) that the diskManager is
-// currently working with. If there is an error a value of -1 will be
-// returned.
+// size returns the size of the underlying file used by the diskManager.
 func (dm *diskManager) size() int64 {
 	return getFileSize(dm.path)
 }
@@ -162,18 +192,6 @@ func (dm *diskManager) close() error {
 		return err
 	}
 	return nil
-}
-
-// getFileSize returns the file size for the file matching the
-// provided path. If the file cannot be found or if any error
-// occurs the resulting file size will be -1.
-func getFileSize(path string) int64 {
-	// Attempt to get the file size at the provided path.
-	fi, err := os.Stat(path)
-	if err != nil {
-		return -1
-	}
-	return fi.Size()
 }
 
 // initPathAndFile takes a path to a file and creates or returns
@@ -203,6 +221,12 @@ func initPathAndFile(path string) (*os.File, error) {
 		if err != nil {
 			return nil, err
 		}
+		// initial file creation, so we will size it
+		// to a full segment size.
+		err = fp.Truncate(segmSize)
+		if err != nil {
+			return nil, err
+		}
 		// close file
 		err = fp.Close()
 		if err != nil {
@@ -216,4 +240,22 @@ func initPathAndFile(path string) (*os.File, error) {
 	}
 	// return file and nil error
 	return fp, nil
+}
+
+// getFileSize is a helper function that returns the file size for the
+// file matching the provided path. If the file cannot be found or if
+// any error occurs the resulting file fsize will be -1.
+func getFileSize(path string) int64 {
+	// Attempt to get the file fsize at the provided path.
+	fi, err := os.Stat(path)
+	if err != nil {
+		return -1
+	}
+	return fi.Size()
+}
+
+// getFreePageCount returns the number of free or unused pages for the
+// file matching the provided path.
+func getFreePageCount(path string) int {
+	return -1
 }

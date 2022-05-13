@@ -2,10 +2,16 @@ package pager
 
 import (
 	"errors"
+	"unsafe"
 )
 
 const (
-	pageSize = 4096
+	kb           = 1 << 10
+	mb           = 1 << 20
+	pageSize     = 4 * kb
+	hdrSize      = uint16(unsafe.Sizeof(header{}))
+	segmSize     = 2 * mb
+	pagesPerSegm = segmSize / pageSize
 )
 
 type pageID uint32
