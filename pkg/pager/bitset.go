@@ -176,3 +176,54 @@ func _get(bits *[]uint64, i uint) uint64 {
 func _unset(bits *[]uint64, i uint) {
 	(*bits)[i>>l2ws] &^= 1 << (i & (ws - 1))
 }
+
+func makeFlags(count uint, start uint) []uint {
+	flags := make([]uint, count)
+	for i := start; i < start+count; i++ {
+		flags[i] = (start + 1) << i
+	}
+	return flags
+}
+
+func setFlag(flags *uint16, flag uint16) {
+	*flags |= flag
+}
+
+func unsetFlag(flags *uint16, flag uint16) {
+	*flags &= ^flag
+}
+
+func flipFlag(flags *uint16, flag uint16) {
+	*flags ^= flag
+}
+
+func checkFlag(flags uint16, flag uint16) bool {
+	return (flags & flag) > 0
+}
+
+func checkFlags(flags uint16, args ...uint16) bool {
+	for _, arg := range args {
+		if (flags & arg) < 1 {
+			return false
+		}
+	}
+	return true
+}
+
+var (
+	setFlagM = func(n, f uint) uint {
+		n |= f
+		return n
+	}
+	clrFlagM = func(n, f uint) uint {
+		n &= ^f
+		return n
+	}
+	tglFlagM = func(n, f uint) uint {
+		n ^= f
+		return n
+	}
+	chkFlagM = func(n, f uint) bool {
+		return (n & f) > 0
+	}
+)

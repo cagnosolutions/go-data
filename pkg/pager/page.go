@@ -1,13 +1,14 @@
 package pager
 
+// the following constants cannot be OR
 const (
-	flagA = uint16(0x0001)
-	flagB = uint16(0x0002)
-	flagC = uint16(0x0004)
-	flagD = uint16(0x0008)
-
-	statusUsed = 0xffff
 	statusFree = 0x0000
+	statusUsed = 0x0001
+	statusSpec = 0x0002
+	typeA      = 0x0010
+	typeB      = 0x0020
+	typeC      = 0x0040
+	typeD      = 0x0080
 )
 
 type header struct {
