@@ -179,4 +179,18 @@ func TestFlags(t *testing.T) {
 	if !checkFlags(flags, flg2, flg3) {
 		t.Errorf("FAIL 3")
 	}
+
+	// round 14
+	// unset flags 1,2,3 and D and set flags A,B,C and D
+	unsetFlag(&flags, flg1)
+	unsetFlag(&flags, flg2)
+	unsetFlag(&flags, flg3)
+	unsetFlag(&flags, flgD)
+	// setFlag(&flags, flgA)
+	setFlag(&flags, flgB)
+	setFlag(&flags, flgC)
+	setFlag(&flags, flgD)
+	checkingFlags(t, round, flags, flgB, flgC, flgD)
+	testFlags(t, flags, flgs{flgB, flgC, flgD}, flgs{flg1, flg2, flg3})
+	round++
 }

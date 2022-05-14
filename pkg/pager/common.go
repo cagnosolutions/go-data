@@ -10,6 +10,7 @@ const (
 	mb           = 1 << 20
 	pageSize     = 4 * kb
 	hdrSize      = uint16(unsafe.Sizeof(header{}))
+	slotSize     = 6
 	segmSize     = 2 * mb
 	pagesPerSegm = segmSize / pageSize
 )
@@ -24,6 +25,7 @@ var (
 	ErrOffsetOutOfBounds = errors.New("calculated offset is outside file bounds")
 	ErrPartialPageWrite  = errors.New("page write was not a full page")
 	ErrPartialPageRead   = errors.New("page read was not a full page")
+	ErrSlotIDOutOfBounds = errors.New("slot id is outside of the lower bounds")
 )
 
 type pageFrameManager interface {
