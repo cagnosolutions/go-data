@@ -13,6 +13,8 @@ const (
 	slotSize     = 6
 	segmSize     = 2 * mb
 	pagesPerSegm = segmSize / pageSize
+	minRecSize   = 8
+	maxRecSize   = pageSize - hdrSize - slotSize
 )
 
 type pageID uint32
@@ -26,6 +28,12 @@ var (
 	ErrPartialPageWrite  = errors.New("page write was not a full page")
 	ErrPartialPageRead   = errors.New("page read was not a full page")
 	ErrSlotIDOutOfBounds = errors.New("slot id is outside of the lower bounds")
+	ErrMinRecSize        = errors.New("record is smaller than the minimum allowed record size")
+	ErrMaxRecSize        = errors.New("record is larger than the maximum allowed record size")
+	ErrPossiblePageFull  = errors.New("page might be full (but may have fragmented space available)")
+	ErrPageFull          = errors.New("page is full and out of available space")
+	ErrBadRID            = errors.New("bad record id; either the page id or the slot id did not match")
+	ErrRecNotFound       = errors.New("record has not been found")
 )
 
 type pageFrameManager interface {
