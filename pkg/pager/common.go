@@ -9,13 +9,22 @@ const (
 	kb           = 1 << 10
 	mb           = 1 << 20
 	pageSize     = 4 * kb
-	hdrSize      = uint16(unsafe.Sizeof(header{}))
+	hdrSize      = uint16(unsafe.Sizeof(_header{}))
 	slotSize     = 6
 	segmSize     = 2 * mb
 	pagesPerSegm = segmSize / pageSize
 	minRecSize   = 8
 	maxRecSize   = pageSize - hdrSize - slotSize
 )
+
+// header is the page's header
+type _header struct {
+	pid   uint32 // page id
+	magic uint16 // status and type (for now, but can include others)
+	slots uint16 // number of slots in page
+	lower uint16 // free space lower offset
+	upper uint16 // free space upper offset
+}
 
 type pageID uint32
 type frameID uint32

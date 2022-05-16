@@ -1,7 +1,7 @@
 package pager
 
 import (
-	"encoding/binary"
+	"fmt"
 )
 
 // flags for setting values on the page headers magic bits
@@ -19,6 +19,13 @@ const (
 	typeB = 0x0020
 	typeC = 0x0040
 	typeD = 0x0080
+
+	// field offsets
+	offPID   = 0
+	offMagic = 4
+	offSlots = 6
+	offLower = 8
+	offUpper = 10
 )
 
 // slotID is a slot index
@@ -45,44 +52,33 @@ type recordID struct {
 	sid slotID
 }
 
-// header is the page's header
-type header struct {
-	pid   pageID // page id
-	magic uint16 // status and type (for now, but can include others)
-	slots uint16 // number of slots in page
-	lower uint16 // free space lower offset
-	upper uint16 // free space upper offset
-}
-
 // page is a basic representation of a slotted page
 type page struct {
-	header
 	data []byte
 }
 
 // newPage instantiates and returns a new pointer to a page.
 func newPage(pid pageID) *page {
+	data := make([]byte, pageSize)
+	putU32(data, offPID, uint32(pid))
+	putU16(data, offMagic, statUsed)
+	putU16(data, offSlots, 0)
+	putU16(data, offLower, hdrSize)
+	putU16(data, offUpper, pageSize)
 	return &page{
-		header: header{
-			pid:   pid,
-			magic: statUsed,
-			slots: 0,
-			lower: hdrSize,
-			upper: pageSize,
-		},
-		data: make([]byte, pageSize),
+		data: data,
 	}
 }
 
 // getPageID returns this page's pageID
 func (p *page) getPageID() pageID {
-	return p.pid
+	return pageID(getU32(p.data, offPID))
 }
 
 // isFree returns a boolean value indicating true if the page
 // is currently free to use.
 func (p *page) isFree() bool {
-	return p.magic&statFree > 0
+	return getU16(p.data, offMagic)&statFree > 0
 }
 
 // checkRecord checks to see fi there is room for the record but,
@@ -95,7 +91,7 @@ func (p *page) checkRecord(recSize uint16) error {
 	if recSize > maxRecSize {
 		return ErrMaxRecSize
 	}
-	if recSize < p.upper-p.lower {
+	if recSize > diffU16(p.data, offUpper, offLower) {
 		return ErrPossiblePageFull
 	}
 	return nil
@@ -109,29 +105,34 @@ func (p *page) addSlot(recSize uint16) *slot {
 	// **Note, we are assuming that record size checks have been
 	// done before calling add slot.
 	//
-	// First we increment the slot count.
-	p.slots++
+	// First we get the slot count for the sid when we return.
+	sid := getU16(p.data, offSlots)
+	// Next we increment the slot count.
+	incrU16(p.data, offSlots, 1)
 	// Next, we raise the free space lower bound, because we are
 	// adding a new slot.
-	p.lower += slotSize
+	incrU16(p.data, offLower, slotSize)
 	// Next, we lower the free space upper bound, because we are
 	// going to be adding record data.
-	p.upper -= recSize
+	decrU16(p.data, offUpper, recSize)
 	// Now, we get the slot entry offset, for ease of use.
-	i := p.lower - slotSize
+	offSlot := int(diffU16(p.data, offLower, slotSize))
+	// We want to get the upper bound to set in the slot and for
+	// later when we return this slot.
+	upper := getU16(p.data, offUpper)
 	// Next, we add the slot. First encoding the slot status, then
 	// the record offset, and then the record length.
-	binary.LittleEndian.PutUint16(p.data[i:i+2], statUsed)
-	i += 2
-	binary.LittleEndian.PutUint16(p.data[i:i+2], p.upper)
-	i += 2
-	binary.LittleEndian.PutUint16(p.data[i:i+2], recSize)
+	putU16(p.data, offSlot, statUsed)
+	offSlot += 2
+	putU16(p.data, offSlot, upper)
+	offSlot += 2
+	putU16(p.data, offSlot, recSize)
 	// Lastly, we will return the slot that we just inserted as
 	// represented by the slot data structure.
 	return &slot{
-		id:     slotID(p.slots - 1),
+		id:     slotID(sid),
 		status: statUsed,
-		offset: p.upper,
+		offset: upper,
 		length: recSize,
 	}
 }
@@ -144,15 +145,15 @@ func (p *page) addSlot(recSize uint16) *slot {
 // another time.
 func (p *page) delSlot(sid slotID) error {
 	// First, we get the slot entry offset, for ease of use.
-	i := hdrSize + (uint16(sid) * slotSize)
+	off := int(hdrSize + (uint16(sid) * slotSize))
 	// Next, do some error checking to make sure the slot id
 	// provided is not outside the slot bounds.
-	if i > p.lower {
+	if off > int(getU16(p.data, offLower)) {
 		return ErrSlotIDOutOfBounds
 	}
 	// Then we can overwrite the slot status field, and mark
 	// it as a free slot.
-	binary.LittleEndian.PutUint16(p.data[i:i+2], statFree)
+	putU16(p.data, off, statFree)
 	// Finally, we return.
 	return nil
 }
@@ -169,26 +170,28 @@ func (p *page) getSlot(recSize uint16) *slot {
 	//
 	// First, we iterate through the slots and check for any
 	// slot statuses that are set to statFree.
-	var status, size uint16
-	for sid := uint16(0); sid < p.slots; sid++ {
+	var status, size, slotCount uint16
+	// Get the slot count
+	slotCount = getU16(p.data, offSlots)
+	for sid := uint16(0); sid < slotCount; sid++ {
 		// Get the slot offset, and check each slot status...
-		i := hdrSize + (sid * slotSize)
-		status = binary.LittleEndian.Uint16(p.data[i : i+2])
+		off := int(hdrSize + (sid * slotSize))
+		status = getU16(p.data, off)
 		if status == statFree {
 			// We found a free slot, check the record length to make
 			// sure that it will work as a fit.
-			size = binary.LittleEndian.Uint16(p.data[i+4 : i+6])
+			size = getU16(p.data, off+4)
 			if recSize <= size {
 				// We have located a free slot that can fit the record.
 				// We should update the slot status, and length for the
 				// new record.
-				binary.LittleEndian.PutUint16(p.data[i:i+2], statUsed)
-				binary.LittleEndian.PutUint16(p.data[i+4:i+6], recSize)
+				putU16(p.data, off, statUsed)
+				putU16(p.data, off+4, recSize)
 				// Then, we can simply return this slot.
 				return &slot{
 					id:     slotID(sid),
 					status: statUsed,
-					offset: binary.LittleEndian.Uint16(p.data[i+2 : i+4]),
+					offset: getU16(p.data, off+2),
 					length: recSize,
 				}
 			}
@@ -206,13 +209,13 @@ func (p *page) getSlot(recSize uint16) *slot {
 // slotID provided.
 func (p *page) findSlot(sid slotID) *slot {
 	// Get the slot offset.
-	i := hdrSize + (uint16(sid) * slotSize)
+	off := int(hdrSize + (uint16(sid) * slotSize))
 	// Decode and return the slot.
 	return &slot{
 		id:     sid,
-		status: binary.LittleEndian.Uint16(p.data[i : i+2]),
-		offset: binary.LittleEndian.Uint16(p.data[i+2 : i+4]),
-		length: binary.LittleEndian.Uint16(p.data[i+4 : i+6]),
+		status: getU16(p.data, off),
+		offset: getU16(p.data, off+2),
+		length: getU16(p.data, off+4),
 	}
 }
 
@@ -227,21 +230,23 @@ func (p *page) findSlot(sid slotID) *slot {
 func (p *page) getFreeSpace() (uint16, uint16) {
 	// First, we iterate through the slots and check for any slot stats
 	// that say they are set to statFree.
-	var status, size uint16
-	for sid := uint16(0); sid < p.slots; sid++ {
+	var status, size, slotCount uint16
+	// Get the slot count
+	slotCount = getU16(p.data, offSlots)
+	for sid := uint16(0); sid < slotCount; sid++ {
 		// Get the slot offset, and check each slot status...
-		i := hdrSize + (sid * slotSize)
-		status = binary.LittleEndian.Uint16(p.data[i : i+2])
+		off := int(hdrSize + (sid * slotSize))
+		status = getU16(p.data, off)
 		if status == statFree {
 			// We found a free slot, add the record size to the total
 			// fragmented free space and continue.
-			size += binary.LittleEndian.Uint16(p.data[i+4 : i+6])
+			size += getU16(p.data, off+4)
 		}
 		// If we get here, this slot is not marked as free.
 	}
 	// Lastly, return our contiguous free space, and our fragmented
 	// free space values.
-	return p.upper - p.lower, size
+	return diffU16(p.data, offUpper, offLower), size
 }
 
 // addRecord adds a new record to the page if it has room. The page will
@@ -271,7 +276,7 @@ func (p *page) addRecord(rec []byte) (*recordID, error) {
 	copy(p.data[beg:end], rec)
 	// Lastly, we will create a recordID to be returned.
 	rid := &recordID{
-		pid: p.pid,
+		pid: p.getPageID(),
 		sid: sl.id,
 	}
 	// And finally, we will return the recordID, and a nil error.
@@ -284,7 +289,7 @@ func (p *page) addRecord(rec []byte) (*recordID, error) {
 func (p *page) getRecord(rid *recordID) ([]byte, error) {
 	// First, we check to make sure the recordID provided is actually
 	// a valid recordID, and if not we will return an error.
-	if rid.pid != p.pid || uint16(rid.sid) > p.slots {
+	if rid.pid != p.getPageID() || uint16(rid.sid) > getU16(p.data, offSlots) {
 		return nil, ErrBadRID
 	}
 	// Next, we will locate the appropriate slot.
@@ -314,7 +319,7 @@ func (p *page) getRecord(rid *recordID) ([]byte, error) {
 func (p *page) delRecord(rid *recordID) error {
 	// First, we check to make sure the recordID provided is actually
 	// a valid recordID, and if not we will return an error.
-	if rid.pid != p.pid || uint16(rid.sid) > p.slots {
+	if rid.pid != p.getPageID() || uint16(rid.sid) > getU16(p.data, offSlots) {
 		return ErrBadRID
 	}
 	// Next, we will locate the appropriate slot.
@@ -338,4 +343,26 @@ func (p *page) delRecord(rid *recordID) error {
 		return err
 	}
 	return nil
+}
+
+func (p *page) String() string {
+	pid := getU32(p.data, offPID)
+	magic := getU16(p.data, offMagic)
+	slots := getU16(p.data, offSlots)
+	lower := getU16(p.data, offLower)
+	upper := getU16(p.data, offUpper)
+	ss := fmt.Sprintf("+---------[ start page ]----------\n")
+	ss += fmt.Sprintf("|   ID=0x%.4x (%d)\n", pid, pid)
+	ss += fmt.Sprintf("| Magic=0x%.2x (%d)\n", magic, magic)
+	ss += fmt.Sprintf("| Slots=0x%.2x (%d)\n", slots, slots)
+	ss += fmt.Sprintf("| Lower=0x%.2x (%d)\n", lower, lower)
+	ss += fmt.Sprintf("| Upper=0x%.2x (%d)\n", upper, upper)
+	ss += fmt.Sprintf("+---------[ start slot ]----------\n")
+	for i := 0; i < int(slots); i++ {
+		sl := p.findSlot(slotID(i))
+		ss += fmt.Sprintf("| %+v\n", sl)
+	}
+	ss += fmt.Sprintf("+---------[  end slot  ]----------\n")
+	ss += fmt.Sprintf("+---------[  end page  ]----------\n")
+	return ss
 }

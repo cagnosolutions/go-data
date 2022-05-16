@@ -16,6 +16,16 @@ const (
 	flgD = 0x0080
 )
 
+func TestPage_addRecord(t *testing.T) {
+	pg := newPage(1)
+	id1, err := pg.addRecord([]byte("foo bar baz"))
+	if err != nil {
+		panic(err)
+	}
+	_ = id1
+	fmt.Println(pg)
+}
+
 func fmtFlag(f uint16, flags ...uint16) string {
 	ss := fmt.Sprintf("0x%.4x", f)
 	if len(flags) > 0 {
