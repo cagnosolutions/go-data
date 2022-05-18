@@ -39,6 +39,23 @@ type slot struct {
 	length uint16
 }
 
+func (s slot) encode(b []byte) {
+	_ = b[5] // bounds check hint to compiler
+	b[0] = byte(s.status)
+	b[1] = byte(s.status >> 8)
+	b[2] = byte(s.offset)
+	b[3] = byte(s.offset >> 8)
+	b[4] = byte(s.length)
+	b[5] = byte(s.length >> 8)
+}
+
+func (s slot) decode(b []byte) {
+	_ = b[6] // bounds check hint to compiler
+	s.status = uint16(b[0]) | uint16(b[1])<<8
+	s.offset = uint16(b[2]) | uint16(b[3])<<8
+	s.length = uint16(b[4]) | uint16(b[5])<<8
+}
+
 // bounds is just a helper method that returns the record offset
 // beginning and end offsets.
 func (s slot) bounds() (uint16, uint16) {
@@ -128,6 +145,8 @@ func (p *page) addSlot(recSize uint16) (slotID, *slot) {
 		length: recSize,
 	}
 	p.sls = append(p.sls, sl)
+	// Encode slot
+	// sl.encode(p.data[p.header.slots*slotSize:])
 	// Finally, we return the new slot pointer.
 	return slotID(p.header.slots - 1), sl
 }
