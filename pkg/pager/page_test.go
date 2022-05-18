@@ -18,11 +18,30 @@ const (
 
 func TestPage_addRecord(t *testing.T) {
 	pg := newPage(1)
-	id1, err := pg.addRecord([]byte("foo bar baz"))
+	id1, err := pg.addRecord([]byte("[this is record 01]"))
 	if err != nil {
 		panic(err)
 	}
 	_ = id1
+	id2, err := pg.addRecord([]byte("[this is record 02]"))
+	if err != nil {
+		panic(err)
+	}
+	_ = id2
+	id3, err := pg.addRecord([]byte("[this is record 03]"))
+	if err != nil {
+		panic(err)
+	}
+	_ = id3
+	err = pg.delRecord(id2)
+	if err != nil {
+		panic(err)
+	}
+	id, err := pg.addRecord([]byte("[this is record 04]"))
+	if err != nil {
+		panic(err)
+	}
+	_ = id
 	fmt.Println(pg)
 }
 
