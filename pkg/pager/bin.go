@@ -96,11 +96,11 @@ func GetU32(ret *uint32) BinMapU32Fn {
 // uint32 span of slice b according to the mapping function mapping. If
 // the mapping function returns nil, the mapping is not written to the
 // underlying slice b. If b is too small this function will panic.
-func BinMapU32(b []byte, fn BinMapU32Fn) {
+func BinMapU32(b []byte, mapping BinMapU32Fn) {
 	_ = b[3] // early bounds check
 	var n uint32
 	n = uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
-	if nn := fn(n); nn != nil {
+	if nn := mapping(n); nn != nil {
 		b[0] = byte(*nn)
 		b[1] = byte(*nn >> 8)
 		b[2] = byte(*nn >> 16)
@@ -115,7 +115,7 @@ type BinMapU64Fn = func(n uint64) *uint64
 // uint64 span of slice b according to the mapping function mapping. If
 // the mapping function returns nil, the mapping is not written to the
 // underlying slice b. If b is too small this function will panic.
-func BinMapU64(b []byte, fn BinMapU64Fn) {
+func BinMapU64(b []byte, mapping BinMapU64Fn) {
 	_ = b[7] // early bounds check
 	var n uint64
 	n = uint64(b[0])
@@ -126,7 +126,7 @@ func BinMapU64(b []byte, fn BinMapU64Fn) {
 	n |= uint64(b[5]) << 40
 	n |= uint64(b[6]) << 48
 	n |= uint64(b[7]) << 56
-	if nn := fn(n); nn != nil {
+	if nn := mapping(n); nn != nil {
 		b[0] = byte(*nn)
 		b[1] = byte(*nn >> 8)
 		b[2] = byte(*nn >> 16)
