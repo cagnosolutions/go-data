@@ -34,7 +34,6 @@ type slotID uint16
 
 // slot represents a record slot index
 type slot struct {
-	id     slotID
 	status uint16
 	offset uint16
 	length uint16
@@ -65,11 +64,11 @@ type page struct {
 // newPage instantiates and returns a new pointer to a page.
 func newPage(pid pageID) *page {
 	data := make([]byte, pageSize)
-	putU32(data, offPID, uint32(pid))
-	putU16(data, offMagic, statUsed)
-	putU16(data, offSlots, 0)
-	putU16(data, offLower, hdrSize)
-	putU16(data, offUpper, pageSize)
+	BinMapU32(data[offPID:], SetU32(pid))
+	BinMapU16(data[offMagic:], SetU16(statUsed))
+	BinMapU16(data[offSlots:], SetU16(0))
+	BinMapU16(data[offLower:], SetU16(hdrSize))
+	BinMapU16(data[offUpper:], SetU16(pageSize))
 	return &page{
 		data: data,
 	}
@@ -77,13 +76,17 @@ func newPage(pid pageID) *page {
 
 // getPageID returns this page's pageID
 func (p *page) getPageID() pageID {
-	return pageID(getU32(p.data, offPID))
+	var pid uint32
+	BinMapU32(p.data[offPid:], GetU32(&pid))
+	return pageID(pid)
 }
 
 // isFree returns a boolean value indicating true if the page
 // is currently free to use.
 func (p *page) isFree() bool {
-	return getU16(p.data, offMagic)&statFree > 0
+	var magic uint16
+	BinMapU16(p.data[offPid:], GetU16(&magic))
+	return magic&statFree > 0
 }
 
 // checkRecord checks to see fi there is room for the record but,
@@ -100,6 +103,32 @@ func (p *page) checkRecord(recSize uint16) error {
 		return ErrPossiblePageFull
 	}
 	return nil
+}
+
+func (p *page) AddSlot(size uint16) *slot {
+	// increment the slot count by one
+	BinMapU16(p.data[offSlots:], IncrU16(1))
+	// raise the free space lower bound (by a slot size)
+	BinMapU16(p.data[offLower:], IncrU16(slotSize))
+	// lower the free space upper bound (by the record size)
+	BinMapU16(p.data[offUpper:], DecrU16(recSize))
+	// get the upper and lower bounds and create a slot
+	var lower, upper uint16
+	BinMapU16(p.data[offLower:], GetU16(&lower))
+	BinMapU16(p.data[offUpper:], GetU16(&upper))
+	sl := &slot{
+		status: statUsed,
+		offset: upper,
+		length: size,
+	}
+	// next we get the slot (to write) offset and
+	// encode the new slot.
+	offset := lower - slotSize
+	BinMapU16(p.data[offset:], SetU16(statUsed))
+	BinMapU16(p.data[offset+2:], SetU16(upper))
+	BinMapU16(p.data[offset+4:], SetU16(size))
+	// finally, return the slot
+	return sl
 }
 
 // addSlot adds a new slot entry to the page. A page slot entry
