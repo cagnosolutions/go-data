@@ -3,6 +3,7 @@ package pager
 import (
 	"encoding/hex"
 	"fmt"
+	"unsafe"
 )
 
 // flags for setting values on the page headers magic bits
@@ -27,6 +28,18 @@ const (
 	offSlots = 6
 	offLower = 8
 	offUpper = 10
+)
+
+const (
+	kb           = 1 << 10
+	mb           = 1 << 20
+	pageSize     = 4 * kb
+	hdrSize      = uint16(unsafe.Sizeof(_header{}))
+	slotSize     = 6
+	segmSize     = 2 * mb
+	pagesPerSegm = segmSize / pageSize
+	minRecSize   = 8
+	maxRecSize   = pageSize - hdrSize - slotSize
 )
 
 // slotID is a slot index

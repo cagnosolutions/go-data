@@ -1,11 +1,65 @@
 package pager
 
 import (
+	"encoding/binary"
 	"fmt"
 	"testing"
 )
 
 const size = 64
+
+func makeSlice() []byte {
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint16(b[0:], 64)
+	binary.LittleEndian.PutUint16(b[2:], 1024)
+	return b
+}
+
+func binTest1(b []byte) int {
+	ok1 := binary.LittleEndian.Uint16(b[0:]) < binary.LittleEndian.Uint16(b[2:])
+	ok2 := binary.LittleEndian.Uint16(b[0:]) > binary.LittleEndian.Uint16(b[2:])
+	if ok1 == false {
+		return -1
+	}
+	if ok2 == true {
+		return -1
+	}
+	return 0
+}
+
+func binTest2(b []byte) int {
+	ok1 := (uint16(b[0]) | uint16(b[1])<<8) < (uint16(b[2]) | uint16(b[3])<<8)
+	ok2 := (uint16(b[0]) | uint16(b[1])<<8) > (uint16(b[2]) | uint16(b[3])<<8)
+	if ok1 == false {
+		return -1
+	}
+	if ok2 == true {
+		return -1
+	}
+	return 0
+}
+
+func Benchmark_BinaryStuff1(b *testing.B) {
+	ss := makeSlice()
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if n := binTest1(ss); n < 0 {
+			b.Error("test1 failed")
+		}
+	}
+}
+
+func Benchmark_BinaryStuff2(b *testing.B) {
+	ss := makeSlice()
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if n := binTest2(ss); n < 0 {
+			b.Error("test2 failed")
+		}
+	}
+}
 
 func TestBitset_Size(t *testing.T) {
 	// create new bitset

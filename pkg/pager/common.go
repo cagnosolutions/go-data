@@ -2,20 +2,19 @@ package pager
 
 import (
 	"errors"
-	"unsafe"
 )
 
-const (
-	kb           = 1 << 10
-	mb           = 1 << 20
-	pageSize     = 4 * kb
-	hdrSize      = uint16(unsafe.Sizeof(_header{}))
-	slotSize     = 6
-	segmSize     = 2 * mb
-	pagesPerSegm = segmSize / pageSize
-	minRecSize   = 8
-	maxRecSize   = pageSize - hdrSize - slotSize
-)
+// const (
+// 	kb           = 1 << 10
+// 	mb           = 1 << 20
+// 	pageSize     = 4 * kb
+// 	hdrSize      = uint16(unsafe.Sizeof(_header{}))
+// 	slotSize     = 6
+// 	segmSize     = 2 * mb
+// 	pagesPerSegm = segmSize / pageSize
+// 	minRecSize   = 8
+// 	maxRecSize   = pageSize - hdrSize - slotSize
+// )
 
 // header is the page's header
 type _header struct {
