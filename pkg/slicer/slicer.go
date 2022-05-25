@@ -168,3 +168,9 @@ func Move[T comparable](slice []T, fromOffset, fromLength, toOffset, toLength in
 	copy(grown[toOffset+len(cutset):], slice[toOffset:])
 	return grown
 }
+
+func swap(nums []int, i, j int) {
+	nums[i] ^= nums[j]
+	nums[j] ^= nums[i]
+	nums[i] ^= nums[j]
+}

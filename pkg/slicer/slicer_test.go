@@ -169,8 +169,9 @@ func TestMoveV2(t *testing.T) {
 	sub1 := SubSlice(nn, sl1.offset, sl1.length)
 	sl2 := index[9]
 	sub2 := SubSlice(nn, sl2.offset, sl2.length)
-	copy(sub1, sub2)
-	copy(sub2, make([]int, len(sub2)))
+
+	_ = sub1
+	_ = sub2
 
 	// nn = Move(nn, sl2.offset, sl2.length, sl1.offset, sl1.length)
 
