@@ -273,17 +273,86 @@ func (t *rbTree) cloneEntries(t2 *rbTree) {
 	)
 }
 
-type Iterator func(entry RBEntry) bool
+type iterator struct {
+	*rbTree
+	current *rbNode
+	index   int
+}
 
-func (t *rbTree) Scan(iter Iterator) {
+func (t *rbTree) Iter() *iterator {
+	node := t.min(t.root)
+	if node == t.NIL {
+		return nil
+	}
+	it := &iterator{
+		rbTree:  t,
+		current: node,
+		index:   int(t.size),
+	}
+	return it
+}
+
+func (it *iterator) First() RBEntry {
+	node := it.min(it.root)
+	if node == it.NIL {
+		return nil
+	}
+	if it.current != nil && it.current == node {
+		return it.current.entry
+	}
+	it.current = node
+	it.index = int(it.size)
+	return it.current.entry
+}
+
+func (it *iterator) Last() RBEntry {
+	node := it.max(it.root)
+	if node == it.NIL {
+		return nil
+	}
+	if it.current != nil && it.current == node {
+		return it.current.entry
+	}
+	it.current = node
+	it.index = int(it.size)
+	return it.current.entry
+}
+
+func (it *iterator) Next() RBEntry {
+	next := it.successor(it.current)
+	if next == it.NIL {
+		return nil
+	}
+	it.index--
+	it.current = next
+	return next.entry
+}
+
+func (it *iterator) Prev() RBEntry {
+	prev := it.predecessor(it.current)
+	if prev == it.NIL {
+		return nil
+	}
+	it.index--
+	it.current = prev
+	return prev.entry
+}
+
+func (it *iterator) HasMore() bool {
+	return it.index > 1
+}
+
+type RangeFn func(entry RBEntry) bool
+
+func (t *rbTree) Scan(iter RangeFn) {
 	t.ascend(t.root, t.min(t.root).entry, iter)
 }
 
-func (t *rbTree) ScanBack(iter Iterator) {
+func (t *rbTree) ScanBack(iter RangeFn) {
 	t.descend(t.root, t.max(t.root).entry, iter)
 }
 
-func (t *rbTree) ScanRange(start, end RBEntry, iter Iterator) {
+func (t *rbTree) ScanRange(start, end RBEntry, iter RangeFn) {
 	t.ascendRange(t.root, start, end, iter)
 }
 
@@ -629,7 +698,7 @@ func (t *rbTree) deleteFixup(x *rbNode) {
 	x.color = BLACK
 }
 
-func (t *rbTree) ascend(x *rbNode, entry RBEntry, iter Iterator) bool {
+func (t *rbTree) ascend(x *rbNode, entry RBEntry, iter RangeFn) bool {
 	if x == t.NIL {
 		return true
 	}
@@ -644,11 +713,11 @@ func (t *rbTree) ascend(x *rbNode, entry RBEntry, iter Iterator) bool {
 	return t.ascend(x.right, entry, iter)
 }
 
-func (t *rbTree) __Descend(pivot RBEntry, iter Iterator) {
+func (t *rbTree) __Descend(pivot RBEntry, iter RangeFn) {
 	t.descend(t.root, pivot, iter)
 }
 
-func (t *rbTree) descend(x *rbNode, pivot RBEntry, iter Iterator) bool {
+func (t *rbTree) descend(x *rbNode, pivot RBEntry, iter RangeFn) bool {
 	if x == t.NIL {
 		return true
 	}
@@ -663,7 +732,7 @@ func (t *rbTree) descend(x *rbNode, pivot RBEntry, iter Iterator) bool {
 	return t.descend(x.left, pivot, iter)
 }
 
-func (t *rbTree) ascendRange(x *rbNode, inf, sup RBEntry, iter Iterator) bool {
+func (t *rbTree) ascendRange(x *rbNode, inf, sup RBEntry, iter RangeFn) bool {
 	if x == t.NIL {
 		return true
 	}

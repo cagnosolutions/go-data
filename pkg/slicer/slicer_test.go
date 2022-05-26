@@ -2,6 +2,7 @@ package slicer
 
 import (
 	"fmt"
+	"sort"
 	"testing"
 )
 
@@ -162,25 +163,44 @@ func TestMoveV2(t *testing.T) {
 		13: {42, 2, true},
 	}
 
+	// populate
+	var sls slots
+	for i := 0; i < len(index); i++ {
+		sl := index[i]
+		sls = append(sls, &sl)
+	}
+	fmt.Println(sls)
+
 	// before
 	fmt.Println("BEFORE: ", nn)
+	for i := range sls {
+		sub := SubSlice(nn, sls[i].offset, sls[i].length)
+		fmt.Println(sub)
+	}
 
-	sl1 := index[7]
-	sub1 := SubSlice(nn, sl1.offset, sl1.length)
-	sl2 := index[9]
-	sub2 := SubSlice(nn, sl2.offset, sl2.length)
-
-	_ = sub1
-	_ = sub2
-
-	// nn = Move(nn, sl2.offset, sl2.length, sl1.offset, sl1.length)
-
-	// compaction
-	fmt.Println("COMPACTING: ")
-	// nn = compaction(nn, index)
+	sort.Stable(sls)
 
 	// after
 	fmt.Println(" AFTER: ", nn)
+	for i := range sls {
+		sub := SubSlice(nn, sls[i].offset, sls[i].length)
+		fmt.Println(sub)
+	}
+}
+
+func (s slots) Len() int {
+	return len(s)
+}
+
+func (s slots) Less(i, j int) bool {
+	if (*s[i]).used == false && (*s[j]).used == true {
+		return true
+	}
+	return false
+}
+
+func (s slots) Swap(i, j int) {
+	*s[i], *s[j] = *s[j], *s[i]
 }
 
 func compaction(nn []int, index map[int]slot) []int {
