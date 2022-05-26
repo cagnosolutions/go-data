@@ -1,4 +1,4 @@
-package main
+package pager
 
 import (
 	"encoding/binary"
@@ -12,7 +12,7 @@ import (
 
 const N = 32
 
-var ids []rid
+var ids []recID
 
 func testing() {
 	p := newPage(1)
@@ -120,23 +120,8 @@ func testing() {
 	fmt.Println()
 }
 
-func getUsedRecCount(p page) int {
-	sls := p.getSlotSet()
-	var n int
-	for _, sl := range sls {
-		if sl.status != stFree {
-			n++
-		}
-	}
-	return n
-}
-
-func info(p page) {
+func info(p *page) {
 	fmt.Println(p.DumpPage(false))
-}
-
-func sinfo(p page) string {
-	return fmt.Sprintln(p.DumpPage(false))
 }
 
 var (
@@ -159,6 +144,7 @@ const (
 	szHd = 12
 	szSl = 6
 	szPg = 4096
+	szSg = 64 * szPg
 
 	offPID   = 0
 	offMagic = 4
@@ -192,8 +178,8 @@ func (s slot) String() string {
 	return ss
 }
 
-// rid is a struct representing a record ID.
-type rid struct {
+// recID is a struct representing a record ID.
+type recID struct {
 	pid uint32 // page id
 	sid uint16 // slot id (slot index)
 }
@@ -211,7 +197,7 @@ type header struct {
 type page []byte
 
 // newPage returns a new page instance set with the provided page ID.
-func newPage(pid uint32) page {
+func newPage(pid uint32) *page {
 	pg := make(page, szPg, szPg)
 	pg.setHeader(
 		&header{
@@ -222,7 +208,7 @@ func newPage(pid uint32) page {
 			upper: szPg,
 		},
 	)
-	return pg
+	return &pg
 }
 
 // setHeader encodes the provided header structure to the underlying
@@ -387,9 +373,9 @@ func (p *page) _acquireSlot(size uint16) (uint16, *slot) {
 	return p._addSlot(size)
 }
 
-// addRecord writes a new record to the page. It returns a *rid which
+// addRecord writes a new record to the page. It returns a *recID which
 // is a record ID, along with any potential errors encountered.
-func (p *page) addRecord(data []byte) (*rid, error) {
+func (p *page) addRecord(data []byte) (*recID, error) {
 	// get the record size
 	rsize := uint16(len(data))
 	// sanity check the record
@@ -404,7 +390,7 @@ func (p *page) addRecord(data []byte) (*rid, error) {
 	// write the record to the page (using record bounds)
 	copy((*p)[beg:end], data)
 	// assemble and return the record ID
-	return &rid{
+	return &recID{
 		pid: bin.Uint32((*p)[offPID:]),
 		sid: sid,
 	}, nil
@@ -413,7 +399,7 @@ func (p *page) addRecord(data []byte) (*rid, error) {
 
 // checkRID performs error and sanity checking on the provided
 // record ID.
-func (p *page) checkRID(id *rid) error {
+func (p *page) checkRID(id *recID) error {
 	if id.pid != bin.Uint32((*p)[offPID:]) {
 		return ErrInvalidPID
 	}
@@ -426,7 +412,7 @@ func (p *page) checkRID(id *rid) error {
 // getRecord reads a record from the page. It returns the record data
 // that is associated with the provided record ID, along with any
 // potential errors encountered.
-func (p *page) getRecord(id *rid) ([]byte, error) {
+func (p *page) getRecord(id *recID) ([]byte, error) {
 	// sanity check the record ID
 	err := p.checkRID(id)
 	if err != nil {
@@ -469,7 +455,7 @@ func (p *page) _delSlot(sid uint16) *slot {
 // so that it can be re-used at a later date if there is another
 // record that can occupy the same (or less) space. It returns any
 // errors encountered.
-func (p *page) delRecord(id *rid) error {
+func (p *page) delRecord(id *recID) error {
 	// sanity check the record ID
 	err := p.checkRID(id)
 	if err != nil {
@@ -564,12 +550,28 @@ func (p *page) compact() error {
 	// Make sure the iterator gets marked for collection.
 	it = nil
 	// Finished adding records to the new page, now swap the pages.
-	*p = pg
+	*p = *pg
 	// Call the GC directly here
 	runtime.GC()
 	// Return our nil error
 	fmt.Printf("wrote %d records\n", n)
 	return nil
+}
+
+func addRecord(p *page, r []byte) (*recID, error) {
+	return p.addRecord(r)
+}
+
+func getRecord(p *page, rid *recID) ([]byte, error) {
+	return p.getRecord(rid)
+}
+
+func delRecord(p *page, rid *recID) error {
+	return p.delRecord(rid)
+}
+
+func compact(p *page) error {
+	return p.compact()
 }
 
 func (p *page) DumpPage(showPageData bool) string {

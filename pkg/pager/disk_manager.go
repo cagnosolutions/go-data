@@ -29,7 +29,7 @@ func newDiskManager(path string) *diskManager {
 	}
 	size := fi.Size()
 	// Set up the nextID according to the file size.
-	npgs := uint32(size / pageSize)
+	npgs := uint32(size / szPg)
 	var nextID pageID
 	if npgs > 0 {
 		nextID = pageID(npgs + 1)
@@ -57,7 +57,7 @@ func (dm *diskManager) getPageOffset(pid pageID, p *page) (int64, error) {
 	}
 	// We should now calculate the logical page offset address using the
 	// provided pageID.
-	offset := int64(pid * pageSize)
+	offset := int64(pid * szPg)
 	// Check to ensure that the calculated offset is not outsize the
 	// bounds of the file.
 	if offset > dm.fsize {
@@ -89,7 +89,7 @@ func (dm *diskManager) allocate() pageID {
 	// Next, we will get the number of used un-used pages within the file.
 	fp := getFreePageCount(dm.path)
 	// Next, determine if the size of the file is close to the 80% full mark.
-	if int64(fp*pageSize) < sz-512*kb {
+	if int64(fp*szPg) < sz-(512*1<<10) {
 		// I DON'T THINK THE ABOVE CALCULATION IS CORRECT...
 		// Grow the underlying file
 	}
@@ -125,12 +125,12 @@ func (dm *diskManager) read(pid pageID, p *page) error {
 	// Next, we can attempt to read the contents of the page data
 	// directly from the calculated offset. **Using ReadAt makes one
 	// syscall, vs using Seek+Read which calls syscall twice.
-	n, err := dm.file.ReadAt(p.data, offset)
+	n, err := dm.file.ReadAt(*p, offset)
 	if err != nil {
 		return err
 	}
 	// Check to ensure that we actually read the contents of a full page.
-	if n < pageSize {
+	if n < szPg {
 		// **It should be noted that we could also alternatively choose
 		// to pad out the remaining byte of the page right in here if
 		// we want to. For now though, we will error out. I feel that
@@ -159,12 +159,12 @@ func (dm *diskManager) write(pid pageID, p *page) error {
 	// syscall, vs using Seek+Write which calls syscall twice. We
 	// should reserve the Seek+Write pattern only if we are dealing
 	// with append only writing type of instance.
-	n, err := dm.file.WriteAt(p.data, offset)
+	n, err := dm.file.WriteAt(*p, offset)
 	if err != nil {
 		return err
 	}
 	// Check to ensure that we actually wrote the contents of a full page.
-	if n != pageSize {
+	if n != szPg {
 		return ErrPartialPageWrite
 	}
 	// Update the diskManager file size if necessary.
@@ -223,7 +223,7 @@ func initPathAndFile(path string) (*os.File, error) {
 		}
 		// initial file creation, so we will size it
 		// to a full segment size.
-		err = fp.Truncate(segmSize)
+		err = fp.Truncate(szSg)
 		if err != nil {
 			return nil, err
 		}

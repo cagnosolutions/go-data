@@ -12,7 +12,7 @@ func newFrame(pid pageID) *frame {
 		pid:      pid,
 		pinCount: 1,
 		isDirty:  false,
-		page:     newPage(pid),
+		page:     newPage(uint32(pid)),
 	}
 }
 
