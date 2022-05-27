@@ -4,27 +4,6 @@ import (
 	"errors"
 )
 
-// const (
-// 	kb           = 1 << 10
-// 	mb           = 1 << 20
-// 	pageSize     = 4 * kb
-// 	hdrSize      = uint16(unsafe.Sizeof(_header{}))
-// 	slotSize     = 6
-// 	segmSize     = 2 * mb
-// 	pagesPerSegm = segmSize / pageSize
-// 	minRecSize   = 8
-// 	maxRecSize   = pageSize - hdrSize - slotSize
-// )
-
-// header is the page's header
-type _header struct {
-	pid   uint32 // page id
-	magic uint16 // status and type (for now, but can include others)
-	slots uint16 // number of slots in page
-	lower uint16 // free space lower offset
-	upper uint16 // free space upper offset
-}
-
 type pageID uint32
 type frameID uint32
 
@@ -44,56 +23,41 @@ var (
 	ErrRecNotFound       = errors.New("record has not been found")
 )
 
-type pageFrameManager interface {
-	// fetchPage fetches the requested page frame from the pageFrameManager
-	fetchPage(pid pageID) *frame
-	// unpinPage unpins the target page frame from the pageFrameManager
+type frameManager interface {
+	// fetchPage fetches the requested page pageFrame from the pageFrameManager
+	fetchPage(pid pageID) *pageFrame
+	// unpinPage unpins the target page pageFrame from the pageFrameManager
 	unpinPage(pid pageID, isDirty bool) error
 	// flushPage flushes the target page to the storage manager
 	flushPage(pid pageID) error
 	// newPage allocates a new page in the pageFrameManager requesting it from the storage manager
-	newPage() *frame
+	newPage() *pageFrame
 	// deletePage deletes a page from the pageFrameManager
 	deletePage(pid pageID) error
-	// getFrame fetches a free page frame, otherwise it victimizes one
+	// getFrame fetches a free page pageFrame, otherwise it victimizes one
 	getFrame() (*frameID, error)
 	// flushAll flushes all the pinned pages to the storage manager
 	flushAll() error
 }
 
-type storageManager interface {
-	allocate() pageID
-	deallocate(pid pageID)
-	read(pid pageID, p *page) error
-	write(pid pageID, p *page) error
-	size() int64
-	close() error
+type set[T comparable] map[T]struct{}
+
+func makeMapSet[T comparable](size int) set[T] {
+	return make(set[T], size)
 }
 
-type replacer interface {
-	pin(fid frameID)
-	unpin(fid frameID)
-	victim() frameID
-	size() int64
+func (s set[T]) add(data T) {
+	s[data] = struct{}{}
 }
 
-type mapSet map[frameID]struct{}
-
-func makeMapSet(size int) mapSet {
-	return make(mapSet, size)
+func (s set[T]) del(data T) {
+	delete(s, data)
 }
 
-func (s mapSet) add(k frameID) {
-	s[k] = struct{}{}
-}
-
-func (s mapSet) del(k frameID) {
-	delete(s, k)
-}
-
-func (s mapSet) get() (frameID, bool) {
-	for k := range s {
-		return k, true
+func (s set[T]) get() (T, bool) {
+	for d := range s {
+		return d, true
 	}
-	return 0, false
+	var zero T
+	return zero, false
 }

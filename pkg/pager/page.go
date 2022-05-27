@@ -14,7 +14,7 @@ const N = 32
 
 var ids []recID
 
-func testing() {
+func pageTests() {
 	p := newPage(1)
 	info(p)
 	fmt.Println(">>>>> [01 ADDING] <<<<<")
@@ -120,7 +120,7 @@ func testing() {
 	fmt.Println()
 }
 
-func info(p *page) {
+func info(p page) {
 	fmt.Println(p.DumpPage(false))
 }
 
@@ -197,7 +197,7 @@ type header struct {
 type page []byte
 
 // newPage returns a new page instance set with the provided page ID.
-func newPage(pid uint32) *page {
+func newPage(pid uint32) page {
 	pg := make(page, szPg, szPg)
 	pg.setHeader(
 		&header{
@@ -208,7 +208,7 @@ func newPage(pid uint32) *page {
 			upper: szPg,
 		},
 	)
-	return &pg
+	return pg
 }
 
 // setHeader encodes the provided header structure to the underlying
@@ -550,7 +550,7 @@ func (p *page) compact() error {
 	// Make sure the iterator gets marked for collection.
 	it = nil
 	// Finished adding records to the new page, now swap the pages.
-	*p = *pg
+	*p = pg
 	// Call the GC directly here
 	runtime.GC()
 	// Return our nil error
@@ -558,19 +558,19 @@ func (p *page) compact() error {
 	return nil
 }
 
-func addRecord(p *page, r []byte) (*recID, error) {
-	return p.addRecord(r)
+func addRecord(p page, rec []byte) (*recID, error) {
+	return p.addRecord(rec)
 }
 
-func getRecord(p *page, rid *recID) ([]byte, error) {
+func getRecord(p page, rid *recID) ([]byte, error) {
 	return p.getRecord(rid)
 }
 
-func delRecord(p *page, rid *recID) error {
+func delRecord(p page, rid *recID) error {
 	return p.delRecord(rid)
 }
 
-func compact(p *page) error {
+func compact(p page) error {
 	return p.compact()
 }
 

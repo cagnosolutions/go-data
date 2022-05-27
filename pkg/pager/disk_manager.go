@@ -115,17 +115,17 @@ func (dm *diskManager) deallocate(pid pageID) {
 // attempt to read the contents of the page located at the offset.
 // Any errors encountered while calculating the logical page offset,
 // or while trying to read will be returned.
-func (dm *diskManager) read(pid pageID, p *page) error {
+func (dm *diskManager) read(pid pageID, p page) error {
 	// First we do a little error checking, and calculate what the page
 	// offset is supposed to be.
-	offset, err := dm.getPageOffset(pid, p)
+	offset, err := dm.getPageOffset(pid, &p)
 	if err != nil {
 		return err
 	}
 	// Next, we can attempt to read the contents of the page data
 	// directly from the calculated offset. **Using ReadAt makes one
 	// syscall, vs using Seek+Read which calls syscall twice.
-	n, err := dm.file.ReadAt(*p, offset)
+	n, err := dm.file.ReadAt(p, offset)
 	if err != nil {
 		return err
 	}
@@ -147,10 +147,10 @@ func (dm *diskManager) read(pid pageID, p *page) error {
 // attempt to write the contents of the provided page to that offset.
 // Any errors encountered while calculating the logical page offset or
 // while writing will be returned.
-func (dm *diskManager) write(pid pageID, p *page) error {
+func (dm *diskManager) write(pid pageID, p page) error {
 	// First we do a little error checking, and calculate what the page
 	// offset is supposed to be.
-	offset, err := dm.getPageOffset(pid, p)
+	offset, err := dm.getPageOffset(pid, &p)
 	if err != nil {
 		return err
 	}
@@ -159,7 +159,7 @@ func (dm *diskManager) write(pid pageID, p *page) error {
 	// syscall, vs using Seek+Write which calls syscall twice. We
 	// should reserve the Seek+Write pattern only if we are dealing
 	// with append only writing type of instance.
-	n, err := dm.file.WriteAt(*p, offset)
+	n, err := dm.file.WriteAt(p, offset)
 	if err != nil {
 		return err
 	}
