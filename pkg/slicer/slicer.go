@@ -2,6 +2,7 @@ package slicer
 
 import (
 	"fmt"
+	"sort"
 )
 
 // Cut cuts a set of elements from a slice at the provided beginning and ending
@@ -173,4 +174,60 @@ func swap(nums []int, i, j int) {
 	nums[i] ^= nums[j]
 	nums[j] ^= nums[i]
 	nums[i] ^= nums[j]
+}
+
+// Ordered is a type that represents all the types that can be
+// compared by <,> which is above and beyond a normal equality
+// comparison.
+type Ordered interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+		~float32 | ~float64 |
+		~string
+}
+
+// Slice is a generic slice type that allows you to create a generic
+// slice of any type that is Ordered
+type Slice[T Ordered] []T
+
+// Len fulfills the sort.Sort interface by returning the length of
+// the slice s.
+func (s Slice[T]) Len() int {
+	return len(s)
+}
+
+// Less fulfills the sort.Sort interface by returning true if element
+// found at index i is less than the element found at index j.
+func (s Slice[T]) Less(i, j int) bool {
+	return s[i] < s[j]
+}
+
+// Swap fulfills the sort.Sort interface by swapping the elements found
+// at i and j.
+func (s Slice[T]) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+// Sort sorts the slice using the sort package. It utilizes the methods
+// Len, Less and Swap that we have implemented for the generic Slice type.
+func (s Slice[T]) Sort() {
+	sort.Stable(s)
+}
+
+// Search performs a binary search on the Slice s.
+func (s Slice[T]) Search(x T) (int, T) {
+	// Define f(-1) == false and f(n) == true.
+	// Invariant: f(i-1) == false, f(j) == true.
+	i, j := 0, s.Len()
+	for i < j {
+		h := int(uint(i+j) >> 1) // avoid overflow when computing h
+		// i ≤ h < j
+		if s[i] < x {
+			i = h + 1 // preserves f(i-1) == false
+		} else {
+			j = h // preserves f(j) == true
+		}
+	}
+	// i == j, f(i-1) == false, and f(j) (= f(i)) == true  =>  answer is i.
+	return i, s[i]
 }
