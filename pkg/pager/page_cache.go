@@ -19,7 +19,10 @@ type pageCache interface {
 	// the page cache. If the page is not currently loaded into a frame, it will be
 	// located on disk by the disk manager and loaded into a frame, which will then
 	// be returned. If there are no available frames, one must be victimized. The pin
-	// count on the frame will be incremented every time fetchPage is called.
+	// count on the frame will be incremented every time fetchPage is called. In the
+	// event in which a page must be victimized, it will first check to see if the
+	// frame considered for reuse is marked as dirty or not. If it is dirty, it will
+	// automatically be flushed before the frame is re-used.
 	fetchPage(pid uint32) *frame
 
 	// flushPage attempts to flush the page that has a pageID that matches the provided
@@ -41,7 +44,9 @@ type pageCache interface {
 	// a request for the pin count to decrement. It instructs the page cache to locate the page
 	// that has a pageID matching the one provided. If one cannot be found, then a ErrPageNotFound
 	// error is returned. If the page is located, the pin count is decremented and if it reaches
-	// zero (it means no more threads are using this page) the page is considered for eviction and
-	// added to the replacer.
+	// zero (it means no more threads are using this page) the page is considered for eviction.
+	// If the isDirty flag is set to true, it means that if this page frame is chosen as a victim,
+	// (in the event that all the page frames are in-use) the isDirty flag will indicate that this
+	// page frame MUST be flushed to disk before being used as a victim.
 	unpinPage(pid uint32, isDirty bool) error
 }
