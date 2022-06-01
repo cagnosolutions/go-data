@@ -3,6 +3,7 @@ package pager
 import (
 	"fmt"
 	"log"
+	"os"
 	"testing"
 
 	"github.com/cagnosolutions/go-data/pkg/util"
@@ -11,7 +12,9 @@ import (
 func TestSample(t *testing.T) {
 	poolSize := 10
 
-	dm := newTempDiskManager("testing/diskmanager.db")
+	testFile := "testing/diskmanager.db"
+
+	dm := newTempDiskManager(testFile)
 	defer dm.close()
 	bpm := newPageManager(poolSize, dm)
 
@@ -53,11 +56,12 @@ func TestSample(t *testing.T) {
 		}
 	}
 	for i := 0; i < 4; i++ {
-		p := bpm.newPage()
-		err = bpm.unpinPage(p.getPageID(), false)
-		if err != nil {
-			t.Error(err)
-		}
+		bpm.newPage()
+		// p := bpm.newPage()
+		// err = bpm.unpinPage(p.getPageID(), false)
+		// if err != nil {
+		//	t.Error(err)
+		// }
 	}
 	// Scenario: We should be able to fetch the data we wrote a while ago.
 	page0 = bpm.fetchPage(pageID(0))
@@ -73,7 +77,16 @@ func TestSample(t *testing.T) {
 
 	pg := bpm.newPage()
 	util.Equals(t, pageID(14), pg.getPageID())
-	util.Equals(t, newPage(15), bpm.newPage())
+	util.Equals(t, page(nil), bpm.newPage())
 	fmt.Println(bpm)
-	util.Equals(t, (*page)(nil), bpm.fetchPage(pageID(0)))
+	util.Equals(t, page(nil), bpm.fetchPage(pageID(0)))
+
+	dm.close()
+	// time.Sleep(3 * time.Second)
+
+	// remove test files
+	err = os.RemoveAll(testFile)
+	if err != nil {
+		t.Error(err)
+	}
 }
