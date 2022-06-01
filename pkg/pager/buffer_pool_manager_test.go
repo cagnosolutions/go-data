@@ -2,6 +2,7 @@ package pager
 
 import (
 	"fmt"
+	"log"
 	"testing"
 
 	"github.com/cagnosolutions/go-data/pkg/util"
@@ -25,12 +26,10 @@ func TestSample(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Printf(" -> DEBUG -> id0: %v\n", id0)
 	rec, err := page0.getRecord(id0)
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Printf(" -> DEBUG -> rec: %q\n", rec)
 	util.Equals(t, []byte("Hello, World!"), rec)
 
 	// Scenario: We should be able to create new pages until we fill up the buffer pool.
@@ -47,17 +46,21 @@ func TestSample(t *testing.T) {
 	// there would still be one cache frame left for reading page 0.
 	for i := 0; i < 5; i++ {
 		util.Ok(t, bpm.unpinPage(pageID(i), true))
+		log.Println("attempting to flush page", i)
 		err := bpm.flushPage(pageID(i))
 		if err != nil {
 			t.Error(err)
 		}
 	}
 	for i := 0; i < 4; i++ {
-		bpm.newPage()
+		p := bpm.newPage()
+		err = bpm.unpinPage(p.getPageID(), false)
+		if err != nil {
+			t.Error(err)
+		}
 	}
 	// Scenario: We should be able to fetch the data we wrote a while ago.
 	page0 = bpm.fetchPage(pageID(0))
-	fmt.Println(page0)
 	rec2, err := page0.getRecord(id0)
 	if err != nil {
 		t.Error(err)
@@ -69,7 +72,8 @@ func TestSample(t *testing.T) {
 	util.Ok(t, bpm.unpinPage(pageID(0), true))
 
 	pg := bpm.newPage()
-	util.Equals(t, pageID(18), pg.getPageID())
-	util.Equals(t, (*page)(nil), bpm.newPage())
+	util.Equals(t, pageID(14), pg.getPageID())
+	util.Equals(t, newPage(15), bpm.newPage())
+	fmt.Println(bpm)
 	util.Equals(t, (*page)(nil), bpm.fetchPage(pageID(0)))
 }

@@ -8,9 +8,9 @@ import (
 type frame struct {
 	pid      pageID  // id of this page
 	fid      frameID // id or index of this frame
-	pinCount uint32  // count of how many threads are accessing this pageFrame
-	isDirty  bool    // this page pageFrame was modified but not flushed
-	page
+	pinCount uint32  // how many threads are mutating the frame
+	isDirty  bool    // page data has been modified and not flushed
+	page             // actual page data
 }
 
 func (f *frame) decrPinCount() {
@@ -29,10 +29,10 @@ func initFrame(fid frameID) *frame {
 	}
 }
 
-func newFrame(pid pageID) *frame {
-	return &frame{
+func newFrame(pid pageID, fid frameID) frame {
+	return frame{
 		pid:      pid,
-		fid:      frameID(0),
+		fid:      fid,
 		pinCount: 1,
 		isDirty:  false,
 		page:     make([]byte, szPg),
@@ -47,16 +47,9 @@ func (f *frame) reset() {
 	f.page = nil
 }
 
-func (f *frame) String() string {
-	ss := fmt.Sprintf("page frame:\n")
-	ss += fmt.Sprintf("\tframe.pid=%d\n", f.pid)
-	ss += fmt.Sprintf("\tframe.fid=%d\n", f.fid)
-	ss += fmt.Sprintf("\tframe.pinCount=%d\n", f.pinCount)
-	ss += fmt.Sprintf("\tframe.isDirty=%v\n", f.isDirty)
-	if f.page == nil {
-		ss += fmt.Sprintf("\tframe.page=%v\n", f.page)
-	} else {
-		ss += fmt.Sprintf("\tframe.page=%d bytes\n", len(f.page))
-	}
-	return ss
+func (f frame) String() string {
+	return fmt.Sprintf(
+		"{ pid: %d, fid: %d, pinCount: %d, dirty: %v, page: %v }",
+		f.pid, f.fid, f.pinCount, f.isDirty, f.page.size(),
+	)
 }

@@ -2,6 +2,7 @@ package pager
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -59,6 +60,7 @@ func (d *tempDiskManager) write(pid pageID, p page) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println(">>> WRITING DATA AT OFFSET: ", offset, string(p), len(p))
 	bytesWritten, err := d.db.Write(p)
 	if err != nil {
 		return err
@@ -106,6 +108,8 @@ func (d *tempDiskManager) read(pid pageID, p page) error {
 //  For now just keep an increasing counter
 func (d *tempDiskManager) allocate() pageID {
 	ret := d.nextPageID
+	// off := ret * szPg
+	// d.db.Truncate()
 	d.nextPageID++
 	return ret
 }

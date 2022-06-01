@@ -1,18 +1,41 @@
 package pager
 
 import (
+	"fmt"
+	"log"
 	"sync"
 )
 
-// bufferPoolManager is our implementation of a pageFrameManager, which is
-// also sometimes called a buffer pool manager in a dbms system.
+// bufferPoolManager is an implementation of a page buffer pool, which is also
+// sometimes called a buffer pool manager in a dbms system.
 type bufferPoolManager struct {
-	lock     sync.RWMutex
+	lock     sync.RWMutex       // latch
 	frames   []frame            // list of loaded page frames
 	replacer clockReplacer      // used to find an unpinned page for replacement
 	manager  tempDiskManager    // underlying storage manager
 	free     []frameID          // used to find a page for replacement
 	table    map[pageID]frameID // used to keep track of pages
+}
+
+func (b *bufferPoolManager) String() string {
+	ss := fmt.Sprintf("Buffer Pool Manager\n")
+	ss += fmt.Sprintf("\tframes:\n")
+	for i := range b.frames {
+		ss += fmt.Sprintf("\t\tframe %d = %v\n", i, b.frames[i])
+	}
+	ss += fmt.Sprintf("\tfree:\n")
+	ss += fmt.Sprintf("\t\tfree frames = %v\n", b.free)
+	ss += fmt.Sprintf("\ttable(pid,fid):\n")
+	if len(b.table) < 1 {
+		ss += fmt.Sprintf("\t\tnil\n")
+	} else {
+		for pid, fid := range b.table {
+			ss += fmt.Sprintf("\t\t%d -> %d\n", pid, fid)
+		}
+	}
+	ss += fmt.Sprintf("\tclock replacer:\n")
+	ss += fmt.Sprintf("\t\t%v\n", &b.replacer)
+	return ss
 }
 
 // newPageManager initializes and returns a new instance of a bufferPoolManager.
@@ -25,7 +48,13 @@ func newPageManager(size int, disk *tempDiskManager) *bufferPoolManager {
 		table:    make(map[pageID]frameID),
 	}
 	for i := 0; i < size; i++ {
-		bm.frames[i] = *initFrame(frameID(i))
+		bm.frames[i] = frame{
+			pid:      0,
+			fid:      0,
+			pinCount: 0,
+			isDirty:  false,
+			page:     nil,
+		}
 		bm.free[i] = frameID(i)
 	}
 	return bm
@@ -48,7 +77,6 @@ func (b *bufferPoolManager) fetchPage(pid pageID) page {
 	if fid, found := b.table[pid]; found {
 		// It appears to be, so we should get the matching page.
 		pf := b.frames[fid]
-		debug.Printf("pf: %v\n", pf)
 		// Don't forget to increment the pin count, and also pin it (make it
 		// unusable as a victim) in the replacer.
 		pf.pinCount++
@@ -61,22 +89,28 @@ func (b *bufferPoolManager) fetchPage(pid pageID) page {
 	fid, err := b.getUsableFrame()
 	if err != nil {
 		// Something went wrong!
-		panic("FETCHING PAGE, GETTING USABLE FRAME: " + err.Error())
+		log.Printf("FETCHING PAGE, GETTING USABLE FRAME: %s\n", err)
+		return nil
 	}
 	// Read in the page data using the disk manager.
 	data := make([]byte, szPg)
 	err = b.manager.read(pid, data)
 	if err != nil {
 		// Something went wrong!
-		panic("FETCHING PAGE, READING DATA OFF THE DISK: " + err.Error())
+		log.Printf("FETCHING PAGE, READING DATA OFF THE DISK: %s\n", err)
+		return nil
 	}
-	// Copy the page data we read, into our page frame.
-	pf := b.frames[*fid]
+	// Create a new frame instance and copy the data we read into the frame page, because
+	// there is not currently an instance of this page frame in the page table since we had
+	// to victimize one.
+	pf := newFrame(pid, *fid)
 	copy(pf.page, data)
-	// Fill out any other metadata.
-	// Now we can add a page table entry for this frame, and update our frame pointer.
+	// Add the entry to our page table.
 	b.table[pid] = *fid
-	// b.frames[fid] = pf
+	// Update our frame with the new page
+	b.frames[*fid] = pf
+	// Fill out any other metadata...
+	//
 	// Lastly, we return our page.
 	return pf.page
 }
@@ -155,11 +189,13 @@ func (b *bufferPoolManager) newPage() page {
 	// and return the pageID, so we can proceed.
 	pid := b.manager.allocate()
 	// Next, we should create a page frame utilizing the new pageID.
-	pf := newFrame(pid)
+	pf := newFrame(pid, *fid)
 	pg := newPage(pid)
 	copy(pf.page, pg)
 	// Add the entry to our page table.
 	b.table[pid] = *fid
+	// And update the page frame
+	b.frames[*fid] = pf
 	// Finally, return our page pageFrame.
 	return pf.page
 }

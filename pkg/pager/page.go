@@ -197,6 +197,13 @@ type header struct {
 // page is a page.
 type page []byte
 
+func (p *page) size() int {
+	if p == nil {
+		return 0
+	}
+	return len(*p)
+}
+
 // newPage returns a new page instance set with the provided page ID.
 func newPage(pid uint32) page {
 	pg := make(page, szPg, szPg)

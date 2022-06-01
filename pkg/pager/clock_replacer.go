@@ -75,6 +75,10 @@ func (c *clockReplacer) size() int {
 	return c.list.size
 }
 
+func (c *clockReplacer) String() string {
+	return c.list.String()
+}
+
 // ErrListIsFull errors reports when the circular list is at capacity
 var ErrListIsFull = errors.New("list is full; circular list capacity met")
 
