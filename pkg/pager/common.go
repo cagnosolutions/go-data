@@ -4,8 +4,8 @@ import (
 	"errors"
 )
 
-type pageID uint32
-type frameID uint32
+type pageID = uint32
+type frameID = uint32
 
 var (
 	ErrPageNotFound      = errors.New("page could not be found")
@@ -21,6 +21,8 @@ var (
 	ErrPageFull          = errors.New("page is full and out of available space")
 	ErrBadRID            = errors.New("bad record id; either the page id or the slot id did not match")
 	ErrRecNotFound       = errors.New("record has not been found")
+
+	ErrUsableFrameNotFound = errors.New("usable frame ID could not be found; this is not good")
 )
 
 type frameManager interface {

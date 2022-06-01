@@ -7,6 +7,8 @@ import (
 	"unsafe"
 )
 
+var ErrNoVictimFound = errors.New("replacer may be empty; victim could not be found")
+
 // clockReplacer represents a clock based replacement cache
 type clockReplacer struct {
 	list *circularList

@@ -55,18 +55,24 @@ func (d *tempDiskManager) close() {
 // write writes a page to the database file
 func (d *tempDiskManager) write(pid pageID, p page) error {
 	offset := int64(pid * szPg)
-	d.db.Seek(offset, io.SeekStart)
+	_, err := d.db.Seek(offset, io.SeekStart)
+	if err != nil {
+		return err
+	}
 	bytesWritten, err := d.db.Write(p)
 	if err != nil {
 		return err
 	}
 	if bytesWritten != szPg {
-		return errors.New("bytes written not equals page size")
+		return errors.New("bytes written not equal to page size")
 	}
 	if offset >= d.size {
 		d.size = offset + int64(bytesWritten)
 	}
-	d.db.Sync()
+	err = d.db.Sync()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -80,7 +86,10 @@ func (d *tempDiskManager) read(pid pageID, p page) error {
 	if offset > fileInfo.Size() {
 		return errors.New("I/O error past end of file")
 	}
-	d.db.Seek(offset, io.SeekStart)
+	_, err = d.db.Seek(offset, io.SeekStart)
+	if err != nil {
+		return err
+	}
 	bytesRead, err := d.db.Read(p)
 	if err != nil {
 		return errors.New("I/O error while reading")

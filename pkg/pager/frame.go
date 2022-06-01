@@ -1,5 +1,9 @@
 package pager
 
+import (
+	"fmt"
+)
+
 // frame is a page frame
 type frame struct {
 	pid      pageID  // id of this page
@@ -15,11 +19,44 @@ func (f *frame) decrPinCount() {
 	}
 }
 
+func initFrame(fid frameID) *frame {
+	return &frame{
+		pid:      pageID(0),
+		fid:      fid,
+		pinCount: 0,
+		isDirty:  false,
+		page:     make([]byte, szPg),
+	}
+}
+
 func newFrame(pid pageID) *frame {
 	return &frame{
 		pid:      pid,
-		fid:      0,
+		fid:      frameID(0),
 		pinCount: 1,
 		isDirty:  false,
+		page:     make([]byte, szPg),
 	}
+}
+
+func (f *frame) reset() {
+	f.pid = pageID(0)
+	f.fid = frameID(0)
+	f.pinCount = 0
+	f.isDirty = false
+	f.page = nil
+}
+
+func (f *frame) String() string {
+	ss := fmt.Sprintf("page frame:\n")
+	ss += fmt.Sprintf("\tframe.pid=%d\n", f.pid)
+	ss += fmt.Sprintf("\tframe.fid=%d\n", f.fid)
+	ss += fmt.Sprintf("\tframe.pinCount=%d\n", f.pinCount)
+	ss += fmt.Sprintf("\tframe.isDirty=%v\n", f.isDirty)
+	if f.page == nil {
+		ss += fmt.Sprintf("\tframe.page=%v\n", f.page)
+	} else {
+		ss += fmt.Sprintf("\tframe.page=%d bytes\n", len(f.page))
+	}
+	return ss
 }

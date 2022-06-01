@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"runtime"
 
 	"github.com/cagnosolutions/go-data/pkg/slicer"
@@ -214,11 +215,11 @@ func newPage(pid uint32) page {
 // setHeader encodes the provided header structure to the underlying
 // page.
 func (p *page) setHeader(h *header) {
-	bin.PutUint32((*p)[offPID:], h.pid)
-	bin.PutUint16((*p)[offMagic:], h.magic)
-	bin.PutUint16((*p)[offSlots:], h.slots)
-	bin.PutUint16((*p)[offLower:], h.lower)
-	bin.PutUint16((*p)[offUpper:], h.upper)
+	bin.PutUint32((*p)[offPID:offPID+4], h.pid)
+	bin.PutUint16((*p)[offMagic:offMagic+2], h.magic)
+	bin.PutUint16((*p)[offSlots:offSlots+2], h.slots)
+	bin.PutUint16((*p)[offLower:offLower+2], h.lower)
+	bin.PutUint16((*p)[offUpper:offUpper+2], h.upper)
 }
 
 // getHeader decodes (from the underlying page) and returns a
@@ -314,7 +315,9 @@ func (p *page) _getSlot(sid uint16) *slot {
 	// get the slot offset
 	off := szHd + (sid * szSl)
 	// make sure it is in bounds
-	if off > bin.Uint16((*p)[offLower:]) {
+	if lo := bin.Uint16((*p)[offLower:]); off > lo {
+		// log.Printf(">>>>>>>> sid=%d, off=%d, lower=%d\n", sid, off, bin.Uint16((*p)[offLower:]))
+		log.Println(">>>", p)
 		panic("slot id or offset is out of bounds")
 	}
 	// for clarity
