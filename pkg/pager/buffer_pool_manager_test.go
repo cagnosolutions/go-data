@@ -16,7 +16,7 @@ func TestSample(t *testing.T) {
 
 	dm := newTempDiskManager(testFile)
 	defer dm.close()
-	bpm := newPageManager(poolSize, dm)
+	bpm := newBufferPoolManager(poolSize, dm)
 
 	page0 := bpm.newPage()
 	fmt.Println(page0)

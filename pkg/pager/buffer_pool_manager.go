@@ -38,8 +38,8 @@ func (b *bufferPoolManager) String() string {
 	return ss
 }
 
-// newPageManager initializes and returns a new instance of a bufferPoolManager.
-func newPageManager(size int, disk *tempDiskManager) *bufferPoolManager {
+// newBufferPoolManager initializes and returns a new instance of a bufferPoolManager.
+func newBufferPoolManager(size int, disk *tempDiskManager) *bufferPoolManager {
 	bm := &bufferPoolManager{
 		frames:   make([]frame, size, size),
 		replacer: *newClockReplacer(size),
