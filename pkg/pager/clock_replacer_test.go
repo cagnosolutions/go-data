@@ -6,32 +6,32 @@ import (
 )
 
 func TestClockReplacer(t *testing.T) {
-	cr := newClockReplacer[frameID, *frame](10)
-	cr.unpin(1, nil)
-	cr.unpin(2, nil)
-	cr.unpin(3, nil)
-	cr.unpin(4, nil)
-	cr.unpin(5, nil)
-	cr.unpin(6, nil)
-	cr.unpin(1, nil)
+	cr := newClockReplacer(10)
+	cr.unpin(1)
+	cr.unpin(2)
+	cr.unpin(3)
+	cr.unpin(4)
+	cr.unpin(5)
+	cr.unpin(6)
+	cr.unpin(1)
 
 	ans := cr.size()
 	if ans != 6 {
 		t.Errorf("got %d, want %d", ans, 6)
 	}
 
-	val, _ := cr.victim()
-	if val != 1 {
+	val := cr.victim()
+	if *val != 1 {
 		t.Errorf("got %d, want %d", val, 1)
 	}
 
-	val, _ = cr.victim()
-	if val != 2 {
+	val = cr.victim()
+	if *val != 2 {
 		t.Errorf("got %d, want %d", val, 2)
 	}
 
-	val, _ = cr.victim()
-	if val != 3 {
+	val = cr.victim()
+	if *val != 3 {
 		t.Errorf("got %d, want %d", val, 3)
 	}
 
@@ -42,20 +42,20 @@ func TestClockReplacer(t *testing.T) {
 		t.Errorf("got %d, want %d", ans, 2)
 	}
 
-	cr.unpin(4, nil)
+	cr.unpin(4)
 
-	val, _ = cr.victim()
-	if val != 5 {
+	val = cr.victim()
+	if *val != 5 {
 		t.Errorf("got %d, want %d", val, 5)
 	}
 
-	val, _ = cr.victim()
-	if val != 6 {
+	val = cr.victim()
+	if *val != 6 {
 		t.Errorf("got %d, want %d", val, 6)
 	}
 
-	val, _ = cr.victim()
-	if val != 4 {
+	val = cr.victim()
+	if *val != 4 {
 		t.Errorf("got %d, want %d", val, 4)
 	}
 }
@@ -63,7 +63,7 @@ func TestClockReplacer(t *testing.T) {
 func TestCircularList(t *testing.T) {
 
 	// create list
-	list := newCircularList[int, bool](10)
+	list := newCircularList(10)
 
 	// test print
 	fmt.Println("list:", list)
@@ -83,7 +83,7 @@ func TestCircularList(t *testing.T) {
 
 	// check has key
 	for i := 0; i <= list.size; i++ {
-		keyFound := list.hasKey(i)
+		keyFound := list.hasKey(frameID(i))
 		if i%2 == 0 && !keyFound {
 			t.Errorf("got key=%d (%v), wanted key=%d (%v)\n", i, keyFound, i, !keyFound)
 		}
@@ -108,7 +108,7 @@ func TestCircularList(t *testing.T) {
 	fmt.Println("list:", list)
 
 	// test scan
-	iter := func(n *node[int, bool]) bool {
+	iter := func(n *node) bool {
 		fmt.Println(n)
 		return n != nil
 	}

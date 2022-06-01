@@ -9,24 +9,30 @@ import (
 // also sometimes called a buffer pool manager in a dbms system.
 type bufferPoolManager struct {
 	lock     sync.RWMutex
-	frames   []*frame                      // list of loaded page frames
-	replacer *clockReplacer[frameID, bool] // used to find an unpinned page for replacement
-	manager  *tempDiskManager              // underlying storage manager
-	free     []frameID                     // used to find a page for replacement
-	table    *pageTable                    // used to keep track of pages
+	frames   []*frame         // list of loaded page frames
+	replacer *clockReplacer   // used to find an unpinned page for replacement
+	manager  *tempDiskManager // underlying storage manager
+	free     []frameID        // used to find a page for replacement
+	table    *pageTable       // used to keep track of pages
 }
 
 // newPageManager initializes and returns a new instance of a bufferPoolManager.
 func newPageManager(size int, disk *tempDiskManager) *bufferPoolManager {
 	bm := &bufferPoolManager{
 		frames:   make([]*frame, size, size),
-		replacer: newClockReplacer[frameID, bool](size),
+		replacer: newClockReplacer(size),
 		manager:  disk,
 		free:     make([]frameID, size),
 		table:    newPageTable(size),
 	}
 	for i := 0; i < size; i++ {
-		bm.frames[i] = nil
+		bm.frames[i] = &frame{
+			pid:      0,
+			fid:      frameID(i),
+			pinCount: 0,
+			isDirty:  false,
+			page:     nil,
+		}
 		bm.free[i] = frameID(i)
 	}
 	return bm
@@ -105,7 +111,7 @@ func (b *bufferPoolManager) unpinPage(pid pageID, isDirty bool) error {
 	// Decrement the pin count and check if we are able to unpin it.
 	f.decrPinCount()
 	if f.pinCount == 0 {
-		b.replacer.unpin(f.fid, true)
+		b.replacer.unpin(f.fid)
 	}
 	// Next, we must check the page pageFrame to see if the dirty bit
 	// needs to be set.
@@ -157,7 +163,7 @@ func (b *bufferPoolManager) newPage() *page {
 	// getUsableFrame which will first check our free list and if we do
 	// not find one in there getUsableFrame will victimize a pageFrame and
 	// return a frameID we can use.
-	f, err := b.getUsableFrame()
+	pf, err := b.getUsableFrame()
 	if err != nil {
 		// Something went wrong!
 		// panic(err)
@@ -175,13 +181,11 @@ func (b *bufferPoolManager) newPage() *page {
 	// flushed at some point, and if this page is victimized before
 	// it is flushed it will be lost.
 	// pf := newFrame(pid)
-	f.pid = pid
-	b.table.addFrame(f)
-	// b.table[pf.pid] = *fid
-	p := newPage(uint32(pid))
-	b.frames[f.fid].page = p
+	pf.pid = pid
+	pf.page = newPage(uint32(pid))
+	b.table.addFrame(pf)
 	// Finally, return our page pageFrame.
-	return &f.page
+	return &pf.page
 }
 
 // deletePage deletes a page from the pageFrameManager
@@ -248,7 +252,7 @@ func (b *bufferPoolManager) getUsableFrame() (*frame, error) {
 	// us see what we are dealing with.
 	if !found {
 		// We did not find a free frame in our free list, so now we victimize one.
-		*f, _ = (*b.replacer).victim()
+		f = (*b.replacer).victim()
 		// Next we must remove the victimized pageFrame, but
 		// in order to do that we also need to ensure it
 		// does not need to be flushed.
@@ -269,7 +273,8 @@ func (b *bufferPoolManager) getUsableFrame() (*frame, error) {
 	// Now we have an empty pageFrame we can utilize, so we
 	// will return a pointer to our frameID, and a nil
 	// error.
-	return b.frames[*f], nil
+	pf := b.frames[*f]
+	return pf, nil
 }
 
 // flushAll flushes all the pinned pages to the storage manager
