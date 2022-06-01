@@ -25,37 +25,37 @@ var (
 
 type frameManager interface {
 	// fetchPage fetches the requested page pageFrame from the pageFrameManager
-	fetchPage(pid pageID) *pageFrame
+	fetchPage(pid pageID) *page
 	// unpinPage unpins the target page pageFrame from the pageFrameManager
 	unpinPage(pid pageID, isDirty bool) error
 	// flushPage flushes the target page to the storage manager
 	flushPage(pid pageID) error
 	// newPage allocates a new page in the pageFrameManager requesting it from the storage manager
-	newPage() *pageFrame
+	newPage() *page
 	// deletePage deletes a page from the pageFrameManager
 	deletePage(pid pageID) error
 	// getFrame fetches a free page pageFrame, otherwise it victimizes one
-	getFrame() (*frameID, error)
+	getFrame() (*frame, error)
 	// flushAll flushes all the pinned pages to the storage manager
 	flushAll() error
 }
 
-type set[T comparable] map[T]struct{}
+type hashSet[T comparable] map[T]struct{}
 
-func makeMapSet[T comparable](size int) set[T] {
-	return make(set[T], size)
+func makeMapSet[T comparable](size int) hashSet[T] {
+	return make(hashSet[T], size)
 }
 
-func (s set[T]) add(data T) {
-	s[data] = struct{}{}
+func (hs hashSet[T]) add(data T) {
+	hs[data] = struct{}{}
 }
 
-func (s set[T]) del(data T) {
-	delete(s, data)
+func (hs hashSet[T]) del(data T) {
+	delete(hs, data)
 }
 
-func (s set[T]) get() (T, bool) {
-	for d := range s {
+func (hs hashSet[T]) get() (T, bool) {
+	for d := range hs {
 		return d, true
 	}
 	var zero T

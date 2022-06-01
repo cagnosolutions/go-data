@@ -6,33 +6,33 @@ import (
 )
 
 func TestClockReplacer(t *testing.T) {
-	cr := newClockReplacer(10)
-	cr.unpin(1)
-	cr.unpin(2)
-	cr.unpin(3)
-	cr.unpin(4)
-	cr.unpin(5)
-	cr.unpin(6)
-	cr.unpin(1)
+	cr := newClockReplacer[frameID, *frame](10)
+	cr.unpin(1, nil)
+	cr.unpin(2, nil)
+	cr.unpin(3, nil)
+	cr.unpin(4, nil)
+	cr.unpin(5, nil)
+	cr.unpin(6, nil)
+	cr.unpin(1, nil)
 
 	ans := cr.size()
 	if ans != 6 {
 		t.Errorf("got %d, want %d", ans, 6)
 	}
 
-	val := cr.victim()
-	if *val != 1 {
-		t.Errorf("got %d, want %d", *val, 1)
+	val, _ := cr.victim()
+	if val != 1 {
+		t.Errorf("got %d, want %d", val, 1)
 	}
 
-	val = cr.victim()
-	if *val != 2 {
-		t.Errorf("got %d, want %d", *val, 2)
+	val, _ = cr.victim()
+	if val != 2 {
+		t.Errorf("got %d, want %d", val, 2)
 	}
 
-	val = cr.victim()
-	if *val != 3 {
-		t.Errorf("got %d, want %d", *val, 3)
+	val, _ = cr.victim()
+	if val != 3 {
+		t.Errorf("got %d, want %d", val, 3)
 	}
 
 	cr.pin(3)
@@ -42,21 +42,21 @@ func TestClockReplacer(t *testing.T) {
 		t.Errorf("got %d, want %d", ans, 2)
 	}
 
-	cr.unpin(4)
+	cr.unpin(4, nil)
 
-	val = cr.victim()
-	if *val != 5 {
-		t.Errorf("got %d, want %d", *val, 5)
+	val, _ = cr.victim()
+	if val != 5 {
+		t.Errorf("got %d, want %d", val, 5)
 	}
 
-	val = cr.victim()
-	if *val != 6 {
-		t.Errorf("got %d, want %d", *val, 6)
+	val, _ = cr.victim()
+	if val != 6 {
+		t.Errorf("got %d, want %d", val, 6)
 	}
 
-	val = cr.victim()
-	if *val != 4 {
-		t.Errorf("got %d, want %d", *val, 4)
+	val, _ = cr.victim()
+	if val != 4 {
+		t.Errorf("got %d, want %d", val, 4)
 	}
 }
 

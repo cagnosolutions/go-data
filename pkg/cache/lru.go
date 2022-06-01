@@ -65,6 +65,11 @@ func (l *LRU[K, V]) evict() *item[K, V] {
 	return i
 }
 
+func (l *LRU[K, V]) Evict() (K, V) {
+	i := l.evict()
+	return i.key, i.value
+}
+
 // pop, stack operation
 func (l *LRU[K, V]) pop(i *item[K, V]) {
 	i.prev.next = i.next
@@ -200,10 +205,18 @@ func (l *LRU[K, V]) Reverse(iter func(key K, value V) bool) {
 }
 
 func (l *LRU[K, V]) String() string {
-	ss := fmt.Sprintf("lur:\n")
-	ss += fmt.Sprintf("\tsize=%d\n", l.size)
-	ss += fmt.Sprintf("\thead=%s\n", l.head)
-	ss += fmt.Sprintf("\ttail=%s\n", l.tail)
+	ss := fmt.Sprintf("LRU:\n")
+	ss += fmt.Sprintf("\tsize=%v\n", l.size)
+	ss += fmt.Sprintf("\thead=%v\n", l.head)
+	ss += fmt.Sprintf("\ttail=%v\n", l.tail)
+	ss += fmt.Sprintf("\titems:\n")
+	if head := l.head; head != nil {
+		i := head.next
+		for i != l.tail {
+			ss += fmt.Sprintf("\t\t%v\n", i)
+			i = i.next
+		}
+	}
 	return ss
 	// size       int
 	// items      map[K]*item[K, V]

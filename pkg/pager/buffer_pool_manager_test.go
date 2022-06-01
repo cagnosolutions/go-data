@@ -38,7 +38,7 @@ func TestSample(t *testing.T) {
 	}
 	// Scenario: Once the buffer pool is full, we should not be able to create any new pages.
 	for i := poolSize; i < poolSize*2; i++ {
-		util.Equals(t, make(page, szPg)[12:], bpm.newPage().page[12:])
+		util.Equals(t, nil, bpm.newPage())
 	}
 
 	// Scenario: After unpinning pages {0, 1, 2, 3, 4} and pinning another 4 new pages,

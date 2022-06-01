@@ -3,20 +3,21 @@ package pager
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"unsafe"
 )
 
 // clockReplacer represents a clock based replacement cache
-type clockReplacer struct {
-	list *circularList[frameID, bool]
-	ptr  **node[frameID, bool]
+type clockReplacer[K comparable, V any] struct {
+	list *circularList[K, V]
+	ptr  **node[K, V]
 }
 
 // newClockReplacer instantiates and returns a new clockReplacer
-func newClockReplacer(size int) *clockReplacer {
-	list := newCircularList[frameID, bool](size)
-	return &clockReplacer{
+func newClockReplacer[K comparable, V any](size int) *clockReplacer[K, V] {
+	list := newCircularList[K, V](size)
+	return &clockReplacer[K, V]{
 		list: list,
 		ptr:  &list.head,
 	}
@@ -24,22 +25,22 @@ func newClockReplacer(size int) *clockReplacer {
 
 // pin takes a frameID and pins a pageFrame indicating that it should not
 // be victimized until it is unpinned
-func (c *clockReplacer) pin(fid frameID) {
-	n := c.list.find(fid)
+func (c *clockReplacer[K, V]) pin(k K) {
+	n := c.list.find(k)
 	if n == nil {
 		return
 	}
 	if (*c.ptr) == n {
 		c.ptr = &(*c.ptr).next
 	}
-	c.list.remove(fid)
+	c.list.remove(k)
 }
 
 // unpin takes a frameID and unpins a pageFrame indicating that it is now
 // available for victimization
-func (c *clockReplacer) unpin(fid frameID) {
-	if !c.list.hasKey(fid) {
-		c.list.insert(fid, true)
+func (c *clockReplacer[K, V]) unpin(k K, v V) {
+	if !c.list.hasKey(k) {
+		c.list.insert(k, v)
 		if c.list.size == 1 {
 			c.ptr = &c.list.head
 		}
@@ -48,28 +49,31 @@ func (c *clockReplacer) unpin(fid frameID) {
 
 // victim removes the victim pageFrame as defined by the replacement policy
 // and returns the frameID of the victim
-func (c *clockReplacer) victim() *frameID {
+func (c *clockReplacer[K, V]) victim() (K, V) {
 	if c.list.size == 0 {
-		return nil
+		var zK K
+		var zV V
+		return zK, zV
 	}
-	var victimID *frameID
+	var ck K
+	var cv V
 	cn := *c.ptr
 	for {
-		if cn.val == true {
-			cn.val = false
+		if !reflect.DeepEqual(cn.val, nil) {
+			cn.val = *new(V)
 			c.ptr = &cn.next
 		} else {
-			fid := cn.key
-			victimID = &fid
+			ck = cn.key
+			cv = cn.val
 			c.ptr = &cn.next
 			c.list.remove(cn.key)
-			return victimID
+			return ck, cv
 		}
 	}
 }
 
 // size returns the size of the clockReplacer
-func (c *clockReplacer) size() int {
+func (c *clockReplacer[K, V]) size() int {
 	return c.list.size
 }
 

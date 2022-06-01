@@ -1,10 +1,5 @@
 package pager
 
-type frame struct {
-	// metadata
-	// embedded page
-}
-
 // pageCache is a definition of a page buffer pool and all the basic functions that
 // it is required to provide.
 type pageCache interface {
@@ -13,7 +8,7 @@ type pageCache interface {
 	// page will be allocated and loaded into a frame that will then be returned. It
 	// should be noted that allocating a new page from the page cache does not mean
 	// it resides on the disk. It will remain in the page cache until it is flushed.
-	newPage(pid uint32) *frame
+	newPage(pid uint32) *page
 
 	// fetchPage attempts to fetch the frame (that contains the requested page) from
 	// the page cache. If the page is not currently loaded into a frame, it will be
@@ -23,7 +18,7 @@ type pageCache interface {
 	// event in which a page must be victimized, it will first check to see if the
 	// frame considered for reuse is marked as dirty or not. If it is dirty, it will
 	// automatically be flushed before the frame is re-used.
-	fetchPage(pid uint32) *frame
+	fetchPage(pid uint32) *page
 
 	// flushPage attempts to flush the page that has a pageID that matches the provided
 	// one. If there is not a matching page that is currently loaded into a frame, then
