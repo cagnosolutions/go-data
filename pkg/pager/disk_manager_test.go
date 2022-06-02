@@ -7,16 +7,19 @@ import (
 )
 
 var testFile = "testing/diskmanager.db"
+var err error
 
 func TestDiskManager(t *testing.T) {
-	var err error
 	dm := newDiskManager(testFile)
-	err = dm.load()
-	if err != nil {
-		panic(err)
+	fmt.Println(dm.getFreePageIDs())
+	for i := 0; i < 15; i++ {
+		fmt.Println(dm.allocate())
 	}
-	free := dm.getFreePageIDs()
-	fmt.Println(free)
+	fmt.Println(dm.getFreePageIDs())
+	for i := 0; i < 15; i++ {
+		fmt.Println(dm.allocate())
+	}
+	fmt.Println(dm.getFreePageIDs())
 	// close and clean
 	clean(dm)
 }

@@ -26,49 +26,50 @@ type diskManager struct {
 
 // newDiskManager instantiates and returns a new diskManager.
 func newDiskManager(path string) *diskManager {
-	// Create or open file
+	// initialize path and file (create or open)
 	file, err := initPathAndFile(path)
 	if err != nil {
 		panic(err)
 	}
-	// Get file size for calculating page offsets and pageIDs.
-	fi, err := file.Stat()
-	if err != nil {
-		panic(err)
-	}
-	var allocSeg bool
-	size := fi.Size()
-	if size == 0 {
-		allocSeg = true
-	}
-	// Set up the nextID according to the file size.
-	npgs := uint32(size / szPg)
-	var nextID pageID
-	if npgs > 0 {
-		nextID = npgs + 1
-	}
-	// Create a new diskManager instance to return.
+	// get the file size for later
+	// fi, err := file.Stat()
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// var allocSeg bool
+	// size := fi.Size()
+	// if size == 0 {
+	// 	allocSeg = true
+	// }
+	// // Set up the nextID according to the file size.
+	// npgs := uint32(size / szPg)
+	// var nextID pageID
+	// if npgs > 0 {
+	// 	nextID = npgs + 1
+	// }
+	// create a new diskManager instance to return.
 	dm := &diskManager{
-		path:   path,
-		file:   file,
-		nextID: nextID,
-		free:   make(pageIDs, 0),
-		fsize:  size,
+		path:  path,
+		file:  file,
+		free:  make(pageIDs, 0),
+		fsize: getFileSize(path),
 	}
-	// check to see if we should allocate the segment
-	if allocSeg {
+	// if the file was fresh, allocate a segment
+	if dm.fsize == 0 {
 		err = dm.allocateSegment()
 		if err != nil {
 			panic(err)
 		}
-	}
-	err = dm.load()
-	if err != nil {
-		panic(err)
+	} else {
+		err = dm.loadFreePageIDs()
+		if err != nil {
+			panic(err)
+		}
 	}
 	return dm
 }
 
+// getFileSize returns the current file size
 func (dm *diskManager) getFileSize() int64 {
 	fi, err := dm.file.Stat()
 	if err != nil {
@@ -98,18 +99,26 @@ func (dm *diskManager) allocateSegment() error {
 	var pg page
 	var pid pageID
 	for i := int64(0); i < lastPid; i++ {
+		// create an empty page for this offset
 		pid = pageID(i)
 		pg = newEmptyPage(pid)
+		// write empty page
 		_, err = dm.file.WriteAt(pg, i*szPg)
 		if err != nil {
 			return err
 		}
+		// append empty page ID to free set
+		dm.free = append(dm.free, pid)
 	}
+	// sort free page IDs
+	sort.Sort(dm.free)
 	// return
 	return nil
 }
 
-func (dm *diskManager) load() error {
+// loadFreePageIDs reads through the file and populates the free
+// list of pageIDs
+func (dm *diskManager) loadFreePageIDs() error {
 	var pid int64
 	buf := make([]byte, 2)
 	for {
@@ -129,24 +138,6 @@ func (dm *diskManager) load() error {
 	}
 	sort.Sort(dm.free)
 	return nil
-	/*
-		ebuf := data
-		var epos []bpos
-		var pos int
-		for exidx := s.index; len(data) > 0; exidx++ {
-			var n int
-			n, err = loadNextBinaryEntry(data)
-			if err != nil {
-				return err
-			}
-			data = data[n:]
-			epos = append(epos, bpos{pos, pos + n})
-			pos += n
-		}
-		s.ebuf = ebuf
-		s.epos = epos
-		return nil
-	*/
 }
 
 // getOffset is a helper method that checks to ensure the page is not nil
@@ -172,10 +163,19 @@ func (dm *diskManager) getOffset(pid pageID, p page) (int64, error) {
 }
 
 // getNextID increments and returns the next pageID
-func (dm *diskManager) getNextID() pageID {
-	id := dm.nextID
-	dm.nextID++
-	return id
+func (dm *diskManager) getNextID() (pageID, error) {
+	if len(dm.free) < 2 {
+		err := dm.allocateSegment()
+		if err != nil {
+			return 0, err
+		}
+	}
+	next, newFree := dm.free[0], dm.free[1:]
+	dm.free = newFree
+	return next, nil
+	// id := dm.nextID
+	// dm.nextID++
+	// return id
 }
 
 func (dm *diskManager) getFreePageIDs() pageIDs {
@@ -191,22 +191,12 @@ func (dm *diskManager) getFreePageIDs() pageIDs {
 // pages in the file, it will attempt to reuse and return those pageID's
 // before continuing to increment and return new ones.
 func (dm *diskManager) allocate() pageID {
-	// First check the size of the underlying file in order to determine
-	// if we need to grow it or not.
-	sz := getFileSize(dm.path)
-	// Next, we will get the number of used un-used pages within the file.
-	fp := getFreePageCount(dm.path)
-	// Next, determine if the size of the file is close to the 80% full mark.
-	if int64(fp*szPg) < sz-(512*1<<10) {
-		// I DON'T THINK THE ABOVE CALCULATION IS CORRECT...
-		// Grow the underlying file
+	// check the free page count
+	pid, err := dm.getNextID()
+	if err != nil {
+		panic(err)
 	}
-	// File is not full enough, check for and possibly return free page.
-	if fp > 0 {
-		// Get and return free page pageID
-	}
-	// Otherwise, we just increment and return our next pageID
-	return dm.getNextID()
+	return pid
 }
 
 // deallocate attempts to deallocate a page at the offset that is
