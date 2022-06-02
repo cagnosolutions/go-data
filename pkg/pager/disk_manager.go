@@ -1,9 +1,18 @@
 package pager
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 )
+
+type pageIDs []pageID
+
+func (x pageIDs) Len() int           { return len(x) }
+func (x pageIDs) Less(i, j int) bool { return x[i] < x[j] }
+func (x pageIDs) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
 // diskManager is a storage manager for working with files
 // on a long term storage medium, aka the hard drive.
@@ -11,7 +20,7 @@ type diskManager struct {
 	path   string
 	file   *os.File
 	nextID pageID
-	index  *bitset
+	free   pageIDs
 	fsize  int64
 }
 
@@ -27,28 +36,123 @@ func newDiskManager(path string) *diskManager {
 	if err != nil {
 		panic(err)
 	}
+	var allocSeg bool
 	size := fi.Size()
+	if size == 0 {
+		allocSeg = true
+	}
 	// Set up the nextID according to the file size.
 	npgs := uint32(size / szPg)
 	var nextID pageID
 	if npgs > 0 {
-		nextID = pageID(npgs + 1)
+		nextID = npgs + 1
 	}
 	// Create a new diskManager instance to return.
 	dm := &diskManager{
 		path:   path,
 		file:   file,
 		nextID: nextID,
+		free:   make(pageIDs, 0),
 		fsize:  size,
-		index:  newBitset(32),
+	}
+	// check to see if we should allocate the segment
+	if allocSeg {
+		err = dm.allocateSegment()
+		if err != nil {
+			panic(err)
+		}
+	}
+	err = dm.load()
+	if err != nil {
+		panic(err)
 	}
 	return dm
 }
 
-// getPageOffset is a helper method that checks to ensure the page is not nil
+func (dm *diskManager) getFileSize() int64 {
+	fi, err := dm.file.Stat()
+	if err != nil {
+		panic(err)
+	}
+	return fi.Size()
+}
+
+// allocateSegment allocates and initializes a new segment
+func (dm *diskManager) allocateSegment() error {
+	// go to the end of the file
+	off, err := dm.file.Seek(0, io.SeekEnd)
+	if err != nil {
+		return err
+	}
+	// get the current file size
+	size := dm.getFileSize()
+	// truncate the file; grow by segment size
+	err = dm.file.Truncate(size + szSg)
+	if err != nil {
+		return err
+	}
+	// find the last logical page ID after the
+	// resize using the offset
+	lastPid := (off + szSg) / szPg
+	// write logical page data
+	var pg page
+	var pid pageID
+	for i := int64(0); i < lastPid; i++ {
+		pid = pageID(i)
+		pg = newEmptyPage(pid)
+		_, err = dm.file.WriteAt(pg, i*szPg)
+		if err != nil {
+			return err
+		}
+	}
+	// return
+	return nil
+}
+
+func (dm *diskManager) load() error {
+	var pid int64
+	buf := make([]byte, 2)
+	for {
+		_, err := dm.file.ReadAt(buf, (pid*szPg)+4)
+		if err != nil {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				break
+			}
+			return err
+		}
+		magic := bin.Uint16(buf)
+		if magic&stFree > 0 {
+			dm.free = append(dm.free, pageID(pid))
+		}
+		fmt.Printf("page=%d, offset=%d, magic=%.4x\n", pid, pid*szPg, magic)
+		pid++
+	}
+	sort.Sort(dm.free)
+	return nil
+	/*
+		ebuf := data
+		var epos []bpos
+		var pos int
+		for exidx := s.index; len(data) > 0; exidx++ {
+			var n int
+			n, err = loadNextBinaryEntry(data)
+			if err != nil {
+				return err
+			}
+			data = data[n:]
+			epos = append(epos, bpos{pos, pos + n})
+			pos += n
+		}
+		s.ebuf = ebuf
+		s.epos = epos
+		return nil
+	*/
+}
+
+// getOffset is a helper method that checks to ensure the page is not nil
 // and also calculates, checks and returns the logical offset of the provided
-// page using the provided pageID.
-func (dm *diskManager) getPageOffset(pid pageID, p *page) (int64, error) {
+// page using the provided page ID.
+func (dm *diskManager) getOffset(pid pageID, p page) (int64, error) {
 	// First we do a little error checking to ensure the provided page
 	// is not nil, and then we will check that the provided offset is
 	// not outsize of the bounds of the file.
@@ -72,6 +176,10 @@ func (dm *diskManager) getNextID() pageID {
 	id := dm.nextID
 	dm.nextID++
 	return id
+}
+
+func (dm *diskManager) getFreePageIDs() pageIDs {
+	return dm.free
 }
 
 // allocate checks the underlying size of the file and grows it in
@@ -110,20 +218,19 @@ func (dm *diskManager) deallocate(pid pageID) {
 	panic("implement me")
 }
 
-// read attempts to read a page from the underlying storage. It uses
-// the pageID provided to calculate the logical page offset and will
-// attempt to read the contents of the page located at the offset.
-// Any errors encountered while calculating the logical page offset,
-// or while trying to read will be returned.
-func (dm *diskManager) read(pid pageID, p page) error {
+// readPage tries to read the page data from the disk. It uses the provided page ID
+// to calculate the logical offset of the disk resident page. It attempts to read
+// the data into the provided page. If no errors are encountered, the function will
+// return a nil error.
+func (dm *diskManager) readPage(pid pageID, p page) error {
 	// First we do a little error checking, and calculate what the page
 	// offset is supposed to be.
-	offset, err := dm.getPageOffset(pid, &p)
+	offset, err := dm.getOffset(pid, p)
 	if err != nil {
 		return err
 	}
 	// Next, we can attempt to read the contents of the page data
-	// directly from the calculated offset. **Using ReadAt makes one
+	// directly from the calculated offset. Using ReadAt makes one
 	// syscall, vs using Seek+Read which calls syscall twice.
 	n, err := dm.file.ReadAt(p, offset)
 	if err != nil {
@@ -150,7 +257,7 @@ func (dm *diskManager) read(pid pageID, p page) error {
 func (dm *diskManager) write(pid pageID, p page) error {
 	// First we do a little error checking, and calculate what the page
 	// offset is supposed to be.
-	offset, err := dm.getPageOffset(pid, &p)
+	offset, err := dm.getOffset(pid, p)
 	if err != nil {
 		return err
 	}
@@ -178,11 +285,6 @@ func (dm *diskManager) write(pid pageID, p page) error {
 	}
 	// Finally, we can return a nil error because everything is good.
 	return nil
-}
-
-// size returns the size of the underlying file used by the diskManager.
-func (dm *diskManager) size() int64 {
-	return getFileSize(dm.path)
 }
 
 // close will call Close on the underlying file. Any errors are returned.
@@ -218,12 +320,6 @@ func initPathAndFile(path string) (*os.File, error) {
 		}
 		// create file
 		fp, err = os.Create(filepath.Join(dir, name))
-		if err != nil {
-			return nil, err
-		}
-		// initial file creation, so we will size it
-		// to a full segment size.
-		err = fp.Truncate(szSg)
 		if err != nil {
 			return nil, err
 		}

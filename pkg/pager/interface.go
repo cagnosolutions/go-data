@@ -1,10 +1,5 @@
 package pager
 
-import (
-	"io"
-	"os"
-)
-
 // BufferPoolManager is a buffer pool implementation that provides working memory
 // and cache for operations for disk resident files. It is responsible for moving
 // physical pages back and forth from main memory to disk.
@@ -49,6 +44,15 @@ type BufferPoolManager interface {
 
 type DiskManager interface {
 
+	// AllocateSegment allocates a segment in the file on disk . A segment is 2MB.
+	// of 512 pages. If the page is 4KB, a segment is about 2MB.
+	AllocateSegment() error
+
+	// AllocatePage tries to allocate a new page on disk.
+	AllocatePage() (pageID, error)
+
+	DeAllocatePage(pid pageID) error
+
 	// WritePage tries to write the page data to the disk. It uses the provided page ID
 	// to calculate the logical offset of the disk resident page. It attempts to write
 	// the data from the provided page. If no errors are encountered, the function will
@@ -63,55 +67,4 @@ type DiskManager interface {
 
 	// Close will safely synchronize and shutdown all file streams.
 	Close() error
-}
-
-type exampleDiskMan struct {
-	f    *os.File
-	size int64
-}
-
-func (dm *exampleDiskMan) WritePage(pid pageID, pg page) error {
-	// get offset
-	offset := int64(pid * szPg)
-	// set write cursor to offset
-	_, err := dm.f.Seek(offset, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	// write the data from page
-	_, err = dm.f.Write(pg)
-	if err != nil {
-		return err
-	}
-	// flush
-	err = dm.f.Sync()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (dm *exampleDiskMan) ReadPage(pid pageID, pg page) error {
-	// get offset
-	offset := int64(pid * szPg)
-	// check if we are beyond file length
-	if offset > dm.size {
-		return io.ErrUnexpectedEOF
-	}
-	// set read cursor to offset
-	_, err := dm.f.Seek(offset, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	// read the data into page
-	_, err = dm.f.Read(pg)
-	if err != nil {
-		return err
-	}
-	// return nil error
-	return nil
-}
-
-func (dm *exampleDiskMan) Close() error {
-	return nil
 }

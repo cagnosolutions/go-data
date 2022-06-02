@@ -145,7 +145,7 @@ const (
 	szHd = 12
 	szSl = 6
 	szPg = 4096
-	szSg = 64 * szPg
+	szSg = 512 * szPg
 
 	offPID   = 0
 	offMagic = 4
@@ -202,6 +202,22 @@ func (p *page) size() int {
 		return 0
 	}
 	return len(*p)
+}
+
+// newEmptyPage returns a new page instance set with the provided page ID,
+// with a magic byte status of stFree, denoting it as empty and free to use.
+func newEmptyPage(pid uint32) page {
+	pg := make(page, szPg, szPg)
+	pg.setHeader(
+		&header{
+			pid:   pid,
+			magic: stFree,
+			slots: 0,
+			lower: szHd,
+			upper: szPg,
+		},
+	)
+	return pg
 }
 
 // newPage returns a new page instance set with the provided page ID.
@@ -588,8 +604,8 @@ func (p *page) DumpPage(showPageData bool) string {
 	h := p.getHeader()
 	ss := fmt.Sprintf("+------------------[ page header ]------------------+\n")
 	ss += fmt.Sprintf(
-		"pid=%.2d, slots=%.2d, lo=%.3d, hi=%.4d [0x%.8x,0x%.4x,0x%.4x,0x%.4x]\n",
-		h.pid, h.slots, h.lower, h.upper, h.pid, h.slots, h.lower, h.upper,
+		"pid=%.2d, magic=%.2d, slots=%.2d, lo=%.3d, hi=%.4d [0x%.8x,0x%.4x,0x%.4x,0x%.4x]\n",
+		h.pid, h.magic, h.slots, h.lower, h.upper, h.pid, h.slots, h.lower, h.upper,
 	)
 	ss += fmt.Sprintf("+------------------[ slots index ]------------------+\n")
 	for sid := uint16(0); sid < h.slots; sid++ {
