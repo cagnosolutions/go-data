@@ -4,8 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
+)
+
+const (
+	minPgInSg = 1
+	maxPgInSg = int(^uint8(0)) // 255
 )
 
 type pageIDs []pageID
@@ -17,15 +21,15 @@ func (x pageIDs) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 // diskManager is a storage manager for working with files
 // on a long term storage medium, aka the hard drive.
 type diskManager struct {
-	path   string
-	file   *os.File
-	nextID pageID
-	free   pageIDs
-	fsize  int64
+	path    string
+	segSize int
+	file    *os.File
+	free    pageIDs
+	fsize   int64
 }
 
 // newDiskManager instantiates and returns a new diskManager.
-func newDiskManager(path string) *diskManager {
+func newDiskManager(path string, pagesInSeg int) *diskManager {
 	// initialize path and file (create or open)
 	file, err := initPathAndFile(path)
 	if err != nil {
@@ -48,11 +52,15 @@ func newDiskManager(path string) *diskManager {
 	// 	nextID = npgs + 1
 	// }
 	// create a new diskManager instance to return.
+	if pagesInSeg > maxPgInSg {
+		pagesInSeg = maxPgInSg
+	}
 	dm := &diskManager{
-		path:  path,
-		file:  file,
-		free:  make(pageIDs, 0),
-		fsize: getFileSize(path),
+		path:    path,
+		segSize: pagesInSeg * szPg,
+		file:    file,
+		free:    make(pageIDs, 0),
+		fsize:   getFileSize(path),
 	}
 	// if the file was fresh, allocate a segment
 	if dm.fsize == 0 {
@@ -88,16 +96,17 @@ func (dm *diskManager) allocateSegment() error {
 	// get the current file size
 	size := dm.getFileSize()
 	// truncate the file; grow by segment size
-	err = dm.file.Truncate(size + szSg)
+	err = dm.file.Truncate(size + int64(dm.segSize))
 	if err != nil {
 		return err
 	}
 	// find the last logical page ID after the
 	// resize using the offset
-	lastPid := (off + szSg) / szPg
+	lastPid := (off + int64(dm.segSize)) / szPg
 	// write logical page data
 	var pg page
 	var pid pageID
+	slSize := len(dm.free)
 	for i := int64(0); i < lastPid; i++ {
 		// create an empty page for this offset
 		pid = pageID(i)
@@ -108,10 +117,11 @@ func (dm *diskManager) allocateSegment() error {
 			return err
 		}
 		// append empty page ID to free set
-		dm.free = append(dm.free, pid)
+		dm.free = append(dm.free[slSize:], pid)
 	}
 	// sort free page IDs
 	sort.Sort(dm.free)
+	fmt.Printf("allocating segment: before=%d, now=%d, slice=%v\n", slSize, len(dm.free), dm.free)
 	// return
 	return nil
 }
@@ -164,14 +174,15 @@ func (dm *diskManager) getOffset(pid pageID, p page) (int64, error) {
 
 // getNextID increments and returns the next pageID
 func (dm *diskManager) getNextID() (pageID, error) {
-	if len(dm.free) < 2 {
+	if len(dm.free) <= 1 {
 		err := dm.allocateSegment()
 		if err != nil {
 			return 0, err
 		}
 	}
 	next, newFree := dm.free[0], dm.free[1:]
-	dm.free = newFree
+	fmt.Println("NextID:", next)
+	(*dm).free = newFree
 	return next, nil
 	// id := dm.nextID
 	// dm.nextID++
@@ -292,40 +303,48 @@ func (dm *diskManager) close() error {
 // will be created. If the path and file exist, the file is simply
 // opened and returned.
 func initPathAndFile(path string) (*os.File, error) {
-	// sanitize path
-	path, err := filepath.Abs(path)
+	fp, err := fileOpenOrMake(path)
 	if err != nil {
 		return nil, err
 	}
-	// split path
-	dir, name := filepath.Split(filepath.ToSlash(path))
-	// init files and dirs
-	var fp *os.File
-	_, err = os.Stat(path)
-	if os.IsNotExist(err) {
-		// create dir
-		err = os.MkdirAll(dir, os.ModeDir)
-		if err != nil {
-			return nil, err
-		}
-		// create file
-		fp, err = os.Create(filepath.Join(dir, name))
-		if err != nil {
-			return nil, err
-		}
-		// close file
-		err = fp.Close()
-		if err != nil {
-			return nil, err
-		}
-	}
-	// open existing file
-	fp, err = os.OpenFile(path, os.O_RDWR, 0666)
-	if err != nil {
-		return nil, err
-	}
-	// return file and nil error
 	return fp, nil
+
+	/*
+		// sanitize path
+		path, err := filepath.Abs(path)
+		if err != nil {
+			return nil, err
+		}
+		// split path
+		dir, name := filepath.Split(filepath.ToSlash(path))
+		// init files and dirs
+		var fp *os.File
+		_, err = os.Stat(path)
+		if os.IsNotExist(err) {
+			// create dir
+			err = os.MkdirAll(dir, os.ModeDir)
+			if err != nil {
+				return nil, err
+			}
+			// create file
+			fp, err = os.Create(filepath.Join(dir, name))
+			if err != nil {
+				return nil, err
+			}
+			// close file
+			err = fp.Close()
+			if err != nil {
+				return nil, err
+			}
+		}
+		// open existing file
+		fp, err = os.OpenFile(path, os.O_RDWR, 0666)
+		if err != nil {
+			return nil, err
+		}
+		// return file and nil error
+		return fp, nil
+	*/
 }
 
 // getFileSize is a helper function that returns the file size for the

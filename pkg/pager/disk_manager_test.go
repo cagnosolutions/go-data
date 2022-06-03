@@ -4,22 +4,28 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/cagnosolutions/go-data/pkg/util"
 )
 
 var testFile = "testing/diskmanager.db"
+var pagesInSeg = 1
 var err error
 
 func TestDiskManager(t *testing.T) {
-	dm := newDiskManager(testFile)
+	dm := newDiskManager(testFile, pagesInSeg)
+	fmt.Println("disk manager size:", util.Sizeof(dm))
+	var ids []pageID
 	fmt.Println(dm.getFreePageIDs())
 	for i := 0; i < 15; i++ {
-		fmt.Println(dm.allocate())
+		ids = append(ids, dm.allocate())
 	}
 	fmt.Println(dm.getFreePageIDs())
 	for i := 0; i < 15; i++ {
-		fmt.Println(dm.allocate())
+		ids = append(ids, dm.allocate())
 	}
 	fmt.Println(dm.getFreePageIDs())
+	fmt.Println(ids)
 	// close and clean
 	clean(dm)
 }

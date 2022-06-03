@@ -136,15 +136,37 @@ var (
 )
 
 const (
-	stFree = 0x0001
-	stUsed = 0x0002
+	szKB = 1 << 10
+	szMB = 1 << 20
+)
 
-	minSize = 8
-	maxSize = 2048
+func KB(n uint) uint {
+	return n << 10
+}
 
-	szHd = 12
-	szSl = 6
-	szPg = 4096
+func MB(n uint) uint {
+	return n << 20
+}
+
+const (
+
+	// statuses (uint16)
+	stFree = 0x0001 // page or slot is free
+	stUsed = 0x0002 // page or slot to use
+
+	// sizes
+	szMinRec = 8    // minimum record size
+	szMaxRec = 2048 // maximum record size
+
+	szHd = 12 // size of page header (in bytes)
+	szSl = 6  // size of slot index (in bytes)
+
+	szPg  = szPg1 // size of page (default)
+	szPg1 = 4096  // size of page (type 1, 4KB)
+	szPg2 = 4096  // size of page (type 2, 4KB)
+	szPg3 = 4096  // size of page (type 3, 4KB)
+	szPg4 = 4096  // size of page (type 4, 4KB)
+
 	szSg = 512 * szPg
 
 	offPID   = 0
@@ -270,10 +292,10 @@ func (p *page) freeSpace() uint16 {
 
 // checkRecord performs sanity and error checking on a record size
 func (p *page) checkRecord(size uint16) error {
-	if size < minSize {
+	if size < szMinRec {
 		return ErrRecordTooSmall
 	}
-	if size > maxSize {
+	if size > szMaxRec {
 		return ErrRecordTooBig
 	}
 	if size >= p.freeSpace()-szSl {

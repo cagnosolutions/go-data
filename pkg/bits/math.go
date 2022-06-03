@@ -37,7 +37,7 @@ func BiSub(i, j uint) uint {
 func BiMul(i, j uint) uint {
 	var r uint
 	for j > 0 {
-		if j&1 == 0 {
+		if j&1 > 0 {
 			r += i
 		}
 		i = i << 1
@@ -48,7 +48,7 @@ func BiMul(i, j uint) uint {
 
 // BiDiv returns the quotient of two unsigned integers
 // using i as the dividend and j as the divisor.
-func BiDiv(i, j uint) uint {
+func _BiDiv(i, j uint) uint {
 	// So a binary division works from the high order digits to the low
 	// order digits and generates a quotient with each step. Very similar
 	// to how long division works on paper but, this will be split into two
@@ -82,4 +82,25 @@ func BiDiv(i, j uint) uint {
 		}
 	}
 	return quo
+}
+
+func BiDiv(n, d uint) uint {
+	// n is dividend, d is divisor, q holds the result.
+	var q uint = 0
+	// as long as the divisor fits into the remainder there is something to do...
+	for n >= d {
+		var i, dT uint = 0, d
+		// determine to which power of two the divisor still fits the dividend;
+		// our intention is to subtract the divisor multiplied by powers of two
+		// yielding us a one in the binary representation of the result.
+		for ; n >= (dT << 1); i++ {
+			dT <<= 1
+		}
+		// set the corresponding bit in the result
+		q |= 1 << i
+		// subtract the multiple of the divisor to be left with the remainder
+		n -= dT
+		// repeat until the divisor does not fit into the remainder anymore
+	}
+	return q
 }
