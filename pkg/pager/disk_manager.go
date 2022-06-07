@@ -303,7 +303,7 @@ func (dm *diskManager) close() error {
 // will be created. If the path and file exist, the file is simply
 // opened and returned.
 func initPathAndFile(path string) (*os.File, error) {
-	fp, err := fileOpenOrMake(path)
+	fp, err := fileOpenOrCreate(path)
 	if err != nil {
 		return nil, err
 	}

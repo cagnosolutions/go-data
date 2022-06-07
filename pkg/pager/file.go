@@ -44,18 +44,31 @@ func fileOpen(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_RDWR|os.O_SYNC, permMode)
 }
 
-func fileOpenOrMake(path string) (*os.File, error) {
-	dir, name := pathSplit(pathClean(path))
-	full := filepath.Join(dir, name)
-	if _, err := os.Stat(full); os.IsNotExist(err) {
+func fileOpenOrCreate(path string) (*os.File, error) {
+	full, err := filepath.Abs(filepath.ToSlash(path))
+	if err != nil {
+		panic("pathClean: " + err.Error())
+	}
+	dir, _ := filepath.Split(full)
+	var fp *os.File
+	_, err = os.Stat(full)
+	if os.IsNotExist(err) {
 		err = os.MkdirAll(dir, os.ModeDir|permMode)
 		if err != nil {
 			return nil, err
 		}
-		err = fileTouch(full)
+		fp, err = os.OpenFile(full, os.O_CREATE|os.O_TRUNC, permMode)
+		if err != nil {
+			return nil, err
+		}
+		err = fp.Close()
 		if err != nil {
 			return nil, err
 		}
 	}
-	return fileOpen(full)
+	fp, err = os.OpenFile(full, os.O_RDWR|os.O_SYNC, permMode)
+	if err != nil {
+		return nil, err
+	}
+	return fp, nil
 }

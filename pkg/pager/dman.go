@@ -1,9 +1,11 @@
 package pager
 
 import (
+	"io"
 	"os"
 )
 
+// dMan is a disk manager
 type dMan struct {
 	file       *os.File
 	fileName   string
@@ -11,9 +13,10 @@ type dMan struct {
 	size       int64
 }
 
+// NewDMan initializes and returns a new dMan instance.
 func (dm *dMan) NewDMan(dbFilePath string) *dMan {
 	// check to see if a file exists (if none, create)
-	fp, err := fileOpenOrMake(dbFilePath)
+	fp, err := fileOpenOrCreate(dbFilePath)
 	if err != nil {
 		panic(err)
 	}
@@ -32,6 +35,80 @@ func (dm *dMan) NewDMan(dbFilePath string) *dMan {
 	}
 }
 
+// allocate returns the next pageID
+func (dm *dMan) allocatePage() pageID {
+	next := dm.nextPageID
+	dm.nextPageID++
+	return next
+}
+
+// getFreePages searches through the file looking for all the pages
+// that have been deallocated and returns a set of page ID's with
+// any of the deallocated pages.
+func (dm *dMan) getFreePages() []pageID {
+	// Check to ensure the file actually contains some kind of data.
+	if dm.size < 1 {
+		return nil
+	}
+	// Start at the beginning of the file, checking each page status
+	// and build a list of free page ID's.
+	var pid int64
+	buf := make([]byte, 2)
+	var free []pageID
+	for {
+		_, err := dm.file.ReadAt(buf, (pid*szPg)+4)
+		if err != nil {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				break
+			}
+			return nil
+		}
+		magic := bin.Uint16(buf)
+		if magic&stFree > 0 {
+			free = append(free, pageID(pid))
+		}
+		pid++
+	}
+	// Check and return our set of free / deallocated page ID's.
+	if len(free) < 1 {
+		return nil
+	}
+	return free
+}
+
+// deallocatePage wipes the page matching the supplied page ID. If the
+// page ID is out of the bounds of the file, this call is ignored.
+func (dm *dMan) deallocatePage(pid pageID) error {
+	// calculate the logical page offset should be.
+	offset := int64(pid * szPg)
+	if offset < 0 {
+		return ErrOffsetOutOfBounds
+	}
+	// Create an empty page
+	ep := newEmptyPage(pid)
+	// Next, we can attempt to write the contents of an empty page data
+	// directly to the calculated offset.
+	n, err := dm.file.WriteAt(ep, offset)
+	if err != nil {
+		return err
+	}
+	// Check to ensure that we actually wrote the contents of a full page.
+	if n != szPg {
+		return ErrPartialPageWrite
+	}
+	// Update the file size if necessary.
+	if offset >= dm.size {
+		dm.size = offset + int64(n)
+	}
+	// Before we are finished, we should call sync.
+	err = dm.file.Sync()
+	if err != nil {
+		return err
+	}
+	// Finally, we can return a nil error because everything is good.
+	return nil
+}
+
 // writePage attempts to write a page to the underlying storage. It uses
 // the pageID provided to calculate the logical page offset and will
 // attempt to write the contents of the provided page to that offset.
@@ -40,6 +117,9 @@ func (dm *dMan) NewDMan(dbFilePath string) *dMan {
 func (dm *dMan) writePage(pid pageID, p page) error {
 	// calculate the logical page offset should be.
 	offset := int64(pid * szPg)
+	if offset < 0 {
+		return ErrOffsetOutOfBounds
+	}
 	// Next, we can attempt to write the contents of the page data
 	// directly to the calculated offset.
 	// Note: Using WriteAt makes one syscall, vs using Seek+Write
@@ -95,6 +175,7 @@ func (dm *dMan) readPage(pid pageID, p page) error {
 	return nil
 }
 
+// close calls sync and close on the underlying file descriptor.
 func (dm *dMan) close() error {
 	err := dm.file.Close()
 	if err != nil {
