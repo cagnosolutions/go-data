@@ -13,8 +13,8 @@ type dMan struct {
 	size       int64
 }
 
-// NewDMan initializes and returns a new dMan instance.
-func (dm *dMan) NewDMan(dbFilePath string) *dMan {
+// newDMan initializes and returns a new dMan instance.
+func newDMan(dbFilePath string) *dMan {
 	// check to see if a file exists (if none, create)
 	fp, err := fileOpenOrCreate(dbFilePath)
 	if err != nil {
