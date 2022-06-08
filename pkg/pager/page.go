@@ -126,8 +126,8 @@ func info(p page) {
 }
 
 var (
-	ErrRecordTooSmall = errors.New("record is too small (under min size allowed)")
-	ErrRecordTooBig   = errors.New("record is too big (over max size allowed)")
+	ErrRecordTooSmall = errors.New("record is too small (under min sz allowed)")
+	ErrRecordTooBig   = errors.New("record is too big (over max sz allowed)")
 	ErrNoRoom         = errors.New("the page is full, or has too much fragmentation")
 	ErrEmptyPage      = errors.New("the page is empty, cannot get any information")
 	ErrInvalidPID     = errors.New("page ID is not valid, or does not match")
@@ -155,20 +155,13 @@ const (
 	stUsed = 0x0002 // page or slot to use
 
 	// sizes
-	szMinRec = 8    // minimum record size
-	szMaxRec = 2048 // maximum record size
+	szMinRec = 8    // minimum record sz
+	szMaxRec = 2048 // maximum record sz
+	szHd     = 12   // sz of page header (in bytes)
+	szSl     = 6    // sz of slot index (in bytes)
+	szPg     = 4096 // sz of page (default)
 
-	szHd = 12 // size of page header (in bytes)
-	szSl = 6  // size of slot index (in bytes)
-
-	szPg  = szPg1 // size of page (default)
-	szPg1 = 4096  // size of page (type 1, 4KB)
-	szPg2 = 4096  // size of page (type 2, 4KB)
-	szPg3 = 4096  // size of page (type 3, 4KB)
-	szPg4 = 4096  // size of page (type 4, 4KB)
-
-	szSg = 512 * szPg
-
+	// page header binary offsets
 	offPID   = 0
 	offMagic = 4
 	offSlots = 6
@@ -424,7 +417,7 @@ func (p *page) _acquireSlot(size uint16) (uint16, *slot) {
 // addRecord writes a new record to the page. It returns a *recID which
 // is a record ID, along with any potential errors encountered.
 func (p *page) addRecord(data []byte) (*recID, error) {
-	// get the record size
+	// get the record sz
 	rsize := uint16(len(data))
 	// sanity check the record
 	err := p.checkRecord(rsize)

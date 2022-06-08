@@ -68,7 +68,7 @@ func TestCircularList(t *testing.T) {
 	// test print
 	fmt.Println("list:", list)
 
-	// check size
+	// check sz
 	if sz := list.size; sz != 0 {
 		t.Errorf("got %d, wanted %d\n", sz, 0)
 	}
@@ -99,7 +99,7 @@ func TestCircularList(t *testing.T) {
 	list.insert(3, true)
 	list.insert(5, true)
 
-	// expecting size=5, because 0 has been inserted before
+	// expecting sz=5, because 0 has been inserted before
 	if sz := list.size; sz != 5 {
 		t.Errorf("got %d, wanted %d\n", sz, 5)
 	}

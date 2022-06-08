@@ -14,17 +14,18 @@ func TestSample(t *testing.T) {
 
 	testFile := "testing/diskmanager.db"
 
-	dm := newTempDiskManager(testFile)
+	dm := newDiskManager(testFile)
 	defer dm.close()
-	bpm := newBufferPoolManager(poolSize, dm)
+	bpm := newBufferPool(poolSize, dm)
 
 	page0 := bpm.newPage()
 	fmt.Println(page0)
 
-	// Scenario: The buffer pool is empty. We should be able to create a new page.
+	// Scenario 1: The buffer pool is empty. We should be able to create a new page.
 	util.Equals(t, pageID(0), page0.getPageID())
+	log.Printf("[S1] >>> DONE")
 
-	// Scenario: Once we have a page, we should be able to read and write content.
+	// Scenario 2: Once we have a page, we should be able to read and write content.
 	id0, err := page0.addRecord([]byte("Hello, World!"))
 	if err != nil {
 		t.Error(err)
@@ -34,18 +35,22 @@ func TestSample(t *testing.T) {
 		t.Error(err)
 	}
 	util.Equals(t, []byte("Hello, World!"), rec)
+	log.Printf("[S2] >>> DONE")
 
-	// Scenario: We should be able to create new pages until we fill up the buffer pool.
+	// Scenario 3: We should be able to create new pages until we fill up the buffer pool.
 	for i := 1; i < poolSize; i++ {
 		p := bpm.newPage()
 		util.Equals(t, pageID(i), p.getPageID())
 	}
-	// Scenario: Once the buffer pool is full, we should not be able to create any new pages.
+	log.Printf("[S3] >>> DONE")
+
+	// Scenario 4: Once the buffer pool is full, we should not be able to create any new pages.
 	for i := poolSize; i < poolSize*2; i++ {
 		util.Equals(t, page(nil), bpm.newPage())
 	}
+	log.Printf("[S4] >>> DONE")
 
-	// Scenario: After unpinning pages {0, 1, 2, 3, 4} and pinning another 4 new pages,
+	// Scenario 5: After unpinning pages {0, 1, 2, 3, 4} and pinning another 4 new pages,
 	// there would still be one cache frame left for reading page 0.
 	for i := 0; i < 5; i++ {
 		util.Ok(t, bpm.unpinPage(pageID(i), true))
@@ -63,15 +68,18 @@ func TestSample(t *testing.T) {
 		//	t.Error(err)
 		// }
 	}
-	// Scenario: We should be able to fetch the data we wrote a while ago.
+	log.Printf("[S5] >>> DONE")
+
+	// Scenario 6: We should be able to fetch the data we wrote a while ago.
 	page0 = bpm.fetchPage(pageID(0))
 	rec2, err := page0.getRecord(id0)
 	if err != nil {
 		t.Error(err)
 	}
 	util.Equals(t, []byte("Hello, World!"), rec2)
+	log.Printf("[S6] >>> DONE")
 
-	// Scenario: If we unpin page 0 and then make a new page, all the buffer pages should
+	// Scenario 7: If we unpin page 0 and then make a new page, all the buffer pages should
 	// now be pinned. Fetching page 0 should fail.
 	util.Ok(t, bpm.unpinPage(pageID(0), true))
 
@@ -80,6 +88,7 @@ func TestSample(t *testing.T) {
 	util.Equals(t, page(nil), bpm.newPage())
 	fmt.Println(bpm)
 	util.Equals(t, page(nil), bpm.fetchPage(pageID(0)))
+	log.Printf("[S7] >>> DONE")
 
 	dm.close()
 	// time.Sleep(3 * time.Second)

@@ -3,6 +3,7 @@ package pager
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"unsafe"
 )
@@ -24,32 +25,51 @@ func newClockReplacer(size int) *clockReplacer {
 	}
 }
 
-// pin takes a frameID and pins a pageFrame indicating that it should not
-// be victimized until it is unpinned
-func (c *clockReplacer) pin(pid frameID) {
-	n := c.list.find(pid)
+// pin takes a frame ID and "pins" it, indicating that the caller is now
+// using it. Because the caller is now using it, the replacer can now remove
+// it to no longer make it available for victimization.
+func (c *clockReplacer) pin(fid frameID) {
+	n := c.list.find(fid)
 	if n == nil {
 		return
 	}
 	if (*c.ptr) == n {
 		c.ptr = &(*c.ptr).next
 	}
-	c.list.remove(pid)
+	c.list.remove(fid)
 }
 
-// unpin takes a frameID and unpins a pageFrame indicating that it is now
-// available for victimization
-func (c *clockReplacer) unpin(k frameID) {
-	if !c.list.hasKey(k) {
-		c.list.insert(k, true)
+// remove is identical to the `pin` call. It is just a wrapper for clarity's
+// sake; I feel the name is more apt in describing the function it is performing.
+func (c *clockReplacer) remove(fid frameID) {
+	c.pin(fid)
+}
+
+// unpin takes a frame ID and "unpins" it, indicating that the caller is no
+// longer using it. Because the caller is no longer using it, the replacer
+// can now add it to make it available for victimization.
+func (c *clockReplacer) unpin(fid frameID) {
+	if !c.list.hasKey(fid) {
+		if err := c.list.insert(fid, true); err != nil {
+			log.Panicf("replacer.unpin: failed on insert: %q", err)
+		}
 		if c.list.size == 1 {
 			c.ptr = &c.list.head
 		}
 	}
 }
 
-// victim removes the victim pageFrame as defined by the replacement policy
-// and returns the frameID of the victim
+// insert is identical to the `unpin` call. It is just a wrapper for clarity's
+// sake; I feel the name is more apt in describing the function it is performing.
+func (c *clockReplacer) insert(fid frameID) {
+	c.unpin(fid)
+}
+
+// victim searches for a frame ID in the replacer that it can victimize and
+// return to the caller. It locates and removes a victim frame ID (as defined
+// by the replacement policy) and returns it. If there are no frame IDs to
+// victimize, it will simply return nil. In the case of a nil return, the caller
+// will have to figure out how to handle the situation.
 func (c *clockReplacer) victim() *frameID {
 	if c.list.size == 0 {
 		return nil
@@ -70,13 +90,40 @@ func (c *clockReplacer) victim() *frameID {
 	}
 }
 
-// size returns the size of the clockReplacer
+// evict is identical to the `victim` call. It is just a wrapper for clarity's
+// sake; I feel the name is more apt in describing the function it is performing.
+func (c *clockReplacer) evict() *frameID {
+	return c.victim()
+}
+
+// size returns the number of elements currently in the replacer.
 func (c *clockReplacer) size() int {
 	return c.list.size
 }
 
+// String is the stringer method for this type.
 func (c *clockReplacer) String() string {
 	return c.list.String()
+}
+
+func NewClockReplacer(size int) Replacer {
+	return newClockReplacer(size)
+}
+
+func (c *clockReplacer) Pin(fid FrameID) {
+	c.pin(fid)
+}
+
+func (c *clockReplacer) Unpin(fid FrameID) {
+	c.unpin(fid)
+}
+
+func (c *clockReplacer) Victim() *FrameID {
+	return c.victim()
+}
+
+func (c *clockReplacer) Size() int {
+	return c.size()
 }
 
 // ErrListIsFull errors reports when the circular list is at capacity

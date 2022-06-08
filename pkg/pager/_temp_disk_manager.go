@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-// tempDiskManager is the disk implementation of DiskManager
+// tempDiskManager is the manager implementation of StorageManager
 type tempDiskManager struct {
 	db         *os.File
 	fileName   string
@@ -18,7 +18,7 @@ type tempDiskManager struct {
 	size       int64
 }
 
-// newTempDiskManager returns a DiskManager instance
+// newTempDiskManager returns a StorageManager instance
 func newTempDiskManager(dbFilename string) *tempDiskManager {
 	file, err := makeOrOpenFile(dbFilename)
 	if err != nil {
@@ -66,7 +66,7 @@ func (d *tempDiskManager) write(pid pageID, p page) error {
 		return err
 	}
 	if bytesWritten != szPg {
-		return errors.New("bytes written not equal to page size")
+		return errors.New("bytes written not equal to page sz")
 	}
 	if offset >= d.size {
 		d.size = offset + int64(bytesWritten)
@@ -120,12 +120,12 @@ func (d *tempDiskManager) allocate() pageID {
 func (d *tempDiskManager) deallocate(pid pageID) {
 }
 
-// GetNumWrites returns the number of disk writes
+// GetNumWrites returns the number of manager writes
 func (d *tempDiskManager) GetNumWrites() uint64 {
 	return d.numWrites
 }
 
-// Size returns the size of the file in disk
+// Size returns the sz of the file in manager
 func (d *tempDiskManager) Size() int64 {
 	return d.size
 }
