@@ -91,3 +91,96 @@ type Replacer interface {
 	// Size returns the number of elements currently in the replacer.
 	Size() int
 }
+
+// tests
+type pageCache struct {
+	pageSize int
+	numPages int
+	sc       storageCache
+}
+
+func newPageCache(pageSize, numPages int, sm storageCache) *pageCache {
+	return &pageCache{
+		pageSize: pageSize,
+		numPages: numPages,
+		sc:       sm,
+	}
+}
+
+func (p *pageCache) NewPage() (Page, error) {
+	return make(Page, p.pageSize), nil
+}
+
+func (p *pageCache) FetchPage(pid PageID) (Page, error) {
+	pg := make(Page, p.pageSize)
+	err := p.sc.ReadPage(pid, pg)
+	if err != nil {
+		return nil, err
+	}
+	return pg, nil
+}
+
+func (p *pageCache) UnpinPage(pid PageID, isDirty bool) error {
+	return nil
+}
+
+func (p *pageCache) FlushPage(pid PageID) error {
+	return p.sc.WritePage(pid, make(Page, p.pageSize))
+}
+
+func (p *pageCache) DeletePage(pid PageID) error {
+	return p.sc.Deallocate(pid)
+}
+
+func (p *pageCache) FlushAll() error {
+	return nil
+}
+
+type storageCache struct {
+	pageSize int
+	fileName string
+	nextID   uint32
+}
+
+func newStorageCache(pageSize int, fileName string) *storageCache {
+	return &storageCache{
+		pageSize: pageSize,
+		fileName: fileName,
+	}
+}
+
+func (s storageCache) Allocate() PageID {
+	next := s.nextID
+	s.nextID++
+	return next
+}
+
+func (s *storageCache) Deallocate(pid PageID) error {
+	off := int(pid) / s.pageSize
+	_ = off
+	return nil
+}
+
+func (s *storageCache) ReadPage(pid PageID, pg Page) error {
+	off := int(pid) / s.pageSize
+	_ = off
+	data := make(Page, s.pageSize)
+	copy(pg, data)
+	return nil
+}
+
+func (s *storageCache) WritePage(pid PageID, pg Page) error {
+	off := int(pid) / s.pageSize
+	_ = off
+	data := make(Page, s.pageSize)
+	copy(data, pg)
+	return nil
+}
+
+func (s *storageCache) Close() error {
+	return nil
+}
+
+func (s *storageCache) Size() int {
+	return 0
+}
