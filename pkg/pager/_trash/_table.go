@@ -1,4 +1,4 @@
-package pager
+package _trash
 
 // pageTable maps pageID's to frames
 type pageTable struct {

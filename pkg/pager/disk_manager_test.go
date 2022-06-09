@@ -1,21 +1,18 @@
 package pager
 
 import (
-	"fmt"
 	"os"
 	"testing"
-
-	"github.com/cagnosolutions/go-data/pkg/util"
 )
 
 var dManFile = "testing/dman.db"
 var r1, r2, r3 *recID
 var err error
 
-func TestDMan(t *testing.T) {
+func TestDiskManager(t *testing.T) {
 	// create new dman
 	dm := newDiskManager(dManFile)
-	fmt.Println("dman sz:", util.Sizeof(dm))
+	// fmt.Println("dman sz:", util.Sizeof(dm))
 
 	// get a fresh page ID
 	pid := dm.allocatePage()
@@ -60,26 +57,29 @@ func TestDMan(t *testing.T) {
 	}
 
 	// print the page data
-	fmt.Println(np.DumpPage(false))
+	// fmt.Println(np.DumpPage(false))
 
 	// read the data from the page
 	r1d, err := np.getRecord(r1)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("record 1, data: %q\n", r1d)
+	// fmt.Printf("record 1, data: %q\n", r1d)
+	_ = r1d
 
 	r2d, err := np.getRecord(r2)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("record 2, data: %q\n", r2d)
+	// fmt.Printf("record 2, data: %q\n", r2d)
+	_ = r2d
 
 	r3d, err := np.getRecord(r3)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("record 3, data: %q\n", r3d)
+	// fmt.Printf("record 3, data: %q\n", r3d)
+	_ = r3d
 
 	// deallocate page
 	err = dm.deallocatePage(pid)
@@ -95,10 +95,10 @@ func TestDMan(t *testing.T) {
 	}
 
 	// print the page data
-	fmt.Println(np2.DumpPage(false))
+	// fmt.Println(np2.DumpPage(false))
 
 	// list any free pages
-	fmt.Println("free:", dm.getFreePages())
+	// fmt.Println("free:", dm.getFreePages())
 
 	// close and clean
 	cnc(dm)

@@ -2,7 +2,6 @@ package pager
 
 import (
 	"encoding/binary"
-	"fmt"
 	"testing"
 )
 
@@ -76,7 +75,7 @@ func TestBitset_Size(t *testing.T) {
 	if len(bm2.bits) != 512 {
 		t.Error("bitset is the wrong fsize")
 	}
-	fmt.Println("bm2 sz:", bm2.sizeof())
+	// fmt.Println("bm2 sz:", bm2.sizeof())
 }
 
 func TestBitset_Has(t *testing.T) {
@@ -117,23 +116,24 @@ func TestBitset_WriteAndRead(t *testing.T) {
 		bm.set(uint(i))
 	}
 	// print out
-	fmt.Println(bm)
+	// fmt.Println(bm)
 	// dump to bytes
 	b := make([]byte, size/8+1)
 	n := bm.write(b)
-	fmt.Printf("wrote %d bytes\n", n)
+	_ = n
+	// fmt.Printf("wrote %d bytes\n", n)
 	// buf = bm.toBytes()
 	// hex.Dump(buf)
-	fmt.Printf("bytes:\n%b\n", b)
+	// fmt.Printf("bytes:\n%b\n", b)
 
 	// make a new one from the bytes
 	// bm2 := newBitmapFromBytes(b)
 	bm2 := newBitset(size * 3)
-	fmt.Println("before:", bm2)
+	// fmt.Println("before:", bm2)
 	// print out
 	n = bm2.read(b)
-	fmt.Printf("read %d bytes\n", n)
-	fmt.Println("after:", bm2)
+	// fmt.Printf("read %d bytes\n", n)
+	// fmt.Println("after:", bm2)
 }
 
 func TestBitset_FindFirst(t *testing.T) {
@@ -146,23 +146,23 @@ func TestBitset_FindFirst(t *testing.T) {
 			bm.set(uint(i))
 		}
 	}
-	fmt.Println(bm)
+	// fmt.Println(bm)
 	// find first
 	at := bm.free()
-	fmt.Printf("free space found at: %d\n", at)
+	//	fmt.Printf("free space found at: %d\n", at)
 	// set the found one
 	bm.set(uint(at))
-	fmt.Println(bm)
+	// fmt.Println(bm)
 	// find the next free one
 	at = bm.free()
-	fmt.Printf("free space found at: %d\n", at)
+	// fmt.Printf("free space found at: %d\n", at)
 	// set the found one
 	bm.set(uint(at))
-	fmt.Println(bm)
+	//	fmt.Println(bm)
 	// find the next free one
 	at = bm.free()
-	fmt.Printf("free space found at: %d\n", at)
-	fmt.Println(bm)
+	// fmt.Printf("free space found at: %d\n", at)
+	// fmt.Println(bm)
 }
 
 func TestBitset_Resize(t *testing.T) {
@@ -170,24 +170,26 @@ func TestBitset_Resize(t *testing.T) {
 	for i := 0; i < 128; i++ {
 		bm.set(uint(i))
 		if i%8 == 0 {
-			fmt.Printf("setting %.3d\t%s\n", i, bm)
+			//	fmt.Printf("setting %.3d\t%s\n", i, bm)
 		}
 	}
 	bm.set(254)
-	fmt.Println(bm)
+	//	fmt.Println(bm)
 }
 
 func TestBitset_Aligns(t *testing.T) {
 	for i := 0; i < 255; i += 16 {
 		b := roundTo(i, 2)
-		fmt.Printf("roundTo(%d, %d) produced %d\n", i, 64, b)
+		// fmt.Printf("roundTo(%d, %d) produced %d\n", i, 64, b)
 		c := alignedSize(uint64(i))
-		fmt.Printf("alignedSize(%d) produced %d\n\n", i, c)
+		// fmt.Printf("alignedSize(%d) produced %d\n\n", i, c)
+		_, _ = b, c
 	}
 }
 
 func TestBitset_RealSize(t *testing.T) {
 	bm := newBitset(127)
-	fmt.Println(bm)
-	fmt.Println("actual sz in memory: ", bm.sizeof())
+	_ = bm
+	// fmt.Println(bm)
+	// fmt.Println("actual sz in memory: ", bm.sizeof())
 }

@@ -2,7 +2,6 @@ package pager
 
 import (
 	"fmt"
-	"log"
 	"sync"
 )
 
@@ -132,7 +131,7 @@ func (b *bufferPool) fetchPage(pid pageID) page {
 	fid, err := b.getUsableFrame()
 	if err != nil {
 		// Something went wrong!
-		log.Printf("ERROR FETCHING PAGE, GETTING UN-USABLE FRAME: %s\n", err)
+		// log.Printf("ERROR FETCHING PAGE, GETTING UN-USABLE FRAME: %s\n", err)
 		return nil
 	}
 	// Read in the page data using the manager storageManager.
@@ -140,7 +139,7 @@ func (b *bufferPool) fetchPage(pid pageID) page {
 	err = b.manager.ReadPage(pid, data)
 	if err != nil {
 		// Something went wrong!
-		log.Printf("FETCHING PAGE, READING DATA OFF THE DISK: %s\n", err)
+		// log.Printf("FETCHING PAGE, READING DATA OFF THE DISK: %s\n", err)
 		return nil
 	}
 	// Create a new frame instance and copy the data we read into the frame page, because

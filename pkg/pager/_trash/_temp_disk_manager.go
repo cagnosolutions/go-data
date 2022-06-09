@@ -1,4 +1,4 @@
-package pager
+package _trash
 
 import (
 	"errors"

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"sync"
 
 	"github.com/cagnosolutions/go-data/pkg/slicer"
 )
@@ -168,6 +169,8 @@ const (
 	offLower = 8
 	offUpper = 10
 )
+
+var pageLatch sync.RWMutex
 
 // bin is just a little shorthand if you wish to easily change
 // up the encoding and decoding byte order, this variable can
@@ -417,6 +420,8 @@ func (p *page) _acquireSlot(size uint16) (uint16, *slot) {
 // addRecord writes a new record to the page. It returns a *recID which
 // is a record ID, along with any potential errors encountered.
 func (p *page) addRecord(data []byte) (*recID, error) {
+	pageLatch.Lock()
+	defer pageLatch.Unlock()
 	// get the record sz
 	rsize := uint16(len(data))
 	// sanity check the record
@@ -435,7 +440,6 @@ func (p *page) addRecord(data []byte) (*recID, error) {
 		pid: bin.Uint32((*p)[offPID:]),
 		sid: sid,
 	}, nil
-
 }
 
 // checkRID performs error and sanity checking on the provided
@@ -454,6 +458,8 @@ func (p *page) checkRID(id *recID) error {
 // that is associated with the provided record ID, along with any
 // potential errors encountered.
 func (p *page) getRecord(id *recID) ([]byte, error) {
+	pageLatch.RLock()
+	defer pageLatch.RUnlock()
 	// sanity check the record ID
 	err := p.checkRID(id)
 	if err != nil {
@@ -497,6 +503,8 @@ func (p *page) _delSlot(sid uint16) *slot {
 // record that can occupy the same (or less) space. It returns any
 // errors encountered.
 func (p *page) delRecord(id *recID) error {
+	pageLatch.Lock()
+	defer pageLatch.Unlock()
 	// sanity check the record ID
 	err := p.checkRID(id)
 	if err != nil {

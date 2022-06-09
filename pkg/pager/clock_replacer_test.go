@@ -1,7 +1,6 @@
 package pager
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -66,7 +65,7 @@ func TestCircularList(t *testing.T) {
 	list := newCircularList(10)
 
 	// test print
-	fmt.Println("list:", list)
+	// fmt.Println("list:", list)
 
 	// check sz
 	if sz := list.size; sz != 0 {
@@ -79,7 +78,7 @@ func TestCircularList(t *testing.T) {
 	list.insert(4, true)
 
 	// test print
-	fmt.Println("list:", list)
+	// fmt.Println("list:", list)
 
 	// check has key
 	for i := 0; i <= list.size; i++ {
@@ -105,32 +104,32 @@ func TestCircularList(t *testing.T) {
 	}
 
 	// test print
-	fmt.Println("list:", list)
+	// fmt.Println("list:", list)
 
 	// test scan
 	iter := func(n *node) bool {
-		fmt.Println(n)
+		// fmt.Println(n)
 		return n != nil
 	}
 	list.scan(iter)
 
 	// remove
 	list.remove(0)
-	fmt.Println(list)
+	// fmt.Println(list)
 	list.scan(iter)
 
 	// remove another
 	list.remove(4)
-	fmt.Println(list)
+	// fmt.Println(list)
 	list.scan(iter)
 
 	// remove another
 	list.remove(5)
-	fmt.Println(list)
+	// fmt.Println(list)
 	list.scan(iter)
 
 	// remove another
 	list.remove(2)
-	fmt.Println(list)
+	//	fmt.Println(list)
 	list.scan(iter)
 }
