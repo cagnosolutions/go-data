@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/cagnosolutions/go-data/pkg/util"
@@ -183,4 +184,91 @@ func getRandVal(rr *[]*recID, remove bool) *recID {
 		return ret
 	}
 	return (*rr)[i]
+}
+
+var addBPRecords = func(bp *bufferPool, pid pageID) error {
+	pg := bp.fetchPage(pid)
+	if pg == nil {
+		return ErrPageNotFound
+	}
+	for i := 0; i < 128; i++ {
+		rec := fmt.Sprintf("record-%6d", i)
+		_, err = pg.addRecord([]byte(rec))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var getBPRecords = func(bp *bufferPool, pid pageID) error {
+	pg := bp.fetchPage(pid)
+	if pg == nil {
+		return ErrPageNotFound
+	}
+	for i := 0; i < 128; i++ {
+		rid := &recID{
+			pid: pid,
+			sid: uint16(i),
+		}
+		_, err := pg.getRecord(rid)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var delBPRecords = func(bp *bufferPool, pid pageID) error {
+	pg := bp.fetchPage(pid)
+	if pg == nil {
+		return ErrPageNotFound
+	}
+	for i := 0; i < 128; i++ {
+		rid := &recID{
+			pid: pid,
+			sid: uint16(i),
+		}
+		err := pg.delRecord(rid)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func TestBufferPool_Sync(t *testing.T) {
+	poolSize := 10
+	testFile := "testing/bp_race.db"
+	dm := newDiskManager(testFile)
+	defer dm.close()
+	bp := newBufferPool(poolSize, dm)
+	_ = bp.newPage()
+	err := addBPRecords(bp, 0)
+	if err != nil {
+		t.Error(err)
+	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		err := getBPRecords(bp, 0)
+		if err != nil {
+			if err != ErrRecordNotFound {
+				t.Error(err)
+			}
+		}
+		wg.Done()
+	}()
+	go func() {
+		err := delBPRecords(bp, 0)
+		if err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+	err = bp.flushAll()
+	if err != nil {
+		t.Error(err)
+	}
+	wg.Wait()
 }

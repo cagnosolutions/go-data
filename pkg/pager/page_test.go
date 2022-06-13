@@ -1,6 +1,8 @@
 package pager
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -50,7 +52,7 @@ func TestPage_NewEmptyPage(t *testing.T) {
 	}
 }
 
-func addRecords(t *testing.T) {
+func _addRecords(t *testing.T) {
 	pg = newPage(3)
 	id1, err := pg.addRecord([]byte("this is record number one"))
 	if err != nil || id1 == nil {
@@ -71,38 +73,113 @@ func addRecords(t *testing.T) {
 
 func TestPage_AddRecord(t *testing.T) {
 	pg = newPage(3)
-	addRecords(t)
+	err := addRecords(pg)
+	if err != nil {
+		t.Error(err)
+	}
+	// fmt.Println(pg)
 }
 
 func TestPage_GetRecord(t *testing.T) {
 	pg = newPage(3)
-	addRecords(t)
-	for i := range recs {
-		data, err := pg.getRecord(recs[i])
-		if err != nil {
-			t.Errorf("got %v, expected %v\n", err, nil)
-		}
-		if data == nil {
-			t.Errorf("got %v, expected %v\n", data, "<record data>")
-		}
+	err := addRecords(pg)
+	if err != nil {
+		t.Error(err)
+	}
+	err = getRecords(pg)
+	if err != nil {
+		t.Error(err)
 	}
 }
 
 func TestPage_DelRecord(t *testing.T) {
 	pg = newPage(3)
-	addRecords(t)
+	err := addRecords(pg)
+	if err != nil {
+		t.Error(err)
+	}
 	sz := pg.size()
 	if sz == 0 {
 		t.Errorf("got %v, expected %v\n", sz, 3)
 	}
-	for i := range recs {
-		err = pg.delRecord(recs[i])
+	err = delRecords(pg)
+	if err != nil {
+		t.Error(err)
+	}
+	// for i := range recs {
+	// 	err = pg.delRecord(recs[i])
+	// 	if err != nil {
+	// 		t.Errorf("got %v, expected %v\n", err, nil)
+	// 	}
+	// 	_, err := pg.getRecord(recs[i])
+	// 	if err == nil {
+	// 		t.Errorf("got %v, expected %v\n", "<error>", err)
+	// 	}
+	// }
+}
+
+var addRecords = func(p page) error {
+	for i := 0; i < 128; i++ {
+		rec := fmt.Sprintf("record-%6d", i)
+		_, err := p.addRecord([]byte(rec))
 		if err != nil {
-			t.Errorf("got %v, expected %v\n", err, nil)
-		}
-		_, err := pg.getRecord(recs[i])
-		if err == nil {
-			t.Errorf("got %v, expected %v\n", "<error>", err)
+			return err
 		}
 	}
+	return nil
+}
+
+var getRecords = func(p page) error {
+	for i := 0; i < 128; i++ {
+		rid := &recID{
+			pid: 3,
+			sid: uint16(i),
+		}
+		_, err := p.getRecord(rid)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var delRecords = func(p page) error {
+	for i := 0; i < 128; i++ {
+		rid := &recID{
+			pid: 3,
+			sid: uint16(i),
+		}
+		err := p.delRecord(rid)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func TestPage_Sync(t *testing.T) {
+	pg = newPage(3)
+	err := addRecords(pg)
+	if err != nil {
+		t.Error(err)
+	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		err := getRecords(pg)
+		if err != nil {
+			if err != ErrRecordNotFound {
+				t.Error(err)
+			}
+		}
+		wg.Done()
+	}()
+	go func() {
+		err := delRecords(pg)
+		if err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+	wg.Wait()
 }

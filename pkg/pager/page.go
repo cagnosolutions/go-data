@@ -1,13 +1,16 @@
 package pager
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
 	"runtime"
+	"strings"
 	"sync"
+	"text/tabwriter"
 
 	"github.com/cagnosolutions/go-data/pkg/slicer"
 )
@@ -170,7 +173,14 @@ const (
 	offUpper = 10
 )
 
-var pageLatch sync.RWMutex
+// page latch
+// type latch struct {
+//	sync.Mutex
+// }
+// func (l latch) Lock() {}
+// func (l latch) Unlock() {}
+
+var pgLatch sync.Mutex
 
 // bin is just a little shorthand if you wish to easily change
 // up the encoding and decoding byte order, this variable can
@@ -420,8 +430,8 @@ func (p *page) _acquireSlot(size uint16) (uint16, *slot) {
 // addRecord writes a new record to the page. It returns a *recID which
 // is a record ID, along with any potential errors encountered.
 func (p *page) addRecord(data []byte) (*recID, error) {
-	pageLatch.Lock()
-	defer pageLatch.Unlock()
+	pgLatch.Lock()
+	defer pgLatch.Unlock()
 	// get the record sz
 	rsize := uint16(len(data))
 	// sanity check the record
@@ -458,8 +468,8 @@ func (p *page) checkRID(id *recID) error {
 // that is associated with the provided record ID, along with any
 // potential errors encountered.
 func (p *page) getRecord(id *recID) ([]byte, error) {
-	pageLatch.RLock()
-	defer pageLatch.RUnlock()
+	pgLatch.Lock()
+	defer pgLatch.Unlock()
 	// sanity check the record ID
 	err := p.checkRID(id)
 	if err != nil {
@@ -503,8 +513,8 @@ func (p *page) _delSlot(sid uint16) *slot {
 // record that can occupy the same (or less) space. It returns any
 // errors encountered.
 func (p *page) delRecord(id *recID) error {
-	pageLatch.Lock()
-	defer pageLatch.Unlock()
+	pgLatch.Lock()
+	defer pgLatch.Unlock()
 	// sanity check the record ID
 	err := p.checkRID(id)
 	if err != nil {
@@ -621,6 +631,37 @@ func delRecord(p page, rid *recID) error {
 
 func compact(p page) error {
 	return p.compact()
+}
+
+func (p page) String() string {
+	var buf bytes.Buffer
+	w := tabwriter.NewWriter(&buf, 16, 4, 0, ' ', tabwriter.DiscardEmptyColumns)
+	var err error
+	_, err = fmt.Fprintf(w, "pid\tmagic\tslots\tlower\tupper\n")
+	if err != nil {
+		panic(err)
+	}
+	err = w.Flush()
+	if err != nil {
+		panic(err)
+	}
+	n := buf.Len()
+	hrule := strings.Repeat("-", n)
+	_, err = fmt.Fprintf(w, "%s\n", hrule)
+	if err != nil {
+		panic(err)
+	}
+	h := p.getHeader()
+	_, err = fmt.Fprintf(w, "%.4d\t%.4d\t%.4d\t%.4d\t%.4d", h.pid, h.magic, h.slots, h.lower, h.upper)
+	if err != nil {
+		panic(err)
+	}
+	err = w.Flush()
+	if err != nil {
+		panic(err)
+	}
+	data := buf.String()
+	return fmt.Sprintf("%s\n%s\n", hrule, data)
 }
 
 func (p *page) DumpPage(showPageData bool) string {
