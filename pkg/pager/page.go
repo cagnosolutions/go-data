@@ -129,6 +129,8 @@ func info(p page) {
 	fmt.Println(p.DumpPage(false))
 }
 
+// https://go.dev/play/p/gr8RC8vDuSv
+
 var (
 	ErrRecordTooSmall = errors.New("record is too small (under min sz allowed)")
 	ErrRecordTooBig   = errors.New("record is too big (over max sz allowed)")
@@ -154,6 +156,10 @@ func MB(n uint) uint {
 
 const (
 
+	// meta (uint32)
+	mdFixed = 0x00000004 //
+	mdDynam = 0x00000007 //
+
 	// statuses (uint16)
 	stFree = 0x0001 // page or slot is free
 	stUsed = 0x0002 // page or slot to use
@@ -161,25 +167,20 @@ const (
 	// sizes
 	szMinRec = 8    // minimum record sz
 	szMaxRec = 2048 // maximum record sz
-	szHd     = 12   // sz of page header (in bytes)
+	szHd     = 16   // sz of page header (in bytes)
 	szSl     = 6    // sz of slot index (in bytes)
 	szPg     = 4096 // sz of page (default)
 
 	// page header binary offsets
-	offPID   = 0
-	offMagic = 4
-	offSlots = 6
-	offLower = 8
-	offUpper = 10
+	offPID   = 0  // uint32
+	offMeta  = 4  // uint32
+	offStat  = 8  // uint16
+	offSlots = 10 // uint16
+	offLower = 12 // uint16
+	offUpper = 14 // uint16
 )
 
 // page latch
-// type latch struct {
-//	sync.Mutex
-// }
-// func (l latch) Lock() {}
-// func (l latch) Unlock() {}
-
 var pgLatch sync.Mutex
 
 // bin is just a little shorthand if you wish to easily change
@@ -215,11 +216,12 @@ type recID struct {
 
 // header is a struct representing a page header.
 type header struct {
-	pid   uint32 // id of page
-	magic uint16 // status and type
-	slots uint16 // number of slots
-	lower uint16 // lower free space bound
-	upper uint16 // upper free space bound
+	pid    uint32 // id of page
+	meta   uint32 // meta data for page
+	status uint16 // status of page
+	slots  uint16 // number of slots
+	lower  uint16 // lower free space bound
+	upper  uint16 // upper free space bound
 }
 
 // page is a page.
@@ -233,16 +235,17 @@ func (p *page) size() int {
 }
 
 // newEmptyPage returns a new page instance set with the provided page ID,
-// with a magic byte status of stFree, denoting it as empty and free to use.
+// with a meta byte status of stFree, denoting it as empty and free to use.
 func newEmptyPage(pid uint32) page {
 	pg := make(page, szPg, szPg)
 	pg.setHeader(
 		&header{
-			pid:   pid,
-			magic: stFree,
-			slots: 0,
-			lower: szHd,
-			upper: szPg,
+			pid:    pid,
+			meta:   0,
+			status: stFree,
+			slots:  0,
+			lower:  szHd,
+			upper:  szPg,
 		},
 	)
 	return pg
@@ -253,11 +256,12 @@ func newPage(pid uint32) page {
 	pg := make(page, szPg, szPg)
 	pg.setHeader(
 		&header{
-			pid:   pid,
-			magic: stUsed,
-			slots: 0,
-			lower: szHd,
-			upper: szPg,
+			pid:    pid,
+			meta:   0,
+			status: stUsed,
+			slots:  0,
+			lower:  szHd,
+			upper:  szPg,
 		},
 	)
 	return pg
@@ -267,7 +271,8 @@ func newPage(pid uint32) page {
 // page.
 func (p *page) setHeader(h *header) {
 	bin.PutUint32((*p)[offPID:offPID+4], h.pid)
-	bin.PutUint16((*p)[offMagic:offMagic+2], h.magic)
+	bin.PutUint32((*p)[offMeta:offMeta+4], h.meta)
+	bin.PutUint16((*p)[offMeta:offMeta+2], h.status)
 	bin.PutUint16((*p)[offSlots:offSlots+2], h.slots)
 	bin.PutUint16((*p)[offLower:offLower+2], h.lower)
 	bin.PutUint16((*p)[offUpper:offUpper+2], h.upper)
@@ -277,11 +282,12 @@ func (p *page) setHeader(h *header) {
 // pointer to a header structure
 func (p *page) getHeader() *header {
 	return &header{
-		pid:   bin.Uint32((*p)[offPID:]),
-		magic: bin.Uint16((*p)[offMagic:]),
-		slots: bin.Uint16((*p)[offSlots:]),
-		lower: bin.Uint16((*p)[offLower:]),
-		upper: bin.Uint16((*p)[offUpper:]),
+		pid:    bin.Uint32((*p)[offPID:]),
+		meta:   bin.Uint32((*p)[offMeta:]),
+		status: bin.Uint16((*p)[offStat:]),
+		slots:  bin.Uint16((*p)[offSlots:]),
+		lower:  bin.Uint16((*p)[offLower:]),
+		upper:  bin.Uint16((*p)[offUpper:]),
 	}
 }
 
@@ -637,7 +643,7 @@ func (p page) String() string {
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 16, 4, 0, ' ', tabwriter.DiscardEmptyColumns)
 	var err error
-	_, err = fmt.Fprintf(w, "pid\tmagic\tslots\tlower\tupper\n")
+	_, err = fmt.Fprintf(w, "pid\tmeta\tslots\tlower\tupper\n")
 	if err != nil {
 		panic(err)
 	}
@@ -652,7 +658,7 @@ func (p page) String() string {
 		panic(err)
 	}
 	h := p.getHeader()
-	_, err = fmt.Fprintf(w, "%.4d\t%.4d\t%.4d\t%.4d\t%.4d", h.pid, h.magic, h.slots, h.lower, h.upper)
+	_, err = fmt.Fprintf(w, "%.4d\t%.4d\t%.4d\t%.4d\t%.4d", h.pid, h.meta, h.slots, h.lower, h.upper)
 	if err != nil {
 		panic(err)
 	}
@@ -668,8 +674,8 @@ func (p *page) DumpPage(showPageData bool) string {
 	h := p.getHeader()
 	ss := fmt.Sprintf("+------------------[ page header ]------------------+\n")
 	ss += fmt.Sprintf(
-		"pid=%.2d, magic=%.2d, slots=%.2d, lo=%.3d, hi=%.4d [0x%.8x,0x%.4x,0x%.4x,0x%.4x]\n",
-		h.pid, h.magic, h.slots, h.lower, h.upper, h.pid, h.slots, h.lower, h.upper,
+		"pid=%.2d, meta=%.2d, slots=%.2d, lo=%.3d, hi=%.4d [0x%.8x,0x%.4x,0x%.4x,0x%.4x]\n",
+		h.pid, h.meta, h.slots, h.lower, h.upper, h.pid, h.slots, h.lower, h.upper,
 	)
 	ss += fmt.Sprintf("+------------------[ slots index ]------------------+\n")
 	for sid := uint16(0); sid < h.slots; sid++ {

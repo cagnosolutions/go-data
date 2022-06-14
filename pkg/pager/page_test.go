@@ -19,7 +19,7 @@ func TestPage_NewPage(t *testing.T) {
 	}
 	tmp := header{
 		pid:   3,
-		magic: stUsed,
+		meta:  stUsed,
 		slots: 0,
 		lower: szHd,
 		upper: szPg,
@@ -41,7 +41,7 @@ func TestPage_NewEmptyPage(t *testing.T) {
 	}
 	tmp := header{
 		pid:   4,
-		magic: stFree,
+		meta:  stFree,
 		slots: 0,
 		lower: szHd,
 		upper: szPg,
