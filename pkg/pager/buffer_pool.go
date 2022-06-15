@@ -8,7 +8,7 @@ import (
 // bufferPool is an implementation of a page buffer pool, which is also
 // sometimes called a buffer pool storageManager in a dbms system.
 type bufferPool struct {
-	lock     sync.RWMutex       // latch
+	lock     sync.Mutex         // latch
 	frames   []frame            // list of loaded page frames
 	replacer Replacer           // used to find an unpinned page for replacement
 	manager  StorageManager     // underlying storage storageManager
@@ -274,7 +274,7 @@ func (b *bufferPool) flushAll() error {
 	// Very simply, we will just range all the entries in the
 	// page pageFrame table, and call flushPage for each of them.
 	var err error
-	for pid, _ := range b.table {
+	for pid := range b.table {
 		err = b.flushPage(pid)
 		if err != nil {
 			return err

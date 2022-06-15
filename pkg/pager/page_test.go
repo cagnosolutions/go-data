@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/cagnosolutions/go-data/pkg/slicer"
 )
 
 var recs []*recID
@@ -18,11 +20,12 @@ func TestPage_NewPage(t *testing.T) {
 		t.Errorf("got %v, expected %v\n", len(pg), szPg)
 	}
 	tmp := header{
-		pid:   3,
-		meta:  stUsed,
-		slots: 0,
-		lower: szHd,
-		upper: szPg,
+		pid:    3,
+		meta:   mdSlotted | mdRecDynmc,
+		status: stUsed,
+		slots:  0,
+		lower:  szHd,
+		upper:  szPg,
 	}
 	hdr := pg.getHeader()
 	if *hdr != tmp || hdr == nil {
@@ -40,11 +43,12 @@ func TestPage_NewEmptyPage(t *testing.T) {
 		t.Errorf("got %v, expected %v\n", len(epg), szPg)
 	}
 	tmp := header{
-		pid:   4,
-		meta:  stFree,
-		slots: 0,
-		lower: szHd,
-		upper: szPg,
+		pid:    4,
+		meta:   mdSlotted | mdRecDynmc,
+		status: stFree,
+		slots:  0,
+		lower:  szHd,
+		upper:  szPg,
 	}
 	hdr := epg.getHeader()
 	if *hdr != tmp || hdr == nil {
@@ -77,7 +81,7 @@ func TestPage_AddRecord(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	// fmt.Println(pg)
+	fmt.Println(pg)
 }
 
 func TestPage_GetRecord(t *testing.T) {
@@ -182,4 +186,122 @@ func TestPage_Sync(t *testing.T) {
 		wg.Done()
 	}()
 	wg.Wait()
+}
+
+func TestPage_Rando(t *testing.T) {
+	pageTests()
+}
+
+const N = 32
+
+var ids []recID
+
+func pageTests() {
+	p := newPage(1)
+	info(p)
+	fmt.Println(">>>>> [01 ADDING] <<<<<")
+	fmt.Printf("created page, adding %d records...\n", N)
+	for i := 0; i < N; i++ {
+		data := fmt.Sprintf("[record number %.2d]", i)
+		id, err := p.addRecord([]byte(data))
+		if err != nil {
+			panic(err)
+		}
+		ids = append(ids, *id)
+	}
+	fmt.Println()
+	info(p)
+	fmt.Println(">>>>> [02 GETTING] <<<<<")
+	fmt.Printf("now, we will be getting the records...\n")
+	for _, id := range ids {
+		rec, err := p.getRecord(&id)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("get(%v)=%q\n", id, rec)
+	}
+	fmt.Println()
+	fmt.Println(">>>>> [03 DELETING] <<<<<")
+	fmt.Printf("now, we will be removing some records...\n")
+	for i, id := range ids {
+		if (id.sid+1)%3 == 0 || id.sid == 31 {
+			fmt.Printf("deleting record: %v\n", id)
+			err := p.delRecord(&id)
+			if err != nil {
+				panic(err)
+			}
+			slicer.DelPtr(&ids, i)
+		}
+	}
+	fmt.Println()
+	info(p)
+	fmt.Println(">>>>> [04 GETTING] <<<<<")
+	fmt.Printf("now, we will be getting the records...\n")
+	for _, id := range ids {
+		rec, err := p.getRecord(&id)
+		if err != nil {
+			if err == ErrRecordNotFound {
+				continue
+			}
+			panic(err)
+		}
+		fmt.Printf("get(%v)=%q\n", id, rec)
+	}
+	fmt.Println()
+	fmt.Printf("taking a look at the page details...\n")
+	info(p)
+	fmt.Println(">>>>> [05 ADDING (9) MORE] <<<<<")
+	for i := 32; i < N+8; i++ {
+		data := fmt.Sprintf("[record number %.2d]", i)
+		id, err := p.addRecord([]byte(data))
+		if err != nil {
+			panic(err)
+		}
+		ids = append(ids, *id)
+	}
+	id, err := p.addRecord([]byte("[large record that will not fit in existing space]"))
+	if err != nil {
+		panic(err)
+	}
+	ids = append(ids, *id)
+	fmt.Println()
+	info(p)
+	fmt.Println(">>>>> [06 GETTING] <<<<<")
+	fmt.Printf("now, we will be getting the records...\n")
+	for _, id := range ids {
+		rec, err := p.getRecord(&id)
+		if err != nil {
+			if err == ErrRecordNotFound {
+				continue
+			}
+			panic(err)
+		}
+		fmt.Printf("get(%v)=%q\n", id, rec)
+	}
+	fmt.Println()
+	fmt.Println(">>>>> [07 NEW PAGE] <<<<<")
+	p = newPage(2)
+	for i := 0; ; i++ {
+		data := fmt.Sprintf("adding another record (%.2d)", i)
+		_, err := p.addRecord([]byte(data))
+		if err != nil {
+			if err == ErrNoRoom {
+				break
+			}
+			panic(err)
+		}
+	}
+	fmt.Println()
+	info(p)
+	fmt.Println(">>>>> [08 COMPACTION] <<<<<")
+	if err = p.compact(); err != nil {
+		panic(err)
+	}
+	fmt.Println()
+	info(p)
+	fmt.Println()
+}
+
+func info(p page) {
+	fmt.Println(p.DumpPage(false))
 }

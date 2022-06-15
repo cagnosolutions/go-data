@@ -11,123 +11,7 @@ import (
 	"strings"
 	"sync"
 	"text/tabwriter"
-
-	"github.com/cagnosolutions/go-data/pkg/slicer"
 )
-
-const N = 32
-
-var ids []recID
-
-func pageTests() {
-	p := newPage(1)
-	info(p)
-	fmt.Println(">>>>> [01 ADDING] <<<<<")
-	fmt.Printf("created page, adding %d records...\n", N)
-	for i := 0; i < N; i++ {
-		data := fmt.Sprintf("[record number %.2d]", i)
-		id, err := p.addRecord([]byte(data))
-		if err != nil {
-			panic(err)
-		}
-		ids = append(ids, *id)
-	}
-	fmt.Println()
-	info(p)
-	fmt.Println(">>>>> [02 GETTING] <<<<<")
-	fmt.Printf("now, we will be getting the records...\n")
-	for _, id := range ids {
-		rec, err := p.getRecord(&id)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Printf("get(%v)=%q\n", id, rec)
-	}
-	fmt.Println()
-	fmt.Println(">>>>> [03 DELETING] <<<<<")
-	fmt.Printf("now, we will be removing some records...\n")
-	for i, id := range ids {
-		if (id.sid+1)%3 == 0 || id.sid == 31 {
-			fmt.Printf("deleting record: %v\n", id)
-			err := p.delRecord(&id)
-			if err != nil {
-				panic(err)
-			}
-			slicer.DelPtr(&ids, i)
-		}
-	}
-	fmt.Println()
-	info(p)
-	fmt.Println(">>>>> [04 GETTING] <<<<<")
-	fmt.Printf("now, we will be getting the records...\n")
-	for _, id := range ids {
-		rec, err := p.getRecord(&id)
-		if err != nil {
-			if err == ErrRecordNotFound {
-				continue
-			}
-			panic(err)
-		}
-		fmt.Printf("get(%v)=%q\n", id, rec)
-	}
-	fmt.Println()
-	fmt.Printf("taking a look at the page details...\n")
-	info(p)
-	fmt.Println(">>>>> [05 ADDING (9) MORE] <<<<<")
-	for i := 32; i < N+8; i++ {
-		data := fmt.Sprintf("[record number %.2d]", i)
-		id, err := p.addRecord([]byte(data))
-		if err != nil {
-			panic(err)
-		}
-		ids = append(ids, *id)
-	}
-	id, err := p.addRecord([]byte("[large record that will not fit in existing space]"))
-	if err != nil {
-		panic(err)
-	}
-	ids = append(ids, *id)
-	fmt.Println()
-	info(p)
-	fmt.Println(">>>>> [06 GETTING] <<<<<")
-	fmt.Printf("now, we will be getting the records...\n")
-	for _, id := range ids {
-		rec, err := p.getRecord(&id)
-		if err != nil {
-			if err == ErrRecordNotFound {
-				continue
-			}
-			panic(err)
-		}
-		fmt.Printf("get(%v)=%q\n", id, rec)
-	}
-	fmt.Println()
-	fmt.Println(">>>>> [07 NEW PAGE] <<<<<")
-	p = newPage(2)
-	for i := 0; ; i++ {
-		data := fmt.Sprintf("adding another record (%.2d)", i)
-		_, err := p.addRecord([]byte(data))
-		if err != nil {
-			if err == ErrNoRoom {
-				break
-			}
-			panic(err)
-		}
-	}
-	fmt.Println()
-	info(p)
-	fmt.Println(">>>>> [08 COMPACTION] <<<<<")
-	if err = p.compact(); err != nil {
-		panic(err)
-	}
-	fmt.Println()
-	info(p)
-	fmt.Println()
-}
-
-func info(p page) {
-	fmt.Println(p.DumpPage(false))
-}
 
 // https://go.dev/play/p/gr8RC8vDuSv
 
@@ -141,43 +25,63 @@ var (
 	ErrRecordNotFound = errors.New("record not found, it may have been deleted")
 )
 
+// Available flag values
 const (
-	szKB = 1 << 10
-	szMB = 1 << 20
+	_ uint16 = 0x0004
+	_ uint16 = 0x0008
+	_ uint16 = 0x0010
+	_ uint16 = 0x0020
+	_ uint16 = 0x0040
+	_ uint16 = 0x0080
+	_ uint16 = 0x0100
+	_ uint16 = 0x0200
+	_ uint16 = 0x0400
+	_ uint16 = 0x0800
+	_ uint16 = 0x1000
+	_ uint16 = 0x2000
+	_ uint16 = 0x4000
+	_ uint16 = 0x8000
 )
 
-func KB(n uint) uint {
-	return n << 10
-}
-
-func MB(n uint) uint {
-	return n << 20
-}
-
+// Sizes for header, page and records
 const (
-
-	// meta (uint32)
-	mdFixed = 0x00000004 //
-	mdDynam = 0x00000007 //
-
-	// statuses (uint16)
-	stFree = 0x0001 // page or slot is free
-	stUsed = 0x0002 // page or slot to use
-
-	// sizes
 	szMinRec = 8    // minimum record sz
 	szMaxRec = 2048 // maximum record sz
 	szHd     = 16   // sz of page header (in bytes)
 	szSl     = 6    // sz of slot index (in bytes)
 	szPg     = 4096 // sz of page (default)
+)
 
-	// page header binary offsets
-	offPID   = 0  // uint32
-	offMeta  = 4  // uint32
-	offStat  = 8  // uint16
-	offSlots = 10 // uint16
-	offLower = 12 // uint16
-	offUpper = 14 // uint16
+// Binary offsets for page header
+const (
+	offPID   = 0  // pid=uint32		offs=0-4
+	offMeta  = 4  // meta=uint32	offs=4-8
+	offStat  = 8  // status=uint16	offs=8-10
+	offSlots = 10 // slots=uint16	offs=10-12
+	offLower = 12 // lower=uint16	offs=12-14
+	offUpper = 14 // upper=uint16	offs=14-16
+)
+
+// Status flags (page or slot status)
+const (
+	stFree uint16 = 0x0001 // page or slot is free
+	stUsed uint16 = 0x0002 // page or slot to use
+)
+
+// Meta flags for page
+const (
+	// Record type
+	mdRecFixed uint32 = 0x000004 // fixed sized records
+	mdRecDynmc uint32 = 0x000008 // dynamic sized records
+
+	// Slotted page type
+	mdSlotted uint32 = 0x000010 // default, general purpose slotted page
+	_         uint32 = 0x000020
+	_         uint32 = 0x000040
+	_         uint32 = 0x000080
+
+	// temp disable
+	_ = mdRecFixed
 )
 
 // page latch
@@ -241,7 +145,7 @@ func newEmptyPage(pid uint32) page {
 	pg.setHeader(
 		&header{
 			pid:    pid,
-			meta:   0,
+			meta:   mdSlotted | mdRecDynmc,
 			status: stFree,
 			slots:  0,
 			lower:  szHd,
@@ -257,7 +161,7 @@ func newPage(pid uint32) page {
 	pg.setHeader(
 		&header{
 			pid:    pid,
-			meta:   0,
+			meta:   mdSlotted | mdRecDynmc,
 			status: stUsed,
 			slots:  0,
 			lower:  szHd,
@@ -272,7 +176,7 @@ func newPage(pid uint32) page {
 func (p *page) setHeader(h *header) {
 	bin.PutUint32((*p)[offPID:offPID+4], h.pid)
 	bin.PutUint32((*p)[offMeta:offMeta+4], h.meta)
-	bin.PutUint16((*p)[offMeta:offMeta+2], h.status)
+	bin.PutUint16((*p)[offStat:offStat+2], h.status)
 	bin.PutUint16((*p)[offSlots:offSlots+2], h.slots)
 	bin.PutUint16((*p)[offLower:offLower+2], h.lower)
 	bin.PutUint16((*p)[offUpper:offUpper+2], h.upper)
@@ -340,7 +244,7 @@ func (p *page) getSlotSet() []*slot {
 // setSlotSet encodes a set of slot pointers into this page. It will
 // return an error if there is not enough room to write the set of slots
 // to the underlying page.
-func (p *page) setSlotSet(slots []*slot) error {
+func (p *page) setSlotSet(_ []*slot) error {
 	// Not sure if I want to append or overwrite this at the moment...
 	return nil
 }
@@ -623,27 +527,11 @@ func (p *page) compact() error {
 	return nil
 }
 
-func addRecord(p page, rec []byte) (*recID, error) {
-	return p.addRecord(rec)
-}
-
-func getRecord(p page, rid *recID) ([]byte, error) {
-	return p.getRecord(rid)
-}
-
-func delRecord(p page, rid *recID) error {
-	return p.delRecord(rid)
-}
-
-func compact(p page) error {
-	return p.compact()
-}
-
 func (p page) String() string {
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 16, 4, 0, ' ', tabwriter.DiscardEmptyColumns)
 	var err error
-	_, err = fmt.Fprintf(w, "pid\tmeta\tslots\tlower\tupper\n")
+	_, err = fmt.Fprintf(w, "pid\tmeta\tstatus\tslots\tlower\tupper\n")
 	if err != nil {
 		panic(err)
 	}
@@ -658,7 +546,7 @@ func (p page) String() string {
 		panic(err)
 	}
 	h := p.getHeader()
-	_, err = fmt.Fprintf(w, "%.4d\t%.4d\t%.4d\t%.4d\t%.4d", h.pid, h.meta, h.slots, h.lower, h.upper)
+	_, err = fmt.Fprintf(w, "%.4d\t%.4d\t%.4d\t%.4d\t%.4d\t%.4d", h.pid, h.meta, h.status, h.slots, h.lower, h.upper)
 	if err != nil {
 		panic(err)
 	}

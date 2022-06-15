@@ -16,7 +16,12 @@ func TestBufferPool(t *testing.T) {
 	testFile := "testing/diskmanager.db"
 
 	dm := newDiskManager(testFile)
-	defer dm.close()
+	defer func(dm *diskManager) {
+		err := dm.close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(dm)
 	bpm := newBufferPool(poolSize, dm)
 
 	page0 := bpm.newPage()
@@ -91,7 +96,10 @@ func TestBufferPool(t *testing.T) {
 	util.Equals(t, page(nil), bpm.fetchPage(pageID(0)))
 	// log.Printf("[S7] >>> DONE")
 
-	dm.close()
+	err = dm.close()
+	if err != nil {
+		return
+	}
 	// time.Sleep(3 * time.Second)
 
 	// remove test files
@@ -106,7 +114,12 @@ func TestBufferPool_Race(t *testing.T) {
 	testFile := "testing/diskmanager.db"
 
 	dm := newDiskManager(testFile)
-	defer dm.close()
+	defer func(dm *diskManager) {
+		err := dm.close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(dm)
 	bpm := newBufferPool(poolSize, dm)
 
 	pg := bpm.newPage()
@@ -241,7 +254,12 @@ func TestBufferPool_Sync(t *testing.T) {
 	poolSize := 10
 	testFile := "testing/bp_race.db"
 	dm := newDiskManager(testFile)
-	defer dm.close()
+	defer func(dm *diskManager) {
+		err := dm.close()
+		if err != nil {
+			t.Error(err)
+		}
+	}(dm)
 	bp := newBufferPool(poolSize, dm)
 	_ = bp.newPage()
 	err := addBPRecords(bp, 0)
