@@ -3,6 +3,7 @@ package pager
 import (
 	"io"
 	"os"
+	"sync/atomic"
 )
 
 // diskManager is a manager storageManager
@@ -10,7 +11,7 @@ type diskManager struct {
 	file       *os.File
 	fileName   string
 	nextPageID pageID
-	sz         int64
+	fileSize   int64
 }
 
 // newDMan initializes and returns a new diskManager instance.
@@ -24,22 +25,23 @@ func newDiskManager(dbFilePath string) *diskManager {
 	if err != nil {
 		panic(err)
 	}
-	// check the sz of the file
+	// check the fileSize of the file
 	size := fi.Size()
 	// init and return a new *diskManager
 	return &diskManager{
 		file:       fp,
 		fileName:   fp.Name(),
 		nextPageID: pageID(size / szPg),
-		sz:         size,
+		fileSize:   size,
 	}
 }
 
 // allocatePage returns, then increments the ID or offset of the next entry.
 func (dm *diskManager) allocatePage() pageID {
-	next := dm.nextPageID
-	dm.nextPageID++
-	return next
+	return atomic.SwapUint32(&dm.nextPageID, dm.nextPageID+1)
+	// next := dm.nextPageID
+	// dm.nextPageID++
+	// return next
 }
 
 // deallocatePage wipes the entry in the location matching the provided ID
@@ -62,9 +64,9 @@ func (dm *diskManager) deallocatePage(pid pageID) error {
 	if n != szPg {
 		return ErrPartialPageWrite
 	}
-	// Update the file sz if necessary.
-	if offset >= dm.sz {
-		dm.sz = offset + int64(n)
+	// Update the file fileSize if necessary.
+	if offset >= dm.fileSize {
+		dm.fileSize = offset + int64(n)
 	}
 	// Before we are finished, we should call sync.
 	err = dm.file.Sync()
@@ -127,9 +129,9 @@ func (dm *diskManager) writePage(pid pageID, p page) error {
 	if n != szPg {
 		return ErrPartialPageWrite
 	}
-	// Update the file sz if necessary.
-	if offset >= dm.sz {
-		dm.sz = offset + int64(n)
+	// Update the file fileSize if necessary.
+	if offset >= dm.fileSize {
+		dm.fileSize = offset + int64(n)
 	}
 	// Before we are finished, we should call sync.
 	err = dm.file.Sync()
@@ -164,7 +166,7 @@ func (dm *diskManager) size() int {
 // any of the deallocated pages.
 func (dm *diskManager) getFreePages() []pageID {
 	// Check to ensure the file actually contains some kind of data.
-	if dm.sz < 1 {
+	if dm.fileSize < 1 {
 		return nil
 	}
 	// Start at the beginning of the file, checking each page status

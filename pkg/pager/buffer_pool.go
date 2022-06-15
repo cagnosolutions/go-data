@@ -5,10 +5,48 @@ import (
 	"sync"
 )
 
+// Defaults for buffer pool
+const (
+	DefaultBufferSize = 1 << 20  // 1MB
+	MinBufferSize     = 64 << 10 // 64KB
+	MaxBufferSize     = 8 << 20  // 8MB
+
+	KB = 1 << 10
+	MB = 1 << 20
+
+	Size1KB  = 1 << 10
+	Size2KB  = 2 << 10
+	Size4KB  = 4 << 10
+	Size8KB  = 8 << 10
+	Size16KB = 16 << 10
+	Size32KB = 32 << 10
+	Size64KB = 64 << 10
+	Size1MB  = 1 << 20
+	Size2MB  = 1 << 20
+	Size4MB  = 1 << 20
+	Size8MB  = 1 << 20
+	Size16MB = 1 << 20
+)
+
+var sizeTable = [8]struct {
+	pageSz  int
+	buffMin int
+	buffMax int
+}{
+	{pageSz: 1 * KB, buffMin: 8 * KB},
+	{pageSz: 2 * KB, buffMin: 512 * KB},
+	{pageSz: 4 * KB, buffMin: 32 * KB},
+	{pageSz: 64 * KB, buffMin: 512 * KB},
+	{},
+	{},
+	{},
+	{},
+}
+
 // bufferPool is an implementation of a page buffer pool, which is also
 // sometimes called a buffer pool storageManager in a dbms system.
 type bufferPool struct {
-	lock     sync.Mutex         // latch
+	bpLatch  sync.Mutex         // latch
 	frames   []frame            // list of loaded page frames
 	replacer Replacer           // used to find an unpinned page for replacement
 	manager  StorageManager     // underlying storage storageManager
@@ -16,8 +54,8 @@ type bufferPool struct {
 	table    map[pageID]frameID // used to keep track of pages
 }
 
-// newBufferPool initializes and returns a new instance of a bufferPool.
-func newBufferPool(size int, sm StorageManager) *bufferPool {
+// NewBufferPool initializes and returns a new instance of a bufferPool.
+func NewBufferPool(size int, sm StorageManager) *bufferPool {
 	bm := &bufferPool{
 		frames:   make([]frame, size, size),
 		replacer: newClockReplacer(size),
@@ -36,6 +74,63 @@ func newBufferPool(size int, sm StorageManager) *bufferPool {
 		bm.free[i] = frameID(i)
 	}
 	return bm
+}
+
+// calcPageSize ensures the provided page size is a power
+// of two according to the default page size. If the provided
+// page is less than the minimum, then the page size is set
+// to the minimum allowable size. If the provided page size
+// is set greater than the maximum, then the page size is set
+// to the maximum allowable size.
+func CalcPageSize(pageSize int) int {
+	if pageSize <= 0 {
+		pageSize = DefaultPageSize
+	}
+	if 0 < pageSize && pageSize < MinPageSize {
+		pageSize = MinPageSize
+	}
+	if MaxPageSize < pageSize {
+		pageSize = MaxPageSize
+	}
+	if pageSize&(DefaultPageSize-1) != 0 {
+		// must be a power of two
+		x := 1
+		for x < pageSize {
+			x *= 2
+		}
+		pageSize = x
+	}
+	return pageSize
+}
+
+// calcBufferSize ensures the provided buffer size is a power
+// of two that works well with the minimum and maximum allowable
+// buffer sizes. It also ensures that the page size works well
+// with the provided buffer size--otherwise, it will be adjusted.
+func CalcBufferSize(pageSize, bufferSize int) int {
+	pageSize = CalcPageSize(pageSize)
+	if bufferSize <= 0 {
+		bufferSize = DefaultBufferSize
+	}
+	if 0 < bufferSize && bufferSize < MinBufferSize {
+		bufferSize = MinBufferSize
+	}
+	if MaxBufferSize < bufferSize {
+		bufferSize = MaxBufferSize
+	}
+	if bufferSize&(DefaultBufferSize-1) != 0 {
+		// must be a power of two
+		x := 1
+		for x < bufferSize {
+			x *= 2
+		}
+		bufferSize = x
+	}
+	return bufferSize
+}
+
+func NewBufferPoolSize(pageSize int) *bufferPool {
+	return nil
 }
 
 // newPage attempts to allocate and return a new page in the bufferPool.
@@ -283,6 +378,19 @@ func (b *bufferPool) flushAll() error {
 	return nil
 }
 
+// close attempts to close the buffer pool
+func (b *bufferPool) close() error {
+	err := b.flushAll()
+	if err != nil {
+		return err
+	}
+	err = b.manager.Close()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // String is the string method for this type
 func (b *bufferPool) String() string {
 	ss := fmt.Sprintf("Buffer Pool Manager\n")
@@ -303,32 +411,4 @@ func (b *bufferPool) String() string {
 	ss += fmt.Sprintf("\tclock replacer:\n")
 	ss += fmt.Sprintf("\t\t%v\n", &b.replacer)
 	return ss
-}
-
-func NewBufferPool(size int, man StorageManager) BufferPoolManager {
-	return newBufferPool(size, man)
-}
-
-func (b *bufferPool) NewPage() (Page, error) {
-	return b.newPage(), nil
-}
-
-func (b *bufferPool) FetchPage(pid PageID) (Page, error) {
-	return b.fetchPage(pid), nil
-}
-
-func (b *bufferPool) UnpinPage(pid PageID, isDirty bool) error {
-	return b.unpinPage(pid, isDirty)
-}
-
-func (b *bufferPool) FlushPage(pid PageID) error {
-	return b.flushPage(pid)
-}
-
-func (b *bufferPool) DeletePage(pid PageID) error {
-	return b.deletePage(pid)
-}
-
-func (b *bufferPool) FlushAll() error {
-	return b.flushAll()
 }

@@ -12,6 +12,7 @@ type (
 // order to accomplish tings such as moving logical page data back and forth
 // from an underlying storage medium into main memory and back.
 type BufferPoolManager interface {
+
 	// NewPage allocates and returns a new page of data.
 	NewPage() (Page, error)
 
@@ -41,6 +42,7 @@ type BufferPoolManager interface {
 // implementations. It is most often seen as a long-term storage manager
 // such as a manager based storage manager.
 type StorageManager interface {
+
 	// Allocate attempts to allocate and return the next ID in the sequence.
 	Allocate() PageID
 
@@ -71,6 +73,7 @@ type StorageManager interface {
 // Replacer is a page replacement policy type. For more information on replacement
 // policies, see [https://en.wikipedia.org/wiki/Page_replacement_algorithm]
 type Replacer interface {
+
 	// Pin takes a frame ID and "pins" it, indicating that the caller is now using
 	// it. Because the caller is now using it, the replacer can now remove it to no
 	// longer make it available for victimization.

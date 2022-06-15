@@ -75,7 +75,7 @@ func TestBitset_Size(t *testing.T) {
 	if len(bm2.bits) != 512 {
 		t.Error("bitset is the wrong fsize")
 	}
-	// fmt.Println("bm2 sz:", bm2.sizeof())
+	// fmt.Println("bm2 fileSize:", bm2.sizeof())
 }
 
 func TestBitset_Has(t *testing.T) {
@@ -191,5 +191,5 @@ func TestBitset_RealSize(t *testing.T) {
 	bm := newBitset(127)
 	_ = bm
 	// fmt.Println(bm)
-	// fmt.Println("actual sz in memory: ", bm.sizeof())
+	// fmt.Println("actual fileSize in memory: ", bm.sizeof())
 }

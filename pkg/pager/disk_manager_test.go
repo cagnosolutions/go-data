@@ -12,7 +12,7 @@ var err error
 func TestDiskManager(t *testing.T) {
 	// create new dman
 	dm := newDiskManager(dManFile)
-	// fmt.Println("dman sz:", util.Sizeof(dm))
+	// fmt.Println("dman fileSize:", util.Sizeof(dm))
 
 	// get a fresh page ID
 	pid := dm.allocatePage()

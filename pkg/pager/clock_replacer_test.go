@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestClockReplacer(t *testing.T) {
+func TestClockReplacer_All(t *testing.T) {
 	cr := newClockReplacer(10)
 	cr.unpin(1)
 	cr.unpin(2)
@@ -59,7 +59,7 @@ func TestClockReplacer(t *testing.T) {
 	}
 }
 
-func TestCircularList(t *testing.T) {
+func TestClockReplacer_CircularList(t *testing.T) {
 
 	// create list
 	list := newCircularList(10)
@@ -67,7 +67,7 @@ func TestCircularList(t *testing.T) {
 	// test print
 	// fmt.Println("list:", list)
 
-	// check sz
+	// check fileSize
 	if sz := list.size; sz != 0 {
 		t.Errorf("got %d, wanted %d\n", sz, 0)
 	}
@@ -98,7 +98,7 @@ func TestCircularList(t *testing.T) {
 	list.insert(3, true)
 	list.insert(5, true)
 
-	// expecting sz=5, because 0 has been inserted before
+	// expecting fileSize=5, because 0 has been inserted before
 	if sz := list.size; sz != 5 {
 		t.Errorf("got %d, wanted %d\n", sz, 5)
 	}

@@ -16,8 +16,8 @@ import (
 // https://go.dev/play/p/gr8RC8vDuSv
 
 var (
-	ErrRecordTooSmall = errors.New("record is too small (under min sz allowed)")
-	ErrRecordTooBig   = errors.New("record is too big (over max sz allowed)")
+	ErrRecordTooSmall = errors.New("record is too small (under min fileSize allowed)")
+	ErrRecordTooBig   = errors.New("record is too big (over max fileSize allowed)")
 	ErrNoRoom         = errors.New("the page is full, or has too much fragmentation")
 	ErrEmptyPage      = errors.New("the page is empty, cannot get any information")
 	ErrInvalidPID     = errors.New("page ID is not valid, or does not match")
@@ -43,13 +43,20 @@ const (
 	_ uint16 = 0x8000
 )
 
+// Defaults for page size
+const (
+	DefaultPageSize = szPg     // 4KB
+	MinPageSize     = 512      // 512B
+	MaxPageSize     = 64 << 10 // 64KB
+)
+
 // Sizes for header, page and records
 const (
-	szMinRec = 8    // minimum record sz
-	szMaxRec = 2048 // maximum record sz
-	szHd     = 16   // sz of page header (in bytes)
-	szSl     = 6    // sz of slot index (in bytes)
-	szPg     = 4096 // sz of page (default)
+	szMinRec = 8       // minimum record size
+	szMaxRec = 2048    // maximum record size
+	szHd     = 16      // fileSize of page header (in bytes)
+	szSl     = 6       // fileSize of slot index (in bytes)
+	szPg     = 4 << 10 // fileSize of page (default)
 )
 
 // Binary offsets for page header
@@ -342,7 +349,7 @@ func (p *page) _acquireSlot(size uint16) (uint16, *slot) {
 func (p *page) addRecord(data []byte) (*recID, error) {
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
-	// get the record sz
+	// get the record size
 	rsize := uint16(len(data))
 	// sanity check the record
 	err := p.checkRecord(rsize)

@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	ws   = 64         // ws is the word sz (how many bits can fit into uint64)
-	l2ws = 6          // l2ws is the log2 of the word sz (6 for 64, 5 for 32, 4 for 16, and 3 for 8)
+	ws   = 64         // ws is the word fileSize (how many bits can fit into uint64)
+	l2ws = 6          // l2ws is the log2 of the word fileSize (6 for 64, 5 for 32, 4 for 16, and 3 for 8)
 	max  = ^uint64(0) // max is the maximum integer that can be stored in a word
 )
 
@@ -18,7 +18,7 @@ type bitset struct {
 	length uint64   // 8
 }
 
-// alignedSize aligns a given sz to the word sz, so it always works well.
+// alignedSize aligns a given fileSize to the word fileSize, so it always works well.
 func alignedSize(size uint64) uint64 {
 	if size > (max - ws + 1) {
 		return max >> l2ws
@@ -89,7 +89,7 @@ func (bm *bitset) free() int {
 	return -1
 }
 
-// roundTo rounds n to binary powers of pow word sz, kind of.
+// roundTo rounds n to binary powers of pow word fileSize, kind of.
 func roundTo(n int, pow int) int {
 	mask := pow - 1
 	return (n + (mask)) &^ (mask)
@@ -150,7 +150,7 @@ func (bm *bitset) write(p []byte) int {
 	return bytesWritten
 }
 
-// sizeof returns the actual sz the bitset is occupying in memory.
+// sizeof returns the actual fileSize the bitset is occupying in memory.
 func (bm *bitset) sizeof() int64 {
 	sz := int64((24 + 8) + (len(bm.bits) * 8))
 	return sz

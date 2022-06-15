@@ -69,7 +69,7 @@ var mu sync.RWMutex
 
 func setRandomKV(m map[int]int, useLock bool) {
 	if useLock {
-		// hold write lock
+		// hold write bpLatch
 		mu.Lock()
 		defer mu.Unlock()
 	}
@@ -84,7 +84,7 @@ func setRandomKV(m map[int]int, useLock bool) {
 
 func getRandomKV(m map[int]int, useLock bool) int {
 	if useLock {
-		// hold read lock
+		// hold read bpLatch
 		mu.RLock()
 		defer mu.RUnlock()
 	}
@@ -98,7 +98,7 @@ func getRandomKV(m map[int]int, useLock bool) int {
 
 func delRandomKV(m map[int]int, useLock bool) {
 	if useLock {
-		// hold write lock
+		// hold write bpLatch
 		mu.Lock()
 		defer mu.Unlock()
 	}

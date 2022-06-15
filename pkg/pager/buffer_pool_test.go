@@ -2,7 +2,6 @@ package pager
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"sync"
 	"testing"
@@ -10,18 +9,11 @@ import (
 	"github.com/cagnosolutions/go-data/pkg/util"
 )
 
-func TestBufferPool(t *testing.T) {
+func TestBufferPool_All(t *testing.T) {
 	poolSize := 10
-
-	testFile := "testing/diskmanager.db"
+	testFile := "testing/bp_all_test.db"
 
 	dm := newDiskManager(testFile)
-	defer func(dm *diskManager) {
-		err := dm.close()
-		if err != nil {
-			t.Error(err)
-		}
-	}(dm)
 	bpm := newBufferPool(poolSize, dm)
 
 	page0 := bpm.newPage()
@@ -96,107 +88,29 @@ func TestBufferPool(t *testing.T) {
 	util.Equals(t, page(nil), bpm.fetchPage(pageID(0)))
 	// log.Printf("[S7] >>> DONE")
 
-	err = dm.close()
-	if err != nil {
-		return
-	}
-	// time.Sleep(3 * time.Second)
-
-	// remove test files
-	err = os.RemoveAll(testFile)
+	err = bpm.flushAll()
 	if err != nil {
 		t.Error(err)
 	}
+
+	err = bpm.close()
+	if err != nil {
+		t.Error(err)
+	}
+	err = cleanup(testFile)
+	if err != nil {
+		t.Error(err)
+	}
+	// time.Sleep(3 * time.Second)
 }
 
-func TestBufferPool_Race(t *testing.T) {
-	poolSize := 10
-	testFile := "testing/diskmanager.db"
-
-	dm := newDiskManager(testFile)
-	defer func(dm *diskManager) {
-		err := dm.close()
-		if err != nil {
-			t.Error(err)
-		}
-	}(dm)
-	bpm := newBufferPool(poolSize, dm)
-
-	pg := bpm.newPage()
-
-	rids := make([]*recID, 0)
-
-	addData := func() {
-		for i := 0; i < 16; i++ {
-			data := fmt.Sprintf("foo-bar-%.8d", i)
-			rid, err := pg.addRecord([]byte(data))
-			if err != nil {
-				fmt.Println(">> DUMP (add)", rids)
-				t.Error(err)
-			}
-			rids = append(rids, rid)
-		}
+var cleanup = func(testFile string) error {
+	// remove test files
+	err = os.RemoveAll(testFile)
+	if err != nil {
+		return err
 	}
-
-	getData := func() {
-		for i := 0; i < 16; i++ {
-			rid := getRandVal(&rids, false)
-			if rid == nil {
-				break
-			}
-			_, err = pg.getRecord(rid)
-			if err != nil {
-				fmt.Println(">> DUMP (get)", rids)
-				t.Error(err, rid)
-			}
-		}
-	}
-
-	delData := func() {
-		for i := 0; i < 16; i++ {
-			mu.Lock()
-			rid := getRandVal(&rids, true)
-			if rid == nil {
-				mu.Unlock()
-				continue
-			}
-			mu.Unlock()
-			err = pg.delRecord(rid)
-			if err != nil {
-				t.Error(err, rid)
-			}
-		}
-	}
-
-	for i := 0; i < 16; i++ {
-		go addData()
-		go getData()
-	}
-
-	delData()
-
-	// err = bpm.flushAll()
-	// if err != nil {
-	//	t.Error(err)
-	// }
-}
-
-func getRandVal(rr *[]*recID, remove bool) *recID {
-	if len(*rr) == 0 {
-		return nil
-	}
-	i := rand.Intn(len(*rr))
-	if remove {
-		var ret *recID
-		ret = (*rr)[i]
-		if i < len(*rr)-1 {
-			copy((*rr)[i:], (*rr)[i+1:])
-		}
-		(*rr)[len(*rr)-1] = nil // or the zero value of T
-		*rr = (*rr)[:len(*rr)-1]
-		return ret
-	}
-	return (*rr)[i]
+	return nil
 }
 
 var addBPRecords = func(bp *bufferPool, pid pageID) error {
@@ -252,14 +166,8 @@ var delBPRecords = func(bp *bufferPool, pid pageID) error {
 
 func TestBufferPool_Sync(t *testing.T) {
 	poolSize := 10
-	testFile := "testing/bp_race.db"
+	testFile := "testing/bp_race_test.db"
 	dm := newDiskManager(testFile)
-	defer func(dm *diskManager) {
-		err := dm.close()
-		if err != nil {
-			t.Error(err)
-		}
-	}(dm)
 	bp := newBufferPool(poolSize, dm)
 	_ = bp.newPage()
 	err := addBPRecords(bp, 0)
@@ -289,4 +197,12 @@ func TestBufferPool_Sync(t *testing.T) {
 		t.Error(err)
 	}
 	wg.Wait()
+	err = bp.close()
+	if err != nil {
+		t.Error(err)
+	}
+	err = cleanup(testFile)
+	if err != nil {
+		t.Error(err)
+	}
 }
