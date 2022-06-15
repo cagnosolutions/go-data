@@ -5,6 +5,32 @@ import (
 	"sync"
 )
 
+/*
+	Notes:
+			Minimum buffer size for
+			each of the page sizes
+			with the minimum page
+			count in the buffer set
+			to 64 pages.
+		+-----------------+-----------+
+		| MIN_BUFFER_SIZE | PAGE_SIZE |
+		+-----------------|-----------+
+		|       64KB      |     1KB   |
+		+-----------------|-----------+
+		|      128KB      |     2KB   |
+		+-----------------|-----------+
+		|      256KB      |     4KB   |
+		+-----------------|-----------+
+		|      512KB      |     8KB   |
+		+-----------------|-----------+
+		|       1MB       |    16KB   |
+		+-----------------|-----------+
+		|       2MB       |    32KB   |
+		+-----------------|-----------+
+		|       4MB       |    64KB   |
+		+-----------------|-----------+
+*/
+
 // Defaults for buffer pool
 const (
 	DefaultBufferSize = 1 << 20  // 1MB
