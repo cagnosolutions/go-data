@@ -54,21 +54,6 @@ const (
 	Size16MB = 1 << 20
 )
 
-var sizeTable = [8]struct {
-	pageSz  int
-	buffMin int
-	buffMax int
-}{
-	{pageSz: 1 * KB, buffMin: 8 * KB},
-	{pageSz: 2 * KB, buffMin: 512 * KB},
-	{pageSz: 4 * KB, buffMin: 32 * KB},
-	{pageSz: 64 * KB, buffMin: 512 * KB},
-	{},
-	{},
-	{},
-	{},
-}
-
 // bufferPool is an implementation of a page buffer pool, which is also
 // sometimes called a buffer pool storageManager in a dbms system.
 type bufferPool struct {
@@ -80,8 +65,8 @@ type bufferPool struct {
 	table    map[pageID]frameID // used to keep track of pages
 }
 
-// NewBufferPool initializes and returns a new instance of a bufferPool.
-func NewBufferPool(size int, sm StorageManager) *bufferPool {
+// newBufferPool initializes and returns a new instance of a bufferPool.
+func newBufferPool(size int, sm StorageManager) *bufferPool {
 	bm := &bufferPool{
 		frames:   make([]frame, size, size),
 		replacer: newClockReplacer(size),

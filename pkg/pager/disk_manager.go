@@ -36,6 +36,10 @@ func newDiskManager(dbFilePath string) *diskManager {
 	}
 }
 
+func (dm *diskManager) setMeta(psize, pcount int) {
+
+}
+
 // allocatePage returns, then increments the ID or offset of the next entry.
 func (dm *diskManager) allocatePage() pageID {
 	return atomic.SwapUint32(&dm.nextPageID, dm.nextPageID+1)
