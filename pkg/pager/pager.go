@@ -1,61 +1,34 @@
 package pager
 
-import (
-	"errors"
-	"os"
-)
-
-var (
-	ErrBadPageSize = errors.New("bad page size--page size is not a multiple of 4096")
-)
-
-var pageMeta []byte
+var ()
 
 type Pager struct {
 	dm *diskManager
 	bp *bufferPool
 }
 
-func Open(pfile string, psize, pcount int) (*Pager, error) {
-	// check the page size first
-	if psize%4096 != 0 {
+// Open attempts to open and return, or create and return an instance of a Pager.
+// It takes a file name or path ending with a file name, strips the suffix and
+// writes to that file. It also creates a meta file with information in it that the
+// pager can use.
+func Open(path string, pageSize, pageCount uint32) (*Pager, error) {
+	// First, check the page size to ensure it is acceptable.
+	if pageSize&(szPg-1) != 0 {
 		return nil, ErrBadPageSize
 	}
-	var fd *os.File
-	// check to see if there is a page file
-	_, err := os.Stat(pfile)
-	if os.IsNotExist(err) {
-		// create new file instance
-		fd, err = os.OpenFile(pfile, os.O_CREATE|os.O_TRUNC, 0666)
-		if err != nil {
-			return nil, err
-		}
-		_, err = fd.Write(pageMeta)
-		if err != nil {
-			return nil, err
-		}
-		err = fd.Close()
-		if err != nil {
-			return nil, err
-		}
-	}
-	// check page file for correct page file size
-	fd, err = os.OpenFile(pfile, os.O_RDWR|os.O_SYNC, 0666)
+	// Next, we want to sanitize the provided path, and trim the provided file suffix.
+	full, err := pathCleanAndTrimSUffix(path)
 	if err != nil {
 		return nil, err
 	}
-	meta := make([]byte, 4096)
-	_, err = fd.Read(meta)
+	// Then, we can pass the path to the disk manager instantiation instance.
+	dm, err := newDiskManager(full, pageSize, pageCount)
 	if err != nil {
 		return nil, err
 	}
-	// TODO: do check and return with any errors
-	//
-	// open disk manager instance
-	dm := newDiskManager(pfile)
-	// return new pager instance
+	// Finally, we can instantiate and return a new *Pager instance.
 	return &Pager{
 		dm: dm,
-		bp: newBufferPool(psize, dm),
+		bp: newBufferPool(uint16(pageSize), int(pageCount), dm),
 	}, nil
 }

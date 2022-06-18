@@ -148,7 +148,14 @@ func (p *page) size() int {
 // newEmptyPage returns a new page instance set with the provided page ID,
 // with a meta byte status of stFree, denoting it as empty and free to use.
 func newEmptyPage(pid uint32) page {
-	pg := make(page, szPg, szPg)
+	return newEmptyPageSize(pid, DefaultPageSize)
+}
+
+// newEmptyPageSize returns a new page instance set with the provided page ID, with
+// a meta byte status of stFree, denoting it as empty and free to use. It is sized
+// according to the provided size.
+func newEmptyPageSize(pid uint32, size uint16) page {
+	pg := make(page, size, size)
 	pg.setHeader(
 		&header{
 			pid:    pid,
@@ -156,7 +163,7 @@ func newEmptyPage(pid uint32) page {
 			status: stFree,
 			slots:  0,
 			lower:  szHd,
-			upper:  szPg,
+			upper:  size,
 		},
 	)
 	return pg
@@ -164,7 +171,13 @@ func newEmptyPage(pid uint32) page {
 
 // newPage returns a new page instance set with the provided page ID.
 func newPage(pid uint32) page {
-	pg := make(page, szPg, szPg)
+	return newPageSize(pid, DefaultPageSize)
+}
+
+// newPageSize returns a new page instance set with the provided page ID, and sized
+// according to the provided size.
+func newPageSize(pid uint32, size uint16) page {
+	pg := make(page, size, size)
 	pg.setHeader(
 		&header{
 			pid:    pid,
@@ -172,7 +185,7 @@ func newPage(pid uint32) page {
 			status: stUsed,
 			slots:  0,
 			lower:  szHd,
-			upper:  szPg,
+			upper:  size,
 		},
 	)
 	return pg

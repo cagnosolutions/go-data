@@ -19,23 +19,13 @@ func (f *frame) decrPinCount() {
 	}
 }
 
-func initFrame(fid frameID) *frame {
-	return &frame{
-		pid:      pageID(0),
-		fid:      fid,
-		pinCount: 0,
-		isDirty:  false,
-		page:     make([]byte, szPg),
-	}
-}
-
-func newFrame(pid pageID, fid frameID) frame {
+func newFrame(pid pageID, fid frameID, pageSize uint16) frame {
 	return frame{
 		pid:      pid,
 		fid:      fid,
 		pinCount: 1,
 		isDirty:  false,
-		page:     make([]byte, szPg),
+		page:     make([]byte, pageSize),
 	}
 }
 

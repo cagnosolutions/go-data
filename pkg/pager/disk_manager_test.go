@@ -9,9 +9,15 @@ var dManFile = "testing/dman.db"
 var r1, r2, r3 *recID
 var err error
 
+var pageSize uint32 = DefaultPageSize
+var pageCount uint32 = 16
+
 func TestDiskManager(t *testing.T) {
 	// create new dman
-	dm := newDiskManager(dManFile)
+	dm, err := newDiskManager(dManFile, pageSize, pageCount)
+	if err != nil {
+		t.Error(err)
+	}
 	// fmt.Println("dman fileSize:", util.Sizeof(dm))
 
 	// get a fresh page ID
@@ -47,8 +53,10 @@ func TestDiskManager(t *testing.T) {
 	}
 
 	// open again
-	dm = newDiskManager(dManFile)
-
+	dm, err = newDiskManager(dManFile, pageSize, pageCount)
+	if err != nil {
+		t.Error(err)
+	}
 	// read the page we just wrote
 	np := make(page, szPg)
 	err = dm.readPage(pid, np)

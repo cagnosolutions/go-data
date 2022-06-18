@@ -3,6 +3,7 @@ package pager
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -34,6 +35,11 @@ func fileTouch(path string) error {
 		return err
 	}
 	return nil
+}
+
+func pathCleanAndTrimSUffix(path string) (string, error) {
+	nosuffix := strings.TrimSuffix(path, filepath.Ext(path))
+	return filepath.Abs(filepath.ToSlash(nosuffix))
 }
 
 func fileMake(path string) (*os.File, error) {

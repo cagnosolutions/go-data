@@ -16,6 +16,7 @@ var (
 	ErrOffsetOutOfBounds = errors.New("calculated offset is outside file bounds")
 	ErrPartialPageWrite  = errors.New("page write was not a full page")
 	ErrPartialPageRead   = errors.New("page read was not a full page")
+	ErrBadPageSize       = errors.New("bad page size--page size is not a multiple of 4096")
 	ErrSlotIDOutOfBounds = errors.New("slot id is outside of the lower bounds")
 	ErrMinRecSize        = errors.New("record is smaller than the minimum allowed record size")
 	ErrMaxRecSize        = errors.New("record is larger than the maximum allowed record size")
@@ -24,6 +25,7 @@ var (
 	ErrBadRID            = errors.New("bad record id; either the page id or the slot id did not match")
 	ErrRecNotFound       = errors.New("record has not been found")
 
+	ErrMetaInfoMismatch    = errors.New("meta file information does not match provided information")
 	ErrUsableFrameNotFound = errors.New("usable frame ID could not be found; this is not good")
 
 	debug = log.New(os.Stdout, "::[DEBUG] >> ", log.Lshortfile|log.Lmsgprefix)

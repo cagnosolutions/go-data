@@ -60,21 +60,23 @@ type bufferPool struct {
 	bpLatch  sync.Mutex         // latch
 	frames   []frame            // list of loaded page frames
 	replacer Replacer           // used to find an unpinned page for replacement
-	manager  StorageManager     // underlying storage storageManager
+	manager  *diskManager       // underlying storage storageManager
 	free     []frameID          // used to find a page for replacement
 	table    map[pageID]frameID // used to keep track of pages
+	pageSize uint16
 }
 
 // newBufferPool initializes and returns a new instance of a bufferPool.
-func newBufferPool(size int, sm StorageManager) *bufferPool {
+func newBufferPool(pageSize uint16, pageCount int, dm *diskManager) *bufferPool {
 	bm := &bufferPool{
-		frames:   make([]frame, size, size),
-		replacer: newClockReplacer(size),
-		manager:  sm,
-		free:     make([]frameID, size),
+		frames:   make([]frame, pageCount, pageCount),
+		replacer: newClockReplacer(pageCount),
+		manager:  dm,
+		free:     make([]frameID, pageCount),
 		table:    make(map[pageID]frameID),
+		pageSize: pageSize,
 	}
-	for i := 0; i < size; i++ {
+	for i := 0; i < pageCount; i++ {
 		bm.frames[i] = frame{
 			pid:      0,
 			fid:      0,
@@ -93,7 +95,7 @@ func newBufferPool(size int, sm StorageManager) *bufferPool {
 // to the minimum allowable size. If the provided page size
 // is set greater than the maximum, then the page size is set
 // to the maximum allowable size.
-func CalcPageSize(pageSize int) int {
+func calcPageSize(pageSize int) int {
 	if pageSize <= 0 {
 		pageSize = DefaultPageSize
 	}
@@ -118,8 +120,8 @@ func CalcPageSize(pageSize int) int {
 // of two that works well with the minimum and maximum allowable
 // buffer sizes. It also ensures that the page size works well
 // with the provided buffer size--otherwise, it will be adjusted.
-func CalcBufferSize(pageSize, bufferSize int) int {
-	pageSize = CalcPageSize(pageSize)
+func calcBufferSize(pageSize, bufferSize int) int {
+	pageSize = calcPageSize(pageSize)
 	if bufferSize <= 0 {
 		bufferSize = DefaultBufferSize
 	}
@@ -138,10 +140,6 @@ func CalcBufferSize(pageSize, bufferSize int) int {
 		bufferSize = x
 	}
 	return bufferSize
-}
-
-func NewBufferPoolSize(pageSize int) *bufferPool {
-	return nil
 }
 
 // newPage attempts to allocate and return a new page in the bufferPool.
@@ -167,10 +165,10 @@ func (b *bufferPool) newPage() page {
 	// Now that we have an empty pageFrame in the table to load a pageFrame
 	// into, we will ask the storage storageManager to allocate a new page
 	// and return the pageID, so we can proceed.
-	pid := b.manager.Allocate()
+	pid := b.manager.allocatePage()
 	// Next, we should create a page frame utilizing the new pageID.
-	pf := newFrame(pid, *fid)
-	pg := newPage(pid)
+	pf := newFrame(pid, *fid, b.pageSize)
+	pg := newPageSize(pid, b.pageSize)
 	copy(pf.page, pg)
 	// Add the entry to our page table.
 	b.table[pid] = *fid
@@ -241,8 +239,8 @@ func (b *bufferPool) fetchPage(pid pageID) page {
 		return nil
 	}
 	// Read in the page data using the manager storageManager.
-	data := make([]byte, szPg)
-	err = b.manager.ReadPage(pid, data)
+	data := make([]byte, b.pageSize)
+	err = b.manager.readPage(pid, data)
 	if err != nil {
 		// Something went wrong!
 		// log.Printf("FETCHING PAGE, READING DATA OFF THE DISK: %s\n", err)
@@ -251,7 +249,7 @@ func (b *bufferPool) fetchPage(pid pageID) page {
 	// Create a new frame instance and copy the data we read into the frame page, because
 	// there is not currently an instance of this page frame in the page table since we had
 	// to victimize one.
-	pf := newFrame(pid, *fid)
+	pf := newFrame(pid, *fid, b.pageSize)
 	copy(pf.page, data)
 	// Add the entry to our page table.
 	b.table[pid] = *fid
@@ -275,7 +273,7 @@ func (b *bufferPool) flushPage(pid pageID) error {
 	pf := b.frames[fid]
 	// Decrement the pin count and flush it.
 	pf.decrPinCount()
-	err := b.manager.WritePage(pf.pid, pf.page)
+	err := b.manager.writePage(pf.pid, pf.page)
 	if err != nil {
 		return err
 	}
@@ -308,7 +306,7 @@ func (b *bufferPool) deletePage(pid pageID) error {
 	b.replacer.Pin(fid)
 	// Then we will instruct the storage storageManager to deallocate it the page, and
 	// finally we will add the pageFrame back into the free list.
-	if err := b.manager.Deallocate(pid); err != nil {
+	if err := b.manager.deallocatePage(pid); err != nil {
 		// Oops, something happened on the manager.
 		return err
 	}
@@ -360,7 +358,7 @@ func (b *bufferPool) getUsableFrame() (*frameID, error) {
 		if &cf != nil {
 			if cf.isDirty {
 				// Our page pageFrame is dirty; write it.
-				err := b.manager.WritePage(cf.pid, cf.page)
+				err := b.manager.writePage(cf.pid, cf.page)
 				if err != nil {
 					return nil, err // error on write
 				}
@@ -395,7 +393,7 @@ func (b *bufferPool) close() error {
 	if err != nil {
 		return err
 	}
-	err = b.manager.Close()
+	err = b.manager.close()
 	if err != nil {
 		return err
 	}

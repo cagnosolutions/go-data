@@ -10,11 +10,15 @@ import (
 )
 
 func TestBufferPool_All(t *testing.T) {
-	poolSize := 10
+	pageSize := DefaultPageSize
+	pageCount := 10
 	testFile := "testing/bp_all_test.db"
 
-	dm := newDiskManager(testFile)
-	bpm := newBufferPool(poolSize, dm)
+	dm, err := newDiskManager(testFile, uint32(pageSize), uint32(pageCount))
+	if err != nil {
+		t.Error(err)
+	}
+	bpm := newBufferPool(uint16(pageSize), pageCount, dm)
 
 	page0 := bpm.newPage()
 	// fmt.Println(page0)
@@ -36,14 +40,14 @@ func TestBufferPool_All(t *testing.T) {
 	// log.Printf("[S2] >>> DONE")
 
 	// Scenario 3: We should be able to create new pages until we fill up the buffer pool.
-	for i := 1; i < poolSize; i++ {
+	for i := 1; i < pageCount; i++ {
 		p := bpm.newPage()
 		util.Equals(t, pageID(i), p.getPageID())
 	}
 	// log.Printf("[S3] >>> DONE")
 
 	// Scenario 4: Once the buffer pool is full, we should not be able to create any new pages.
-	for i := poolSize; i < poolSize*2; i++ {
+	for i := pageCount; i < pageCount*2; i++ {
 		util.Equals(t, page(nil), bpm.newPage())
 	}
 	// log.Printf("[S4] >>> DONE")
@@ -165,12 +169,16 @@ var delBPRecords = func(bp *bufferPool, pid pageID) error {
 }
 
 func TestBufferPool_Sync(t *testing.T) {
-	poolSize := 10
+	pageSize := DefaultPageSize
+	pageCount := 10
 	testFile := "testing/bp_race_test.db"
-	dm := newDiskManager(testFile)
-	bp := newBufferPool(poolSize, dm)
+	dm, err := newDiskManager(testFile, uint32(pageSize), uint32(pageCount))
+	if err != nil {
+		t.Error(err)
+	}
+	bp := newBufferPool(uint16(pageSize), pageCount, dm)
 	_ = bp.newPage()
-	err := addBPRecords(bp, 0)
+	err = addBPRecords(bp, 0)
 	if err != nil {
 		t.Error(err)
 	}
