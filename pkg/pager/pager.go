@@ -1,5 +1,9 @@
 package pager
 
+import (
+	"errors"
+)
+
 var ()
 
 type Pager struct {
@@ -31,4 +35,56 @@ func Open(path string, pageSize, pageCount uint32) (*Pager, error) {
 		dm: dm,
 		bp: newBufferPool(uint16(pageSize), int(pageCount), dm),
 	}, nil
+}
+
+// NewPage allocates and returns a new page of data.
+func (p *Pager) NewPage() (Page, error) {
+	pg := p.bp.newPage()
+	if pg == nil {
+		return nil, errors.New("page frames are all full, and non could be evicted")
+	}
+	return pg, nil
+}
+
+// FetchPage locates and returns the page matching the supplied page ID.
+func (p *Pager) FetchPage(pid PageID) (Page, error) {
+	pg := p.bp.fetchPage(pid)
+	if pg == nil {
+		return nil, errors.New(
+			"got an error: either reading the page off of the disk or" +
+				" the frames are all full, and non could be evicted",
+		)
+	}
+	return pg, nil
+}
+
+// UnpinPage locates the page matching the supplied page ID and lets the
+// buffer pool that we are finished using it. A page should be flushed
+// before UnpinPage is call in most situations.
+func (p *Pager) UnpinPage(pid PageID, isDirty bool) error {
+	return p.bp.unpinPage(pid, isDirty)
+}
+
+// FlushPage flushes any changes made to the page back to the underlying
+// storage manager.
+func (p *Pager) FlushPage(pid PageID) error {
+	return p.bp.flushPage(pid)
+}
+
+// DeletePage locates the page matching the supplied page ID and removes
+// it from the buffer pool. It also removes the page from the underlying
+// storage manager.
+func (p *Pager) DeletePage(pid PageID) error {
+	return p.bp.deletePage(pid)
+}
+
+// FlushAll is just like FlushPage except for it will flush all the pages
+// that are currently resident in the buffer pool.
+func (p *Pager) FlushAll() error {
+	return p.bp.flushAll()
+}
+
+// Close closes the pager
+func (p *Pager) Close() error {
+	return p.bp.close()
 }
