@@ -8,6 +8,7 @@ import (
 	"math"
 )
 
+// https://github.com/scottcagno/storage/blob/main/pkg/swal
 // https://github.com/scottcagno/storage/tree/e54fed254539aebc0588d0a736faa69dc1bfbf27/pkg/lsmt/wal
 
 type entry struct {
