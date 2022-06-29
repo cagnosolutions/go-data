@@ -21,7 +21,7 @@ func TestDelimReader_Bufio_IndexData(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, sp := range spans {
-		fmt.Printf("line=%d, beg=%d, end=%d, data=%q\n", sp.Line, sp.Beg, sp.End, data[sp.Beg:sp.End])
+		fmt.Printf("id=%d, beg=%d, end=%d, data=%q\n", sp.ID, sp.Beg, sp.End, data[sp.Beg:sp.End])
 	}
 }
 

@@ -31,9 +31,12 @@ func newLineBytes() int {
 }
 
 type Span struct {
-	Line     int // Line number of this span
+	ID       int // Index number of this span
 	Beg, End int // Beginning and ending offsets for this span
 }
+
+// Reference for this span type can be found at the location below.
+// [https://cs.opensource.google/go/go/+/master:src/bytes/bytes.go;l=477]
 
 // IndexData reads the data from the reader and returns a list of span offsets
 // for each delimited section of data. It uses ReadLine which has been tested
@@ -44,7 +47,7 @@ func (dr *DelimReader) IndexData() ([]Span, error) {
 	br := bufio.NewReader(dr.r)
 	// Declare span offsets
 	var beg, end int
-	var line int
+	var id int
 	var spans []Span
 	for {
 		if beg < end {
@@ -61,12 +64,12 @@ func (dr *DelimReader) IndexData() ([]Span, error) {
 		// Not the same line as the previous one, so we will add a span
 		if !prefix {
 			end = beg + len(data) + newLineBytes()
-			line++
+			id++
 			spans = append(
 				spans, Span{
-					Line: line,
-					Beg:  beg,
-					End:  end,
+					ID:  id,
+					Beg: beg,
+					End: end,
 				},
 			)
 		}
