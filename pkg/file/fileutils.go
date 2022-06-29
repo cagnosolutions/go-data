@@ -61,7 +61,11 @@ func (dr *DelimReader) IndexData() ([]Span, error) {
 			}
 			return nil, err
 		}
-		// Not the same line as the previous one, so we will add a span
+		// Continuation of the previous segment (previous segment would not fit in the buffer)
+		if prefix {
+			// Figure out how to handle partials...
+		}
+		// Not the same segment as the previous one, so we will add a span (because it is complete)
 		if !prefix {
 			end = beg + len(data) + newLineBytes()
 			id++
