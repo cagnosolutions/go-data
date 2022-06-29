@@ -2,9 +2,18 @@ package file
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"runtime"
 )
+
+var newline = []byte{'\r', '\n'}
+
+func init() {
+	if newLineBytes() == 1 {
+		newline = []byte{'\n'}
+	}
+}
 
 // DelimReader reads and returns one section of data with each successive call
 // to ReadNext, or ScanNext as denoted by the delimiter provided at instantiation.
@@ -22,7 +31,7 @@ func NewDelimReader(r io.Reader, delim byte) *DelimReader {
 
 func newLineBytes() int {
 	switch runtime.GOOS {
-	case "linux", "unix":
+	case "linux", "unix", "darwin":
 		return 1 // \n
 	case "windows":
 		return 2 // \r\n
@@ -49,25 +58,30 @@ func (dr *DelimReader) IndexData() ([]Span, error) {
 	var beg, end int
 	var id int
 	var spans []Span
+	var buffers int
 	for {
 		if beg < end {
 			beg = end
 		}
-		data, prefix, err := br.ReadLine()
+		data, isPrefix, err := br.ReadLine()
 		if err != nil {
 			if err == io.EOF {
-				prefix = false
+				isPrefix = false
 				break
 			}
 			return nil, err
 		}
-		// Continuation of the previous segment (previous segment would not fit in the buffer)
-		if prefix {
-			// Figure out how to handle partials...
-		}
-		// Not the same segment as the previous one, so we will add a span (because it is complete)
-		if !prefix {
-			end = beg + len(data) + newLineBytes()
+		// if beg < end && !isPrefix {
+		//	beg = end
+		// }
+		if isPrefix {
+			// Just the prefix of a segment, more to follow
+			buffers++
+			fmt.Printf(">>> [T-PRE]: buff=%d, beg=%d, end=%d, id=%d\n", buffers, beg, end, id)
+			continue
+		} else {
+			// No more to the segment, simply add to span set
+			end = beg + len(data) + len(newline)
 			id++
 			spans = append(
 				spans, Span{
@@ -76,7 +90,47 @@ func (dr *DelimReader) IndexData() ([]Span, error) {
 					End: end,
 				},
 			)
+			beg = end
+			buffers = 0
+			fmt.Printf(">>> [F-PRE]: buff=%d, beg=%d, end=%d, id=%d\n", buffers, beg, end, id)
 		}
+	}
+	return spans, nil
+}
+
+func (dr *DelimReader) IndexData2() ([]Span, error) {
+	br := bufio.NewReader(dr.r)
+	var spans []Span
+	var id int
+	var beg, end int
+	for {
+		data, more, err := br.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+		// More to process, update end offset
+		if more {
+			end += len(data) + 2
+		}
+		// Have a full span, so we can append it
+		if !more {
+			id++
+			end = beg + len(data) + 2
+			spans = append(spans, Span{id, beg, end})
+			beg = end
+		}
+		if data == nil && !more {
+			fmt.Println(">>>", id)
+		}
+		fmt.Printf("(id=%d, more=%t) read %d bytes, beg=%d, end=%d\n", id, more, len(data), beg, end)
+		// end = beg + len(data)
+		//line = append(line, data...)
+		// if !more {
+		//	break
+		// }
 	}
 	return spans, nil
 }
