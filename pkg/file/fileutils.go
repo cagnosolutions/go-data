@@ -103,6 +103,7 @@ func (dr *DelimReader) IndexData2() ([]Span, error) {
 	var spans []Span
 	var id int
 	var beg, end int
+	var offset int
 	for {
 		data, more, err := br.ReadLine()
 		if err != nil {
@@ -111,21 +112,27 @@ func (dr *DelimReader) IndexData2() ([]Span, error) {
 			}
 			return nil, err
 		}
+		// update offset
+		offset += len(data) + 2
 		// More to process, update end offset
 		if more {
-			end += len(data) + 2
+			end = offset
 		}
 		// Have a full span, so we can append it
 		if !more {
+			if end > (beg + len(data) + 2) {
+				spans = append(spans, Span{id, beg, end})
+			} else {
+				end = beg + len(data) + 2
+				spans = append(spans, Span{id, beg, end})
+			}
 			id++
-			end = beg + len(data) + 2
-			spans = append(spans, Span{id, beg, end})
-			beg = end
+			beg = offset
 		}
 		if data == nil && !more {
 			fmt.Println(">>>", id)
 		}
-		fmt.Printf("(id=%d, more=%t) read %d bytes, beg=%d, end=%d\n", id, more, len(data), beg, end)
+		fmt.Printf("(id=%d, more=%t, offset=%d) read %d bytes, beg=%d, end=%d\n", id, more, offset, len(data), beg, end)
 		// end = beg + len(data)
 		//line = append(line, data...)
 		// if !more {
