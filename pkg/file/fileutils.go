@@ -44,6 +44,10 @@ type Span struct {
 	Beg, End int // Beginning and ending offsets for this span
 }
 
+func (s Span) String() string {
+	return fmt.Sprintf("id=%d, beg=%d, end=%d", s.ID, s.Beg, s.End)
+}
+
 // Reference for this span type can be found at the location below.
 // [https://cs.opensource.google/go/go/+/master:src/bytes/bytes.go;l=477]
 
@@ -142,13 +146,15 @@ func (dr *DelimReader) IndexData2() ([]Span, error) {
 	return spans, nil
 }
 
-func readLine(r bufio.Reader) ([]byte, error) {
+func readLine(r *bufio.Reader) ([]byte, error) {
 	var line []byte
+	var beg, end int
 	for {
 		l, more, err := r.ReadLine()
 		if err != nil {
 			return nil, err
 		}
+		end += len(l)
 		// Avoid the copy if the first call produced a full line.
 		if line == nil && !more {
 			return l, nil
@@ -157,6 +163,132 @@ func readLine(r bufio.Reader) ([]byte, error) {
 		if !more {
 			break
 		}
+		fmt.Printf("beg=%d, end=%d\n", beg, end)
+		beg = end
 	}
 	return line, nil
+}
+
+func (dr *DelimReader) LineScanner() ([]Span, error) {
+	var spans []Span
+	var id, beg, end int
+	scanner := bufio.NewScanner(dr.r)
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		data := scanner.Bytes()
+		end += len(data) + 2 // add two to skip the trailing \r\n
+		spans = append(
+			spans, Span{
+				ID:  id,
+				Beg: beg,
+				End: end - 2,
+			},
+		)
+		beg = end
+		id++
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return spans, nil
+}
+
+func (dr *DelimReader) LineReader() ([]Span, error) {
+	// Setup initial variables for the function
+	var spans []Span
+	var id, beg, end int
+	// This lf variable is our system dependent number of characters for a linefeed.
+	lf := newLineBytes()
+	// Get a new buffered reader set to our determined buffer size.
+	br := bufio.NewReaderSize(dr.r, 4096)
+	for {
+		// Read up to buffer size length of data and look for the delimiter. If we fill
+		// up the buffer and do not find the delimiter we are looking for, we will just
+		// keep reading, one buffer length at a time, until we find it.
+		data, err := br.ReadSlice('\n')
+		if err != nil {
+			if err == io.EOF {
+				// We have reached the end--we are going to check for any remaining data.
+				if len(data) > 0 {
+					// We have some leftover data, which means the stream was not newline
+					// terminated. Add the remaining data to one last span before breaking.
+					spans = append(spans, Span{id + 1, beg, end + len(data)})
+				}
+				// Otherwise, the stream is indeed newline terminated, so we can just break.
+				break
+			}
+			if err == bufio.ErrBufferFull {
+				// Our buffer seems to be full, so at this point we will simply update the
+				// ending offset and continue reading (skipping all the stuff below, and
+				// restarting the loop from the next iteration.)
+				end += len(data)
+				continue
+			}
+			// Uh oh, we have some other issue going on.
+			return nil, err
+		}
+		// We were able to locate a newline without filling the buffer, so we should update
+		// our ending offset; then add our span data to our set.
+		end += len(data)
+		// We subtract two from the ending offset because we don't want to include any of
+		// that new-line characters that we read in our span. On Windows this number will be
+		// two, and on Mac (darwin), Linux, and Unix's it will be 1 character. Win="\r\n",
+		// *Nix="\n"
+		spans = append(spans, Span{id, beg, end - lf})
+		// We will grow the beginning offset up to where the end is, and increment the id.
+		beg = end
+		id++
+	}
+	return spans, nil
+}
+
+// FINAL RESULT --> [https://go.dev/play/p/o9DYbf6xA7G]
+
+func IndexSpans(r io.Reader, delim byte, size int) ([]Span, error) {
+	// Setup initial variables for the function
+	var spans []Span
+	var id, beg, end, skip int
+	if delim == '\n' && runtime.GOOS == "windows" {
+		skip = 2
+	} else {
+		skip = 1
+	}
+	// Calculate how many bytes of entry we must skip when encountering a new delimiter.
+	// Get a new buffered reader set to our determined buffer size.
+	br := bufio.NewReaderSize(r, size)
+	for {
+		// Read up to buffer size length of data and look for the delimiter. If we fill
+		// up the buffer and do not find the delimiter we are looking for, we will just
+		// keep reading, one buffer length at a time, until we find it.
+		data, err := br.ReadSlice(delim)
+		if err != nil {
+			if err == io.EOF {
+				// We have reached the end--we are going to check for any remaining data.
+				if len(data) > 0 {
+					// We have some leftover data, which means the stream was not delimiter
+					// terminated. Add the remaining data to one last span before breaking.
+					spans = append(spans, Span{id + 1, beg, end + len(data)})
+				}
+				// Otherwise, the stream is indeed delimiter terminated, so we can just break.
+				break
+			}
+			if err == bufio.ErrBufferFull {
+				// Our buffer seems to be full, so at this point we will simply update the
+				// ending offset and continue reading (skipping all the stuff below, and
+				// restarting the loop from the next iteration.)
+				end += len(data)
+				continue
+			}
+			// Uh oh, we have some other issue going on.
+			return nil, err
+		}
+		// We were able to locate a delimiter without filling the buffer, so we should update
+		// our ending offset; then add our span data to our set.
+		end += len(data)
+		spans = append(spans, Span{id, beg, end - skip})
+		// We will grow the beginning offset up to where the end is, and increment the id.
+		beg = end
+		id++
+	}
+	return spans, nil
 }
