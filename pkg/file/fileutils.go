@@ -55,119 +55,119 @@ func (s Span) String() string {
 // for each delimited section of data. It uses ReadLine which has been tested
 // against ReadBytes, ReadSlice and Scanner, and it is as fast (or faster) and
 // uses the smallest buffer of all of them.
-func (dr *DelimReader) IndexData() ([]Span, error) {
-	// Get a new buffered reader
-	br := bufio.NewReader(dr.r)
-	// Declare span offsets
-	var beg, end int
-	var id int
-	var spans []Span
-	var buffers int
-	for {
-		if beg < end {
-			beg = end
-		}
-		data, isPrefix, err := br.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				isPrefix = false
-				break
-			}
-			return nil, err
-		}
-		// if beg < end && !isPrefix {
-		//	beg = end
-		// }
-		if isPrefix {
-			// Just the prefix of a segment, more to follow
-			buffers++
-			fmt.Printf(">>> [T-PRE]: buff=%d, beg=%d, end=%d, id=%d\n", buffers, beg, end, id)
-			continue
-		} else {
-			// No more to the segment, simply add to span set
-			end = beg + len(data) + len(newline)
-			id++
-			spans = append(
-				spans, Span{
-					ID:  id,
-					Beg: beg,
-					End: end,
-				},
-			)
-			beg = end
-			buffers = 0
-			fmt.Printf(">>> [F-PRE]: buff=%d, beg=%d, end=%d, id=%d\n", buffers, beg, end, id)
-		}
-	}
-	return spans, nil
-}
+// func (dr *DelimReader) IndexData() ([]Span, error) {
+// 	// Get a new buffered reader
+// 	br := bufio.NewReader(dr.r)
+// 	// Declare span offsets
+// 	var beg, end int
+// 	var id int
+// 	var spans []Span
+// 	var buffers int
+// 	for {
+// 		if beg < end {
+// 			beg = end
+// 		}
+// 		data, isPrefix, err := br.ReadLine()
+// 		if err != nil {
+// 			if err == io.EOF {
+// 				isPrefix = false
+// 				break
+// 			}
+// 			return nil, err
+// 		}
+// 		// if beg < end && !isPrefix {
+// 		//	beg = end
+// 		// }
+// 		if isPrefix {
+// 			// Just the prefix of a segment, more to follow
+// 			buffers++
+// 			fmt.Printf(">>> [T-PRE]: buff=%d, beg=%d, end=%d, id=%d\n", buffers, beg, end, id)
+// 			continue
+// 		} else {
+// 			// No more to the segment, simply add to span set
+// 			end = beg + len(data) + len(newline)
+// 			id++
+// 			spans = append(
+// 				spans, Span{
+// 					ID:  id,
+// 					Beg: beg,
+// 					End: end,
+// 				},
+// 			)
+// 			beg = end
+// 			buffers = 0
+// 			fmt.Printf(">>> [F-PRE]: buff=%d, beg=%d, end=%d, id=%d\n", buffers, beg, end, id)
+// 		}
+// 	}
+// 	return spans, nil
+// }
 
-func (dr *DelimReader) IndexData2() ([]Span, error) {
-	br := bufio.NewReader(dr.r)
-	var spans []Span
-	var id int
-	var beg, end int
-	var offset int
-	for {
-		data, more, err := br.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, err
-		}
-		// update offset
-		offset += len(data) + 2
-		// More to process, update end offset
-		if more {
-			end = offset
-		}
-		// Have a full span, so we can append it
-		if !more {
-			if end > (beg + len(data) + 2) {
-				spans = append(spans, Span{id, beg, end})
-			} else {
-				end = beg + len(data) + 2
-				spans = append(spans, Span{id, beg, end})
-			}
-			id++
-			beg = offset
-		}
-		if data == nil && !more {
-			fmt.Println(">>>", id)
-		}
-		fmt.Printf("(id=%d, more=%t, offset=%d) read %d bytes, beg=%d, end=%d\n", id, more, offset, len(data), beg, end)
-		// end = beg + len(data)
-		//line = append(line, data...)
-		// if !more {
-		//	break
-		// }
-	}
-	return spans, nil
-}
+// func (dr *DelimReader) IndexData2() ([]Span, error) {
+// 	br := bufio.NewReader(dr.r)
+// 	var spans []Span
+// 	var id int
+// 	var beg, end int
+// 	var offset int
+// 	for {
+// 		data, more, err := br.ReadLine()
+// 		if err != nil {
+// 			if err == io.EOF {
+// 				break
+// 			}
+// 			return nil, err
+// 		}
+// 		// update offset
+// 		offset += len(data) + 2
+// 		// More to process, update end offset
+// 		if more {
+// 			end = offset
+// 		}
+// 		// Have a full span, so we can append it
+// 		if !more {
+// 			if end > (beg + len(data) + 2) {
+// 				spans = append(spans, Span{id, beg, end})
+// 			} else {
+// 				end = beg + len(data) + 2
+// 				spans = append(spans, Span{id, beg, end})
+// 			}
+// 			id++
+// 			beg = offset
+// 		}
+// 		if data == nil && !more {
+// 			fmt.Println(">>>", id)
+// 		}
+// 		fmt.Printf("(id=%d, more=%t, offset=%d) read %d bytes, beg=%d, end=%d\n", id, more, offset, len(data), beg, end)
+// 		// end = beg + len(data)
+// 		//line = append(line, data...)
+// 		// if !more {
+// 		//	break
+// 		// }
+// 	}
+// 	return spans, nil
+// }
 
-func readLine(r *bufio.Reader) ([]byte, error) {
-	var line []byte
-	var beg, end int
-	for {
-		l, more, err := r.ReadLine()
-		if err != nil {
-			return nil, err
-		}
-		end += len(l)
-		// Avoid the copy if the first call produced a full line.
-		if line == nil && !more {
-			return l, nil
-		}
-		line = append(line, l...)
-		if !more {
-			break
-		}
-		fmt.Printf("beg=%d, end=%d\n", beg, end)
-		beg = end
-	}
-	return line, nil
-}
+// func readLine(r *bufio.Reader) ([]byte, error) {
+// 	var line []byte
+// 	var beg, end int
+// 	for {
+// 		l, more, err := r.ReadLine()
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		end += len(l)
+// 		// Avoid the copy if the first call produced a full line.
+// 		if line == nil && !more {
+// 			return l, nil
+// 		}
+// 		line = append(line, l...)
+// 		if !more {
+// 			break
+// 		}
+// 		fmt.Printf("beg=%d, end=%d\n", beg, end)
+// 		beg = end
+// 	}
+// 	return line, nil
+// }
 
 func (dr *DelimReader) LineScanner() ([]Span, error) {
 	var spans []Span
@@ -248,6 +248,7 @@ func IndexSpans(r io.Reader, delim byte, size int) ([]Span, error) {
 	// Setup initial variables for the function
 	var spans []Span
 	var id, beg, end, skip int
+	// Skip might be able to be taken out or modified at some point
 	if delim == '\n' && runtime.GOOS == "windows" {
 		skip = 2
 	} else {
