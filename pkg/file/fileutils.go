@@ -141,3 +141,22 @@ func (dr *DelimReader) IndexData2() ([]Span, error) {
 	}
 	return spans, nil
 }
+
+func readLine(r bufio.Reader) ([]byte, error) {
+	var line []byte
+	for {
+		l, more, err := r.ReadLine()
+		if err != nil {
+			return nil, err
+		}
+		// Avoid the copy if the first call produced a full line.
+		if line == nil && !more {
+			return l, nil
+		}
+		line = append(line, l...)
+		if !more {
+			break
+		}
+	}
+	return line, nil
+}
