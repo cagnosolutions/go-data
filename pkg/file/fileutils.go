@@ -242,25 +242,30 @@ func (dr *DelimReader) LineReader() ([]Span, error) {
 	return spans, nil
 }
 
-// FINAL RESULT --> [https://go.dev/play/p/o9DYbf6xA7G]
+// ALMOST FINAL RESULT --> [https://go.dev/play/p/o9DYbf6xA7G]
 
 func IndexSpans(r io.Reader, delim byte, size int) ([]Span, error) {
 	// Setup initial variables for the function
-	var spans []Span
-	var id, beg, end, skip int
-	// Skip might be able to be taken out or modified at some point
-	if delim == '\n' && runtime.GOOS == "windows" {
-		skip = 2
-	} else {
-		skip = 1
+	var id, beg, end int
+	// Skip is a helper func used to drop the correct number of bytes. Right now it
+	// is mostly used to handle the special case of \n and \r\n
+	skip := func(p []byte, c byte) int {
+		if c == '\n' {
+			if len(p) > 1 && p[len(p)-2] == '\r' {
+				return 2
+			}
+		}
+		return 1
 	}
-	// Calculate how many bytes of entry we must skip when encountering a new delimiter.
+	// Initialize our spans
+	spans := make([]Span, 0, 8)
 	// Get a new buffered reader set to our determined buffer size.
 	br := bufio.NewReaderSize(r, size)
 	for {
 		// Read up to buffer size length of data and look for the delimiter. If we fill
 		// up the buffer and do not find the delimiter we are looking for, we will just
-		// keep reading, one buffer length at a time, until we find it.
+		// keep reading, one buffer length at a time, until we find it. Note: ReadSlice
+		// attempts to re-use the same buffer internally, so that helps a lot.
 		data, err := br.ReadSlice(delim)
 		if err != nil {
 			if err == io.EOF {
@@ -286,7 +291,10 @@ func IndexSpans(r io.Reader, delim byte, size int) ([]Span, error) {
 		// We were able to locate a delimiter without filling the buffer, so we should update
 		// our ending offset; then add our span data to our set.
 		end += len(data)
-		spans = append(spans, Span{id, beg, end - skip})
+		// Handle the special case of \r\n and \n
+		drop := skip(data, delim)
+		// Add our span to our set and adjust the beginning, ending and id variables
+		spans = append(spans, Span{id, beg, end - drop})
 		// We will grow the beginning offset up to where the end is, and increment the id.
 		beg = end
 		id++
