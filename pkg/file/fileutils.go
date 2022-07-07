@@ -244,12 +244,15 @@ func (dr *DelimReader) LineReader() ([]Span, error) {
 
 // ALMOST FINAL RESULT --> [https://go.dev/play/p/o9DYbf6xA7G]
 
+// IndexSpans can be used to index spans of text based around a delimiter of your
+// choice. The size argument allows you to tune it a bit and have some control over
+// the overhead used by the function.
 func IndexSpans(r io.Reader, delim byte, size int) ([]Span, error) {
 	// Setup initial variables for the function
 	var id, beg, end int
-	// Skip is a helper func used to drop the correct number of bytes. Right now it
+	// Drop is a helper func used to drop the correct number of bytes. Right now it
 	// is mostly used to handle the special case of \n and \r\n
-	skip := func(p []byte, c byte) int {
+	drop := func(p []byte, c byte) int {
 		if c == '\n' {
 			if len(p) > 1 && p[len(p)-2] == '\r' {
 				return 2
@@ -291,10 +294,10 @@ func IndexSpans(r io.Reader, delim byte, size int) ([]Span, error) {
 		// We were able to locate a delimiter without filling the buffer, so we should update
 		// our ending offset; then add our span data to our set.
 		end += len(data)
-		// Handle the special case of \r\n and \n
-		drop := skip(data, delim)
+		// Calculate number of bytes to drop
+		n := drop(data, delim)
 		// Add our span to our set and adjust the beginning, ending and id variables
-		spans = append(spans, Span{id, beg, end - drop})
+		spans = append(spans, Span{id, beg, end - n})
 		// We will grow the beginning offset up to where the end is, and increment the id.
 		beg = end
 		id++
