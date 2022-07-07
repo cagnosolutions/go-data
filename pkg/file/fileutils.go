@@ -246,7 +246,8 @@ func (dr *DelimReader) LineReader() ([]Span, error) {
 
 // IndexSpans can be used to index spans of text based around a delimiter of your
 // choice. The size argument allows you to tune it a bit and have some control over
-// the overhead used by the function.
+// the overhead used by the function. The delimiter is not included in the returned
+// span bound set and empty lines are not ignored.
 func IndexSpans(r io.Reader, delim byte, size int) ([]Span, error) {
 	// Setup initial variables for the function
 	var id, beg, end int
