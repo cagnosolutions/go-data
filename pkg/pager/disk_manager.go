@@ -7,24 +7,24 @@ import (
 )
 
 type metaInfo struct {
-	pageSize  uint32
-	pageCount uint32
+	pageSize  uint16
+	pageCount uint16
 }
 
 func (m metaInfo) read(p []byte) {
 	if len(p) < 8 {
 		panic("cannot read meta info, buffer is too small")
 	}
-	m.pageSize = bin.Uint32(p[0:])
-	m.pageCount = bin.Uint32(p[4:])
+	m.pageSize = bin.Uint16(p[0:])
+	m.pageCount = bin.Uint16(p[4:])
 }
 
 func (m metaInfo) write(p []byte) {
 	if len(p) < 8 {
 		panic("cannot write meta info, buffer is too small")
 	}
-	bin.PutUint32(p[0:], m.pageSize)
-	bin.PutUint32(p[4:], m.pageCount)
+	bin.PutUint16(p[0:], m.pageSize)
+	bin.PutUint16(p[4:], m.pageCount)
 }
 
 const (
@@ -32,17 +32,17 @@ const (
 	dbMetaSuffix = `.meta`
 )
 
-// diskManager is a manager storageManager
+// diskManager is a disk storageManager
 type diskManager struct {
 	file       *os.File
 	filePath   string
 	nextPageID pageID
-	pageSize   uint32
+	pageSize   uint16
 	fileSize   int64
 }
 
 // newDMan initializes and returns a new diskManager instance.
-func newDiskManager(filePath string, pageSize, pageCount uint32) (*diskManager, error) {
+func newDiskManager(filePath string, pageSize uint16, pageCount uint16) (*diskManager, error) {
 	// check to see if a file exists (if none, create)
 	fd, err := fileOpenOrCreate(filePath + dbFileSuffix)
 	if err != nil {
@@ -102,7 +102,7 @@ func (dm *diskManager) allocatePage() pageID {
 // or offset. If out of bounds, it will return an error.
 func (dm *diskManager) deallocatePage(pid pageID) error {
 	// calculate the logical page offset should be.
-	offset := int64(pid * dm.pageSize)
+	offset := int64(pid * uint32(dm.pageSize))
 	if offset < 0 {
 		return ErrOffsetOutOfBounds
 	}
@@ -138,7 +138,7 @@ func (dm *diskManager) deallocatePage(pid pageID) error {
 func (dm *diskManager) readPage(pid pageID, p page) error {
 	// First we do a little error checking, and calculate what the page
 	// offset is supposed to be.
-	offset := int64(pid * dm.pageSize)
+	offset := int64(pid * uint32(dm.pageSize))
 	// Next, we can attempt to read the contents of the page data
 	// directly from the calculated offset. Using ReadAt makes one
 	// syscall, vs using Seek+Read which calls syscall twice.
@@ -165,7 +165,7 @@ func (dm *diskManager) readPage(pid pageID, p page) error {
 // that location. Any errors encountered will be returned immediately.
 func (dm *diskManager) writePage(pid pageID, p page) error {
 	// calculate the logical page offset should be.
-	offset := int64(pid * dm.pageSize)
+	offset := int64(pid * uint32(dm.pageSize))
 	if offset < 0 {
 		return ErrOffsetOutOfBounds
 	}
@@ -206,7 +206,7 @@ func (dm *diskManager) close() error {
 	return nil
 }
 
-// size returns the number of bytes the storage manager is current using.
+// size returns the number of bytes the storage disk is current using.
 func (dm *diskManager) size() int {
 	fi, err := dm.file.Stat()
 	if err != nil {

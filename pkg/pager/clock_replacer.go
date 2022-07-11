@@ -17,7 +17,7 @@ type clockReplacer struct {
 }
 
 // newClockReplacer instantiates and returns a new clockReplacer
-func newClockReplacer(size int) *clockReplacer {
+func newClockReplacer(size uint16) *clockReplacer {
 	list := newCircularList(size)
 	return &clockReplacer{
 		list: list,
@@ -97,33 +97,13 @@ func (c *clockReplacer) evict() *frameID {
 }
 
 // size returns the number of elements currently in the replacer.
-func (c *clockReplacer) size() int {
+func (c *clockReplacer) size() uint16 {
 	return c.list.size
 }
 
 // String is the stringer method for this type.
 func (c *clockReplacer) String() string {
 	return c.list.String()
-}
-
-func NewClockReplacer(size int) Replacer {
-	return newClockReplacer(size)
-}
-
-func (c *clockReplacer) Pin(fid FrameID) {
-	c.pin(fid)
-}
-
-func (c *clockReplacer) Unpin(fid FrameID) {
-	c.unpin(fid)
-}
-
-func (c *clockReplacer) Victim() *FrameID {
-	return c.victim()
-}
-
-func (c *clockReplacer) Size() int {
-	return c.size()
 }
 
 // ErrListIsFull errors reports when the circular list is at capacity
@@ -144,14 +124,14 @@ func (n *node) String() string {
 // circularList is a circular list implementation.
 type circularList struct {
 	head, tail *node
-	size       int
-	capacity   int
+	size       uint16
+	capacity   uint16
 }
 
 // newCircularList instantiates and returns a pointer to a new
 // circular list instance with the capacity set using the provided
 // max integer.
-func newCircularList(max int) *circularList {
+func newCircularList(max uint16) *circularList {
 	return &circularList{
 		head:     nil,
 		tail:     nil,
@@ -164,7 +144,7 @@ func newCircularList(max int) *circularList {
 // the matching key. If said node cannot be found, find returns nil.
 func (c *circularList) find(k frameID) *node {
 	ptr := c.head
-	for i := 0; i < c.size; i++ {
+	for i := uint16(0); i < c.size; i++ {
 		if ptr.key == k {
 			return ptr
 		}
@@ -261,7 +241,7 @@ func (c *circularList) isFull() bool {
 // scan is a simple closure based iterator
 func (c *circularList) scan(iter func(n *node) bool) {
 	ptr := c.head
-	for i := 0; i < c.size; i++ {
+	for i := uint16(0); i < c.size; i++ {
 		if !iter(ptr) {
 			break
 		}
@@ -275,10 +255,10 @@ func (c *circularList) String() string {
 		return "nil"
 	}
 	var sb strings.Builder
-	sb.Grow(c.size * int(unsafe.Sizeof(node{})))
+	sb.Grow(int(c.size * uint16(unsafe.Sizeof(node{}))))
 	ptr := c.head
 	sb.WriteString(fmt.Sprintf("%v <- ", ptr.prev.key))
-	for i := 0; i < c.size; i++ {
+	for i := uint16(0); i < c.size; i++ {
 		if i == c.size-1 {
 			sb.WriteString(fmt.Sprintf("%v", ptr.key))
 		} else {

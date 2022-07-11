@@ -27,6 +27,7 @@ var (
 
 	ErrMetaInfoMismatch    = errors.New("meta file information does not match provided information")
 	ErrUsableFrameNotFound = errors.New("usable frame ID could not be found; this is not good")
+	ErrOpeningDiskManager  = errors.New("unable to open disk manager")
 
 	debug = log.New(os.Stdout, "::[DEBUG] >> ", log.Lshortfile|log.Lmsgprefix)
 )

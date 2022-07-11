@@ -81,7 +81,7 @@ func TestClockReplacer_CircularList(t *testing.T) {
 	// fmt.Println("list:", list)
 
 	// check has key
-	for i := 0; i <= list.size; i++ {
+	for i := uint16(0); i <= list.size; i++ {
 		keyFound := list.hasKey(frameID(i))
 		if i%2 == 0 && !keyFound {
 			t.Errorf("got key=%d (%v), wanted key=%d (%v)\n", i, keyFound, i, !keyFound)

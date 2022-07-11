@@ -9,8 +9,8 @@ var dManFile = "testing/dman.db"
 var r1, r2, r3 *recID
 var err error
 
-var pageSize uint32 = DefaultPageSize
-var pageCount uint32 = 16
+var pageSize uint16 = DefaultPageSize
+var pageCount uint16 = 16
 
 func TestDiskManager(t *testing.T) {
 	// create new dman

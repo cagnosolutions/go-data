@@ -55,28 +55,32 @@ const (
 )
 
 // bufferPool is an implementation of a page buffer pool, which is also
-// sometimes called a buffer pool storageManager in a dbms system.
+// sometimes called a buffer pool page disk in a dbms system.
 type bufferPool struct {
 	bpLatch  sync.Mutex         // latch
 	frames   []frame            // list of loaded page frames
-	replacer Replacer           // used to find an unpinned page for replacement
-	manager  *diskManager       // underlying storage storageManager
+	replacer *clockReplacer     // page replacement structure (used to find an unpinned page for replacement)
+	disk     *diskManager       // underlying disk storage manager
 	free     []frameID          // used to find a page for replacement
 	table    map[pageID]frameID // used to keep track of pages
-	pageSize uint16
+	pageSize uint16             // page size for this buffer pool
 }
 
 // newBufferPool initializes and returns a new instance of a bufferPool.
-func newBufferPool(pageSize uint16, pageCount int, dm *diskManager) *bufferPool {
+func newBufferPool(file string, pageSize, pageCount uint16) *bufferPool {
+	dm, err := newDiskManager(file, pageSize, pageCount)
+	if err != nil {
+		panic(ErrOpeningDiskManager)
+	}
 	bm := &bufferPool{
 		frames:   make([]frame, pageCount, pageCount),
 		replacer: newClockReplacer(pageCount),
-		manager:  dm,
+		disk:     dm,
 		free:     make([]frameID, pageCount),
 		table:    make(map[pageID]frameID),
 		pageSize: pageSize,
 	}
-	for i := 0; i < pageCount; i++ {
+	for i := uint16(0); i < pageCount; i++ {
 		bm.frames[i] = frame{
 			pid:      0,
 			fid:      0,
@@ -165,7 +169,7 @@ func (b *bufferPool) newPage() page {
 	// Now that we have an empty pageFrame in the table to load a pageFrame
 	// into, we will ask the storage storageManager to allocate a new page
 	// and return the pageID, so we can proceed.
-	pid := b.manager.allocatePage()
+	pid := b.disk.allocatePage()
 	// Next, we should create a page frame utilizing the new pageID.
 	pf := newFrame(pid, *fid, b.pageSize)
 	pg := newPageSize(pid, b.pageSize)
@@ -193,7 +197,7 @@ func (b *bufferPool) unpinPage(pid pageID, isDirty bool) error {
 	// Decrement the pin count and check if we are able to unpin it.
 	pf.decrPinCount()
 	if pf.pinCount == 0 {
-		b.replacer.Unpin(fid)
+		b.replacer.unpin(fid)
 	}
 	// Next, we must check the page pageFrame to see if the dirty bit
 	// needs to be set.
@@ -214,9 +218,9 @@ func (b *bufferPool) unpinPage(pid pageID, isDirty bool) error {
 //	 	1.2 - If P does not exist, find a replacement page (R).
 //			1.2.0 - First check the free list for R. (always check free list first)
 // 			1.2.1 - If R can not be found in the free list, use the replacer.
-//	2.0 - If R is dirty, write it back to the manager.
+//	2.0 - If R is dirty, write it back to the disk.
 //	3.0 - Delete R from the page table and insert P.
-// 	4.0 - Update P's metadata. Read in page from manager, and return a pointer to P.
+// 	4.0 - Update P's metadata. Read in page from disk, and return a pointer to P.
 //
 func (b *bufferPool) fetchPage(pid pageID) page {
 	// Check to see if the frame ID is in the page table.
@@ -226,7 +230,7 @@ func (b *bufferPool) fetchPage(pid pageID) page {
 		// Don't forget to increment the pin count, and also pin it (make it
 		// unusable as a victim) in the replacer.
 		pf.pinCount++
-		b.replacer.Pin(fid)
+		b.replacer.pin(fid)
 		// Finally, return the page.
 		return pf.page
 	}
@@ -238,9 +242,9 @@ func (b *bufferPool) fetchPage(pid pageID) page {
 		// log.Printf("ERROR FETCHING PAGE, GETTING UN-USABLE FRAME: %s\n", err)
 		return nil
 	}
-	// Read in the page data using the manager storageManager.
+	// Read in the page data using the disk storageManager.
 	data := make([]byte, b.pageSize)
-	err = b.manager.readPage(pid, data)
+	err = b.disk.readPage(pid, data)
 	if err != nil {
 		// Something went wrong!
 		// log.Printf("FETCHING PAGE, READING DATA OFF THE DISK: %s\n", err)
@@ -273,7 +277,7 @@ func (b *bufferPool) flushPage(pid pageID) error {
 	pf := b.frames[fid]
 	// Decrement the pin count and flush it.
 	pf.decrPinCount()
-	err := b.manager.writePage(pf.pid, pf.page)
+	err := b.disk.writePage(pf.pid, pf.page)
 	if err != nil {
 		return err
 	}
@@ -303,11 +307,11 @@ func (b *bufferPool) deletePage(pid pageID) error {
 	delete(b.table, pid)
 	// Next, we will pin this page frame, so it cannot be returned as a victimized
 	// frame (because we are trying to delete it.)
-	b.replacer.Pin(fid)
+	b.replacer.pin(fid)
 	// Then we will instruct the storage storageManager to deallocate it the page, and
 	// finally we will add the pageFrame back into the free list.
-	if err := b.manager.deallocatePage(pid); err != nil {
-		// Oops, something happened on the manager.
+	if err := b.disk.deallocatePage(pid); err != nil {
+		// Oops, something happened on the disk.
 		return err
 	}
 	b.addFreeFrame(fid)
@@ -332,7 +336,7 @@ func (b *bufferPool) getFrameID() (*frameID, bool) {
 		return &fid, true // bool: fromFreeList == true
 	}
 	// nothing for us in the free list, time to use the replacer
-	return b.replacer.Victim(), false // bool: fromFreeList == false
+	return b.replacer.victim(), false // bool: fromFreeList == false
 }
 
 // getUsableFrame attempts to return a usable frameID. It is used in the event that
@@ -349,7 +353,7 @@ func (b *bufferPool) getUsableFrame() (*frameID, error) {
 	}
 	// If we are here, we have a frameID, but we don't yet know if it came out of our
 	// free list, or from the allocator. If it is from the allocator then we need to
-	// check the frame and possible flush it to manager before using the frame; so let's
+	// check the frame and possible flush it to disk before using the frame; so let's
 	// see if it was returned using the allocator and go from there.
 	if !foundInFreeList {
 		// Get the current frame.
@@ -358,7 +362,7 @@ func (b *bufferPool) getUsableFrame() (*frameID, error) {
 		if &cf != nil {
 			if cf.isDirty {
 				// Our page pageFrame is dirty; write it.
-				err := b.manager.writePage(cf.pid, cf.page)
+				err := b.disk.writePage(cf.pid, cf.page)
 				if err != nil {
 					return nil, err // error on write
 				}
@@ -393,7 +397,7 @@ func (b *bufferPool) close() error {
 	if err != nil {
 		return err
 	}
-	err = b.manager.close()
+	err = b.disk.close()
 	if err != nil {
 		return err
 	}

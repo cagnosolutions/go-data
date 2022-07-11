@@ -25,12 +25,12 @@ type BufferPoolManager interface {
 	UnpinPage(pid PageID, isDirty bool) error
 
 	// FlushPage flushes any changes made to the page back to the underlying
-	// storage manager.
+	// storage disk.
 	FlushPage(pid PageID) error
 
 	// DeletePage locates the page matching the supplied page ID and removes
 	// it from the buffer pool. It also removes the page from the underlying
-	// storage manager.
+	// storage disk.
 	DeletePage(pid PageID) error
 
 	// FlushAll is just like FlushPage except for it will flush all the pages
@@ -38,9 +38,9 @@ type BufferPoolManager interface {
 	FlushAll() error
 }
 
-// StorageManager is a storage manager type that may have many kinds of
-// implementations. It is most often seen as a long-term storage manager
-// such as a manager based storage manager.
+// StorageManager is a storage disk type that may have many kinds of
+// implementations. It is most often seen as a long-term storage disk
+// such as a disk based storage disk.
 type StorageManager interface {
 
 	// Allocate attempts to allocate and return the next ID in the sequence.
@@ -66,7 +66,7 @@ type StorageManager interface {
 	// Close will safely synchronize and shutdown all open file streams.
 	Close() error
 
-	// Size returns the number of bytes the storage manager is occupying.
+	// Size returns the number of bytes the storage disk is occupying.
 	Size() int
 }
 
