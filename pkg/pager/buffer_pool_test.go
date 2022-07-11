@@ -97,10 +97,10 @@ func TestBufferPool_All(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	err = cleanup(testFile)
-	if err != nil {
-		t.Error(err)
-	}
+	// err = cleanup(testFile)
+	// if err != nil {
+	//	t.Error(err)
+	// }
 	// time.Sleep(3 * time.Second)
 }
 
@@ -303,8 +303,8 @@ func TestBufferPool_Sync(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	err = cleanup(testFile)
-	if err != nil {
-		t.Error(err)
-	}
+	// err = cleanup(testFile)
+	// if err != nil {
+	//	t.Error(err)
+	// }
 }

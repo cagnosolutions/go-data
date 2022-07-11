@@ -28,6 +28,10 @@ var (
 	ErrMetaInfoMismatch    = errors.New("meta file information does not match provided information")
 	ErrUsableFrameNotFound = errors.New("usable frame ID could not be found; this is not good")
 	ErrOpeningDiskManager  = errors.New("unable to open disk manager")
+	ErrMetaFileExists      = errors.New("meta info file already exists")
+	ErrMetaFileNotExists   = errors.New("meta info file does not exists")
+	ErrDataFileExists      = errors.New("meta info file already exists")
+	ErrDataFileNotExists   = errors.New("meta info file does not exists")
 
 	debug = log.New(os.Stdout, "::[DEBUG] >> ", log.Lshortfile|log.Lmsgprefix)
 )

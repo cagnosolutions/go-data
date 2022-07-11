@@ -12,7 +12,7 @@ var err error
 var pageSize uint16 = DefaultPageSize
 var pageCount uint16 = 16
 
-func TestDiskManager(t *testing.T) {
+func TestDiskManager_All(t *testing.T) {
 	// create new dman
 	dm, err := newDiskManager(dManFile, pageSize, pageCount)
 	if err != nil {
@@ -109,7 +109,7 @@ func TestDiskManager(t *testing.T) {
 	// fmt.Println("free:", dm.getFreePages())
 
 	// close and clean
-	cnc(dm)
+	// cnc(dm)
 }
 
 func cnc(dm *diskManager) {
