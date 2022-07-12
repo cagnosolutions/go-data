@@ -2,6 +2,7 @@ package pager
 
 import (
 	"errors"
+	"hash/crc32"
 	"log"
 	"os"
 )
@@ -56,4 +57,9 @@ func (hs hashSet[T]) get() (T, bool) {
 	}
 	var zero T
 	return zero, false
+}
+
+// checksum is a checksum calculator
+func checksum(p []byte) uint32 {
+	return crc32.Checksum(p, crc32.MakeTable(crc32.Koopman))
 }

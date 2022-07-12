@@ -6,12 +6,81 @@ import (
 	"sync/atomic"
 )
 
-type metaInfo struct {
-	pageSize  uint16
-	pageCount uint16
+// Sizes for file header
+const (
+	_szMinRec = 8       // minimum record size
+	_szMaxRec = 2048    // maximum record size
+	_szHd     = 16      // fileSize of page header (in bytes)
+	_szSl     = 6       // fileSize of slot index (in bytes)
+	_szPg     = 4 << 10 // fileSize of page (default)
+)
+
+const (
+	minPageSize = 0
+	maxPageSize = 0
+
+	minPageCount = 0
+	maxPageCount = 0
+
+	defaultPageSize  = 0
+	defaultPageCount = 0
+)
+
+// Binary offsets for file header
+const (
+	offSign        uint64 = 0  // 0-8   (8 bytes)
+	offVers        uint16 = 8  // 8-10  (2 bytes)
+	offPgSz        uint16 = 10 // 10-12 (2 bytes)
+	offPgCt        uint16 = 12 // 12-14 (2 bytes)
+	offRes1        uint16 = 14 // 14-16 (2 bytes)
+	offRes2        uint32 = 16 // 16-20 (4 bytes)
+	offCRC         uint32 = 20 // 20-24 (4 bytes)
+	fileHeaderSize        = 24
+)
+
+type fileHeader struct {
+	signature uint64 // data file signature
+	version   uint16 // data file version number
+	pageSize  uint16 // data file page size
+	pageCount uint16 // data file size in pages
+	res1      uint16 // reserved for expansion
+	res2      uint32 // reserved for expansion
+	checksum  uint32 // data file header checksum
 }
 
-func (m *metaInfo) read(p []byte) {
+func (dm *diskManager) setHeader(fh *fileHeader) {
+	p := make([]byte, fileHeaderSize)
+	bin.PutUint64(p[offSign:offSign+8], fh.signature)
+	bin.PutUint16(p[offVers:offVers+2], fh.version)
+	bin.PutUint16(p[offPgSz:offPgSz+2], fh.pageSize)
+	bin.PutUint16(p[offPgCt:offPgCt+2], fh.pageCount)
+	bin.PutUint16(p[offRes1:offRes1+2], fh.res1)
+	bin.PutUint32(p[offRes2:offRes2+4], fh.res2)
+	bin.PutUint32(p[offCRC:offCRC+4], fh.checksum)
+	_, err := dm.file.WriteAt(p, 0)
+	if err != nil {
+		panic("error writing data file header")
+	}
+}
+
+func (dm *diskManager) getHeader() *fileHeader {
+	p := make([]byte, fileHeaderSize)
+	_, err := dm.file.ReadAt(p, 0)
+	if err != nil {
+		panic("error reading data file header")
+	}
+	return &fileHeader{
+		signature: bin.Uint64(p[offSign : offSign+8]),
+		version:   bin.Uint16(p[offVers : offVers+2]),
+		pageSize:  bin.Uint16(p[offPgSz : offPgSz+2]),
+		pageCount: bin.Uint16(p[offPgCt : offPgCt+2]),
+		res1:      bin.Uint16(p[offRes1 : offRes1+2]),
+		res2:      bin.Uint32(p[offRes2 : offRes2+4]),
+		checksum:  bin.Uint32(p[offCRC : offCRC+4]),
+	}
+}
+
+func (m *fileHeader) read(p []byte) {
 	if len(p) < 8 {
 		panic("cannot read meta info, buffer is too small")
 	}
@@ -19,7 +88,7 @@ func (m *metaInfo) read(p []byte) {
 	m.pageCount = bin.Uint16(p[4:])
 }
 
-func (m metaInfo) write(p []byte) {
+func (m fileHeader) write(p []byte) {
 	if len(p) < 8 {
 		panic("cannot write meta info, buffer is too small")
 	}
@@ -41,8 +110,15 @@ type diskManager struct {
 	fileSize   int64
 }
 
-// newDMan initializes and returns a new diskManager instance.
-func newDiskManager(filePath string, pageSize uint16, pageCount uint16) (*diskManager, error) {
+// newDiskManagerSize initializes and returns a new diskManager instance using the specified
+// pageSize the default maxPageCount.
+func newDiskManager(filePath string, pageSize uint16) (*diskManager, error) {
+	return newDiskManagerSize(filePath, pageSize, defaultPageCount)
+}
+
+// newDiskManagerSize initializes and returns a new diskManager instance using the specified
+// pageSize and maxPageCount.
+func newDiskManagerSize(filePath string, pageSize uint16, pageCount uint16) (*diskManager, error) {
 	// sanitize the provided path, and trim the provided file suffix (if it has any)
 	path, err := pathCleanAndTrimSUffix(filePath)
 	if err != nil {
@@ -100,7 +176,7 @@ func (dm *diskManager) writeMeta(name string, pageSize, pageCount uint16) error 
 	}
 	// meta file does not yet exist, lets write it!
 	buf := make([]byte, 8)
-	mi := metaInfo{
+	mi := fileHeader{
 		pageSize:  pageSize,
 		pageCount: pageCount,
 	}
@@ -125,7 +201,7 @@ func (dm *diskManager) checkMeta(name string, pageSize, pageCount uint16) error 
 	if err != nil {
 		return err
 	}
-	var mi metaInfo
+	var mi fileHeader
 	mi.read(buf)
 	if mi.pageSize != pageSize || mi.pageCount != pageCount {
 		return ErrMetaInfoMismatch

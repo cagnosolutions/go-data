@@ -33,9 +33,9 @@ import (
 
 // Defaults for buffer pool
 const (
-	DefaultBufferSize = 1 << 20  // 1MB
-	MinBufferSize     = 64 << 10 // 64KB
-	MaxBufferSize     = 8 << 20  // 8MB
+	DefaultBufferSize uint32 = 1 << 20  // 1MB
+	MinBufferSize     uint32 = 64 << 10 // 64KB
+	MaxBufferSize     uint32 = 8 << 20  // 8MB
 
 	KB = 1 << 10
 	MB = 1 << 20
@@ -68,6 +68,8 @@ type bufferPool struct {
 
 // newBufferPool initializes and returns a new instance of a bufferPool.
 func newBufferPool(file string, pageSize, pageCount uint16) *bufferPool {
+	// sanitize the page size
+	pageSize = calcPageSize(pageSize)
 	dm, err := newDiskManager(file, pageSize, pageCount)
 	if err != nil {
 		panic(ErrOpeningDiskManager)
@@ -99,7 +101,7 @@ func newBufferPool(file string, pageSize, pageCount uint16) *bufferPool {
 // to the minimum allowable size. If the provided page size
 // is set greater than the maximum, then the page size is set
 // to the maximum allowable size.
-func calcPageSize(pageSize int) int {
+func calcPageSize(pageSize uint16) uint16 {
 	if pageSize <= 0 {
 		pageSize = DefaultPageSize
 	}
@@ -111,7 +113,7 @@ func calcPageSize(pageSize int) int {
 	}
 	if pageSize&(DefaultPageSize-1) != 0 {
 		// must be a power of two
-		x := 1
+		var x uint16 = 1
 		for x < pageSize {
 			x *= 2
 		}
@@ -124,7 +126,7 @@ func calcPageSize(pageSize int) int {
 // of two that works well with the minimum and maximum allowable
 // buffer sizes. It also ensures that the page size works well
 // with the provided buffer size--otherwise, it will be adjusted.
-func calcBufferSize(pageSize, bufferSize int) int {
+func calcBufferSize(pageSize uint16, bufferSize uint32) uint32 {
 	pageSize = calcPageSize(pageSize)
 	if bufferSize <= 0 {
 		bufferSize = DefaultBufferSize
@@ -137,7 +139,7 @@ func calcBufferSize(pageSize, bufferSize int) int {
 	}
 	if bufferSize&(DefaultBufferSize-1) != 0 {
 		// must be a power of two
-		x := 1
+		var x uint32 = 1
 		for x < bufferSize {
 			x *= 2
 		}

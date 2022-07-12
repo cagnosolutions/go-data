@@ -45,9 +45,9 @@ const (
 
 // Defaults for page size
 const (
-	DefaultPageSize = szPg     // 4KB
-	MinPageSize     = 512      // 512B
-	MaxPageSize     = 64 << 10 // 64KB
+	DefaultPageSize        = szPg  // 4KB
+	MinPageSize     uint16 = 512   // 512B
+	MaxPageSize     uint16 = 65535 // 64KB
 )
 
 // Sizes for header, page and records
@@ -61,12 +61,12 @@ const (
 
 // Binary offsets for page header
 const (
-	offPID   = 0  // pid=uint32		offs=0-4
-	offMeta  = 4  // meta=uint32	offs=4-8
-	offStat  = 8  // status=uint16	offs=8-10
-	offSlots = 10 // slots=uint16	offs=10-12
-	offLower = 12 // lower=uint16	offs=12-14
-	offUpper = 14 // upper=uint16	offs=14-16
+	offPID   uint32 = 0  // pid=uint32		offs=0-4
+	offMeta  uint32 = 4  // meta=uint32	offs=4-8
+	offStat  uint16 = 8  // status=uint16	offs=8-10
+	offSlots uint16 = 10 // slots=uint16	offs=10-12
+	offLower uint16 = 12 // lower=uint16	offs=12-14
+	offUpper uint16 = 14 // upper=uint16	offs=14-16
 )
 
 // Status flags (page or slot status)
