@@ -34,6 +34,10 @@ var (
 	ErrDataFileExists      = errors.New("meta info file already exists")
 	ErrDataFileNotExists   = errors.New("meta info file does not exists")
 
+	ErrWriteFileHeader = errors.New("there was an issue writing the file header")
+	ErrReadFileHeader  = errors.New("there was an issue reading the file header")
+	ErrCRCFileHeader   = errors.New("the crc checksum does not match in the file header")
+
 	debug = log.New(os.Stdout, "::[DEBUG] >> ", log.Lshortfile|log.Lmsgprefix)
 )
 

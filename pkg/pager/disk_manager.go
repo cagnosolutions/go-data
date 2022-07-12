@@ -3,8 +3,21 @@ package pager
 import (
 	"io"
 	"os"
+	"sync"
 	"sync/atomic"
 )
+
+var headerBufPool = sync.Pool{
+	New: func() any {
+		return make([]byte, fileHeaderSize)
+	},
+}
+
+func clearHeaderBuf(hb []byte) {
+	for i := range hb {
+		hb[i] = 0x00
+	}
+}
 
 // Sizes for file header
 const (
@@ -28,14 +41,18 @@ const (
 
 // Binary offsets for file header
 const (
-	offSign        uint64 = 0  // 0-8   (8 bytes)
-	offVers        uint16 = 8  // 8-10  (2 bytes)
-	offPgSz        uint16 = 10 // 10-12 (2 bytes)
-	offPgCt        uint16 = 12 // 12-14 (2 bytes)
-	offRes1        uint16 = 14 // 14-16 (2 bytes)
-	offRes2        uint32 = 16 // 16-20 (4 bytes)
-	offCRC         uint32 = 20 // 20-24 (4 bytes)
-	fileHeaderSize        = 24
+	offSign uint64 = 0  // 0-8   (8 bytes)
+	offVers uint16 = 8  // 8-10  (2 bytes)
+	offPgSz uint16 = 10 // 10-12 (2 bytes)
+	offPgCt uint16 = 12 // 12-14 (2 bytes)
+	offRes1 uint16 = 14 // 14-16 (2 bytes)
+	offRes2 uint32 = 16 // 16-20 (4 bytes)
+	offCRC  uint32 = 20 // 20-24 (4 bytes)
+
+	fileHeaderSize = 24
+
+	fileSignature uint64 = 0xDEADBEEF
+	fileVersion   uint16 = 0x0001
 )
 
 type fileHeader struct {
@@ -48,36 +65,80 @@ type fileHeader struct {
 	checksum  uint32 // data file header checksum
 }
 
-func (dm *diskManager) setHeader(fh *fileHeader) {
-	p := make([]byte, fileHeaderSize)
-	bin.PutUint64(p[offSign:offSign+8], fh.signature)
-	bin.PutUint16(p[offVers:offVers+2], fh.version)
-	bin.PutUint16(p[offPgSz:offPgSz+2], fh.pageSize)
-	bin.PutUint16(p[offPgCt:offPgCt+2], fh.pageCount)
-	bin.PutUint16(p[offRes1:offRes1+2], fh.res1)
-	bin.PutUint32(p[offRes2:offRes2+4], fh.res2)
-	bin.PutUint32(p[offCRC:offCRC+4], fh.checksum)
-	_, err := dm.file.WriteAt(p, 0)
-	if err != nil {
-		panic("error writing data file header")
-	}
+func getChecksum(signature uint64, version, pageSize, pageCount uint16) uint32 {
+	// little endian encoding
+	return checksum(
+		[]byte{
+			// signature
+			byte(signature),
+			byte(signature >> 8),
+			byte(signature >> 16),
+			byte(signature >> 24),
+			byte(signature >> 32),
+			byte(signature >> 40),
+			byte(signature >> 48),
+			byte(signature >> 56),
+			// version
+			byte(version),
+			byte(version >> 8),
+			// pageSize
+			byte(pageSize),
+			byte(pageSize >> 8),
+			// pageCount
+			byte(pageCount),
+			byte(pageCount >> 8),
+		},
+	)
 }
 
-func (dm *diskManager) getHeader() *fileHeader {
-	p := make([]byte, fileHeaderSize)
-	_, err := dm.file.ReadAt(p, 0)
+func (dm *diskManager) writeHeader() error {
+	// get out byte slice buffer from the pool
+	hb := headerBufPool.Get().([]byte)
+	defer headerBufPool.Put(hb)
+	// serialize the fileHeader into our buffer
+	bin.PutUint64(hb[offSign:offSign+8], dm.header.signature)
+	bin.PutUint16(hb[offVers:offVers+2], dm.header.version)
+	bin.PutUint16(hb[offPgSz:offPgSz+2], dm.header.pageSize)
+	bin.PutUint16(hb[offPgCt:offPgCt+2], dm.header.pageCount)
+	bin.PutUint16(hb[offRes1:offRes1+2], dm.header.res1)
+	bin.PutUint32(hb[offRes2:offRes2+4], dm.header.res2)
+	bin.PutUint32(hb[offCRC:offCRC+4], dm.header.checksum)
+	// test the checksum (before writing)
+	sum := checksum(hb[offSign : offPgCt+2])
+	if sum != dm.header.checksum {
+		return ErrCRCFileHeader
+	}
+	// write the file header from the buffer to disk
+	_, err := dm.file.WriteAt(hb, 0)
 	if err != nil {
-		panic("error reading data file header")
+		return err
 	}
-	return &fileHeader{
-		signature: bin.Uint64(p[offSign : offSign+8]),
-		version:   bin.Uint16(p[offVers : offVers+2]),
-		pageSize:  bin.Uint16(p[offPgSz : offPgSz+2]),
-		pageCount: bin.Uint16(p[offPgCt : offPgCt+2]),
-		res1:      bin.Uint16(p[offRes1 : offRes1+2]),
-		res2:      bin.Uint32(p[offRes2 : offRes2+4]),
-		checksum:  bin.Uint32(p[offCRC : offCRC+4]),
+	return nil
+}
+
+func (dm *diskManager) readHeader() error {
+	// get out byte slice buffer from the pool
+	hb := headerBufPool.Get().([]byte)
+	defer headerBufPool.Put(hb)
+	// read the file header into the buffer from the disk
+	_, err := dm.file.ReadAt(hb, 0)
+	if err != nil {
+		return err
 	}
+	// test the checksum (before de-serializing)
+	sum := checksum(hb[offSign : offPgCt+2])
+	if sum != bin.Uint32(hb[offCRC:offCRC+4]) {
+		return ErrCRCFileHeader
+	}
+	// de-serialize the buffer into the header struct
+	dm.header.signature = bin.Uint64(hb[offSign : offSign+8])
+	dm.header.version = bin.Uint16(hb[offVers : offVers+2])
+	dm.header.pageSize = bin.Uint16(hb[offPgSz : offPgSz+2])
+	dm.header.pageCount = bin.Uint16(hb[offPgCt : offPgCt+2])
+	dm.header.res1 = bin.Uint16(hb[offRes1 : offRes1+2])
+	dm.header.res2 = bin.Uint32(hb[offRes2 : offRes2+4])
+	dm.header.checksum = bin.Uint32(hb[offCRC : offCRC+4])
+	return nil
 }
 
 func (m *fileHeader) read(p []byte) {
@@ -103,6 +164,7 @@ const (
 
 // diskManager is a disk storageManager
 type diskManager struct {
+	header     *fileHeader
 	file       *os.File
 	filePath   string
 	nextPageID pageID
@@ -137,6 +199,15 @@ func newDiskManagerSize(filePath string, pageSize uint16, pageCount uint16) (*di
 	size := fi.Size()
 	// initialize a new *diskManager instance
 	dm := &diskManager{
+		header: &fileHeader{
+			signature: fileSignature,
+			version:   fileVersion,
+			pageSize:  pageSize,
+			pageCount: 0,
+			res1:      0,
+			res2:      0,
+			checksum:  getChecksum(fileSignature, fileVersion, pageSize, pageCount),
+		},
 		file:       fd,
 		filePath:   fd.Name(),
 		nextPageID: pageID(size / int64(pageSize)),
@@ -211,6 +282,11 @@ func (dm *diskManager) checkMeta(name string, pageSize, pageCount uint16) error 
 
 // allocatePage returns, then increments the ID or offset of the next entry.
 func (dm *diskManager) allocatePage() pageID {
+	dm.header.pageCount++
+	err := dm.writeHeader()
+	if err != nil {
+		panic(ErrWriteFileHeader)
+	}
 	return atomic.SwapUint32(&dm.nextPageID, dm.nextPageID+1)
 	// next := dm.nextPageID
 	// dm.nextPageID++
@@ -324,6 +400,14 @@ func (dm *diskManager) writePage(pid pageID, p page) error {
 	if offset >= dm.fileSize {
 		dm.fileSize = offset + int64(n)
 	}
+	// Update the file header if necessary.
+	if pid > uint32(dm.header.pageCount) {
+		dm.header.pageCount++
+		err = dm.writeHeader()
+		if err != nil {
+			return err
+		}
+	}
 	// Before we are finished, we should call sync.
 	err = dm.file.Sync()
 	if err != nil {
@@ -336,6 +420,7 @@ func (dm *diskManager) writePage(pid pageID, p page) error {
 // close attempts to finalize and close any open streams. Any errors
 // encountered will be returned immediately.
 func (dm *diskManager) close() error {
+
 	err := dm.file.Close()
 	if err != nil {
 		return err

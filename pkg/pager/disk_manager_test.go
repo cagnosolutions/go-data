@@ -14,7 +14,7 @@ var pageCount uint16 = 16
 
 func TestDiskManager_All(t *testing.T) {
 	// create new dman
-	dm, err := newDiskManager(dManFile, pageSize, pageCount)
+	dm, err := newDiskManager(dManFile, pageSize)
 	if err != nil {
 		t.Error(err)
 	}
@@ -53,7 +53,7 @@ func TestDiskManager_All(t *testing.T) {
 	}
 
 	// open again
-	dm, err = newDiskManager(dManFile, pageSize, pageCount)
+	dm, err = newDiskManager(dManFile, pageSize)
 	if err != nil {
 		t.Error(err)
 	}
