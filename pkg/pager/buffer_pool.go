@@ -70,7 +70,7 @@ type bufferPool struct {
 func newBufferPool(file string, pageSize, pageCount uint16) *bufferPool {
 	// sanitize the page size
 	pageSize = calcPageSize(pageSize)
-	dm, err := newDiskManager(file, pageSize, pageCount)
+	dm, err := newDiskManagerSize(file, pageSize, pageCount)
 	if err != nil {
 		panic(ErrOpeningDiskManager)
 	}
