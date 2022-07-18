@@ -19,27 +19,36 @@ func clearHeaderBuf(hb []byte) {
 	}
 }
 
-// Sizes for file header
 const (
-	_szMinRec = 8       // minimum record size
-	_szMaxRec = 2048    // maximum record size
-	_szHd     = 16      // fileSize of page header (in bytes)
-	_szSl     = 6       // fileSize of slot index (in bytes)
-	_szPg     = 4 << 10 // fileSize of page (default)
+	// minPageSize is the minimum page size allowed. It is small enough to fit 16 min
+	// sized virtual pages into one physical 4KB address space.
+	minPageSize = 255
+
+	// maxPageSize is the maximum page size allowed. It is lage enough to map 16 physical
+	// 4KB page address into one 64KB virtual address space.
+	maxPageSize = 65535
+
+	// fileHeaderSize is the space reserved for file header information. There may be
+	// several file header types, but each file has a statically reserved header size.
+	// The file header size does not have to be full.
+	fileHeaderSize = 24
 )
 
-const (
-	minPageSize = 0
-	maxPageSize = 0
+// segment > extent > page
 
-	minPageCount = 0
-	maxPageCount = 0
+/*  		File header structure byte index, field name and field bits overview
+			+--------+--------+--------+--------+--------+--------+--------+--------+
+ byte index	|   00   |   01   |   02   |   03   |   04   |   05   |   06   |   07   | byte index
+			+--------+--------+--------+--------+--------+--------+--------+--------+
+ field name	|  lock  |  magic |       kind      |    page_size    |    page_count   | field
+			+--------+--------+-----------------+-----------------+-----------------+
+ field bits |   u8   |   u8   |       u16       |       u16       |       u16       | bits
+			+--------+--------+-----------------+-----------------+-----------------+
 
-	defaultPageSize  = 0
-	defaultPageCount = 0
-)
+			file_lock=u8, magic=u8, file_kind=u16, page_size=u16, page_count=u16
+*/
 
-// Binary offsets for file header
+// File header binary offsets
 const (
 	offSign uint64 = 0  // 0-8   (8 bytes)
 	offVers uint16 = 8  // 8-10  (2 bytes)
@@ -49,13 +58,16 @@ const (
 	offRes2 uint32 = 16 // 16-20 (4 bytes)
 	offCRC  uint32 = 20 // 20-24 (4 bytes)
 
-	fileHeaderSize = 24
-
 	fileSignature uint64 = 0xDEADBEEF
 	fileVersion   uint16 = 0x0001
 )
 
-type fileHeader struct {
+type FileHeader interface {
+	size() uint8
+	kind() uint8
+}
+
+type fileheader struct {
 	signature uint64 // data file signature
 	version   uint16 // data file version number
 	pageSize  uint16 // data file page size
