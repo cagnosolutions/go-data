@@ -67,3 +67,14 @@ func (hs hashSet[T]) get() (T, bool) {
 func checksum(p []byte) uint32 {
 	return crc32.Checksum(p, crc32.MakeTable(crc32.Koopman))
 }
+
+func AlignSize(size, count uint) uint {
+	return alignSize(size, count)
+}
+
+func alignSize(size, count uint) uint {
+	for count < size {
+		count *= 2
+	}
+	return count
+}
