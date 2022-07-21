@@ -2,6 +2,12 @@ package pager
 
 import "fmt"
 
+// MY HARD DRIVE SURFACE PRO 6
+// KBG30ZPZ512G TOSHIBA
+// 512 GB
+// READ 1500MB/s (Sequential)
+// WRITE 1000MB/s (Sequential)
+
 func blockAlign(count uint8, block uint32) uint32 {
 	size := uint32(count) * block
 	for block < size {
