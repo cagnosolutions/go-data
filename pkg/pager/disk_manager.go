@@ -34,7 +34,7 @@ const (
 	fileHeaderSize = 24
 
 	// maxSegmentSize is the MAX FILE SIZE, IT'S GOOD, KEEP IT!
-	maxSegmentSize = 16 << 20
+	// maxSegmentSize = 16 << 20
 )
 
 // segment > extent > page
@@ -63,6 +63,8 @@ const (
 
 	fileSignature uint64 = 0xDEADBEEF
 	fileVersion   uint16 = 0x0001
+
+	defaultPageCount = 16 // **TEMPORARY -- JUST NEED IT TO COMPILE FOR NOW**
 )
 
 type FileHeader interface {
@@ -80,6 +82,7 @@ type fileheader struct {
 	checksum  uint32 // data file header checksum
 }
 
+/*
 func getChecksum(signature uint64, version, pageSize, pageCount uint16) uint32 {
 	// little endian encoding
 	return checksum(
@@ -171,6 +174,7 @@ func (m fileHeader) write(p []byte) {
 	bin.PutUint16(p[0:], m.pageSize)
 	bin.PutUint16(p[4:], m.pageCount)
 }
+*/
 
 const (
 	dbFileSuffix = `.db`
@@ -179,7 +183,7 @@ const (
 
 // diskManager is a disk storageManager
 type diskManager struct {
-	header     *fileHeader
+	//header     *fileHeader
 	file       *os.File
 	filePath   string
 	nextPageID pageID
@@ -214,39 +218,47 @@ func newDiskManagerSize(filePath string, pageSize uint16, pageCount uint16) (*di
 	size := fi.Size()
 	// initialize a new *diskManager instance
 	dm := &diskManager{
-		header: &fileHeader{
-			signature: fileSignature,
-			version:   fileVersion,
-			pageSize:  pageSize,
-			pageCount: 0,
-			res1:      0,
-			res2:      0,
-			checksum:  getChecksum(fileSignature, fileVersion, pageSize, pageCount),
-		},
+		// **TEMPORARY -- JUST NEED IT TO COMPILE FOR NOW**
+		// header: &fileHeader{
+		// 	signature: fileSignature,
+		// 	version:   fileVersion,
+		// 	pageSize:  pageSize,
+		// 	pageCount: 0,
+		// 	res1:      0,
+		// 	res2:      0,
+		// 	checksum:  getChecksum(fileSignature, fileVersion, pageSize, pageCount),
+		// },
 		file:       fd,
 		filePath:   fd.Name(),
 		nextPageID: pageID(size / int64(pageSize)),
 		pageSize:   pageSize,
 		fileSize:   size,
 	}
+	// **TEMPORARY -- JUST NEED IT TO COMPILE FOR NOW**
+	// **ACTUALLY -- WE MIGHT DO AWAY WITH THIS**
 	// check for metafile and read/write
-	if !dm.hasMeta(path) {
-		// no metafile, so let's write a new one
-		err = dm.writeMeta(path, pageSize, pageCount)
-		if err != nil && err != ErrMetaFileExists {
-			return nil, err
+	/*
+		if !dm.hasMeta(path) {
+			// no metafile, so let's write a new one
+			err = dm.writeMeta(path, pageSize, pageCount)
+			if err != nil && err != ErrMetaFileExists {
+				return nil, err
+			}
+		} else {
+			// there must be a metafile, so let's check it
+			err = dm.checkMeta(path, pageSize, pageCount)
+			if err != nil {
+				return nil, err
+			}
 		}
-	} else {
-		// there must be a metafile, so let's check it
-		err = dm.checkMeta(path, pageSize, pageCount)
-		if err != nil {
-			return nil, err
-		}
-	}
+	*/
 	// everything looks good, let's return the disk manager
 	return dm, nil
 }
 
+// **TEMPORARY -- JUST NEED IT TO COMPILE FOR NOW**
+// **ACTUALLY -- WE MIGHT DO AWAY WITH THIS**
+/*
 func (dm *diskManager) hasMeta(name string) bool {
 	// stat meta file to get the size
 	_, err := os.Stat(name + dbMetaSuffix)
@@ -294,14 +306,17 @@ func (dm *diskManager) checkMeta(name string, pageSize, pageCount uint16) error 
 	}
 	return nil
 }
+*/
 
 // allocatePage returns, then increments the ID or offset of the next entry.
 func (dm *diskManager) allocatePage() pageID {
-	dm.header.pageCount++
-	err := dm.writeHeader()
-	if err != nil {
-		panic(ErrWriteFileHeader)
-	}
+	// **TEMPORARY -- JUST NEED IT TO COMPILE FOR NOW**
+	// **ACTUALLY -- WE MIGHT DO AWAY WITH THIS**
+	// dm.header.pageCount++
+	// err := dm.writeHeader()
+	// if err != nil {
+	// 	panic(ErrWriteFileHeader)
+	// }
 	return atomic.SwapUint32(&dm.nextPageID, dm.nextPageID+1)
 	// next := dm.nextPageID
 	// dm.nextPageID++
@@ -415,14 +430,16 @@ func (dm *diskManager) writePage(pid pageID, p page) error {
 	if offset >= dm.fileSize {
 		dm.fileSize = offset + int64(n)
 	}
+	// **TEMPORARY -- JUST NEED IT TO COMPILE FOR NOW**
+	// **ACTUALLY -- WE MIGHT DO AWAY WITH THIS**
 	// Update the file header if necessary.
-	if pid > uint32(dm.header.pageCount) {
-		dm.header.pageCount++
-		err = dm.writeHeader()
-		if err != nil {
-			return err
-		}
-	}
+	// if pid > uint32(dm.header.pageCount) {
+	// 	dm.header.pageCount++
+	// 	err = dm.writeHeader()
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 	// Before we are finished, we should call sync.
 	err = dm.file.Sync()
 	if err != nil {
