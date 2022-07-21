@@ -32,6 +32,9 @@ const (
 	// several file header types, but each file has a statically reserved header size.
 	// The file header size does not have to be full.
 	fileHeaderSize = 24
+
+	// maxSegmentSize is the MAX FILE SIZE, IT'S GOOD, KEEP IT!
+	maxSegmentSize = 16 << 20
 )
 
 // segment > extent > page
