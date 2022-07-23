@@ -15,12 +15,6 @@ import (
 	"sync"
 )
 
-func init() {
-	if err := checkSegmentSize(segmentSize); err != nil {
-		panic(err)
-	}
-}
-
 const (
 	segmentSize       uint32 = 16 << 20 // either 2, 4, 8 or 16mb;
 	segmentHeaderSize uint8  = 16       // bytes
@@ -29,16 +23,6 @@ const (
 	segmentUnlocked   uint16 = 0x0000
 	segmentLocked     uint16 = 0xffff
 )
-
-func LockString(lock uint16) string {
-	if lock == segmentLocked {
-		return "locked"
-	}
-	if lock == segmentUnlocked {
-		return "unlocked"
-	}
-	return "unknown"
-}
 
 var (
 	// segmentSize    uint32 = 16 << 20 // either 2, 4, 8 or 16 mb; 8 or 16 are preferable
@@ -51,16 +35,6 @@ var (
 	ErrSegmentHeaderShortRead  = errors.New("buffer is to small to read segment header from")
 	ErrSegmentNotFound         = errors.New("segment has not been found")
 )
-
-func checkSegmentSize(size uint32) error {
-	if size < minSegmentSize {
-		return ErrSegmentSizeTooSmall
-	}
-	if maxSegmentSize < size {
-		return ErrSegmentSizeTooLarge
-	}
-	return nil
-}
 
 // segmentHeader represents the header for a segment.
 type segmentHeader struct {
@@ -199,7 +173,12 @@ func (sh *segmentHeader) String() string {
 	ss += fmt.Sprintf("\tmaxPages: %d\n", sh.maxPages)
 	ss += fmt.Sprintf("\tpageSize: %d\n", sh.pageSize)
 	ss += fmt.Sprintf("\tpageCount: %d\n", sh.pageCount)
-	ss += fmt.Sprintf("\tfileLock: %q\n", LockString(sh.fileLock))
+	if sh.fileLock == segmentLocked {
+		ss += fmt.Sprintf("\tfileLock: %q\n", "locked")
+	}
+	if sh.fileLock == segmentUnlocked {
+		ss += fmt.Sprintf("\tfileLock: %q\n", "unlocked")
+	}
 	return ss
 }
 

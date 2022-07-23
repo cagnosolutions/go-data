@@ -20,12 +20,14 @@ func TestPage_NewPage(t *testing.T) {
 		t.Errorf("got %v, expected %v\n", len(pg), szPg)
 	}
 	tmp := header{
-		pid:    3,
-		meta:   mdSlotted | mdRecDynmc,
-		status: stUsed,
-		slots:  0,
-		lower:  szHd,
-		upper:  szPg,
+		pid:      3,
+		size:     szPg,
+		reserved: 0,
+		meta:     mdSlotted | mdRecDynmc,
+		status:   stUsed,
+		slots:    0,
+		lower:    szHd,
+		upper:    szPg,
 	}
 	hdr := pg.getHeader()
 	if *hdr != tmp || hdr == nil {
@@ -43,12 +45,14 @@ func TestPage_NewEmptyPage(t *testing.T) {
 		t.Errorf("got %v, expected %v\n", len(epg), szPg)
 	}
 	tmp := header{
-		pid:    4,
-		meta:   mdSlotted | mdRecDynmc,
-		status: stFree,
-		slots:  0,
-		lower:  szHd,
-		upper:  szPg,
+		pid:      4,
+		size:     szPg,
+		reserved: 0,
+		meta:     mdSlotted | mdRecDynmc,
+		status:   stFree,
+		slots:    0,
+		lower:    szHd,
+		upper:    szPg,
 	}
 	hdr := epg.getHeader()
 	if *hdr != tmp || hdr == nil {

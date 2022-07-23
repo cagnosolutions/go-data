@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"runtime"
 	"strings"
 	"sync"
@@ -25,7 +24,7 @@ var (
 	ErrRecordNotFound = errors.New("record not found, it may have been deleted")
 )
 
-// Available flag values
+// available flag values
 const (
 	_ uint16 = 0x0004
 	_ uint16 = 0x0008
@@ -50,23 +49,27 @@ const (
 	MaxPageSize     uint16 = 65535 // 64KB
 )
 
-// Sizes for header, page and records
 const (
-	szMinRec = 8       // minimum record size
-	szMaxRec = 2048    // maximum record size
-	szHd     = 16      // fileSize of page header (in bytes)
-	szSl     = 6       // fileSize of slot index (in bytes)
-	szPg     = 4 << 10 // fileSize of page (default)
+	szHd = 24      // fileSize of page header (in bytes)
+	szSl = 6       // fileSize of slot index (in bytes)
+	szPg = 4 << 10 // fileSize of page (default)
+)
+
+const (
+	szMinRec = 8    // minimum record size
+	szMaxRec = 2048 // maximum record size
 )
 
 // Binary offsets for page header
 const (
-	offPID   uint32 = 0  // pid=uint32		offs=0-4
-	offMeta  uint32 = 4  // meta=uint32	offs=4-8
-	offStat  uint16 = 8  // status=uint16	offs=8-10
-	offSlots uint16 = 10 // slots=uint16	offs=10-12
-	offLower uint16 = 12 // lower=uint16	offs=12-14
-	offUpper uint16 = 14 // upper=uint16	offs=14-16
+	offPID      uint32 = 0  // pid=uint32		offs=0-4 	(4 bytes)
+	offSize     uint32 = 4  // size=uint32 	offs=4-8	(4 bytes)
+	offReserved uint32 = 8  // reserved=uint32 offs=8-12	(4 bytes)
+	offMeta     uint32 = 12 // meta=uint32		offs=12-16	(4 bytes)
+	offStat     uint16 = 16 // status=uint16	offs=16-18	(2 bytes)
+	offSlots    uint16 = 18 // slots=uint16	offs=18-20	(2 bytes)
+	offLower    uint16 = 20 // lower=uint16	offs=20-22 	(2 bytes)
+	offUpper    uint16 = 22 // upper=uint16	offs=22-24	(2 bytes)
 )
 
 // Status flags (page or slot status)
@@ -127,12 +130,14 @@ type recID struct {
 
 // header is a struct representing a page header.
 type header struct {
-	pid    uint32 // id of page
-	meta   uint32 // meta data for page
-	status uint16 // status of page
-	slots  uint16 // number of slots
-	lower  uint16 // lower free space bound
-	upper  uint16 // upper free space bound
+	pid      uint32 // id of page
+	size     uint32 // size of the page
+	reserved uint32 // reserved for later use
+	meta     uint32 // meta data for page
+	status   uint16 // status of page
+	slots    uint16 // number of slots
+	lower    uint16 // lower free space bound
+	upper    uint16 // upper free space bound
 }
 
 // page is a page.
@@ -158,12 +163,14 @@ func newEmptyPageSize(pid uint32, size uint16) page {
 	pg := make(page, size, size)
 	pg.setHeader(
 		&header{
-			pid:    pid,
-			meta:   mdSlotted | mdRecDynmc,
-			status: stFree,
-			slots:  0,
-			lower:  szHd,
-			upper:  size,
+			pid:      pid,
+			size:     uint32(size),
+			reserved: uint32(0),
+			meta:     mdSlotted | mdRecDynmc,
+			status:   stFree,
+			slots:    uint16(0),
+			lower:    szHd,
+			upper:    size,
 		},
 	)
 	return pg
@@ -180,12 +187,14 @@ func newPageSize(pid uint32, size uint16) page {
 	pg := make(page, size, size)
 	pg.setHeader(
 		&header{
-			pid:    pid,
-			meta:   mdSlotted | mdRecDynmc,
-			status: stUsed,
-			slots:  0,
-			lower:  szHd,
-			upper:  size,
+			pid:      pid,
+			size:     uint32(size),
+			reserved: uint32(0),
+			meta:     mdSlotted | mdRecDynmc,
+			status:   stUsed,
+			slots:    uint16(0),
+			lower:    szHd,
+			upper:    size,
 		},
 	)
 	return pg
@@ -195,6 +204,8 @@ func newPageSize(pid uint32, size uint16) page {
 // page.
 func (p *page) setHeader(h *header) {
 	bin.PutUint32((*p)[offPID:offPID+4], h.pid)
+	bin.PutUint32((*p)[offSize:offSize+4], h.size)
+	bin.PutUint32((*p)[offReserved:offReserved+4], h.reserved)
 	bin.PutUint32((*p)[offMeta:offMeta+4], h.meta)
 	bin.PutUint16((*p)[offStat:offStat+2], h.status)
 	bin.PutUint16((*p)[offSlots:offSlots+2], h.slots)
@@ -206,18 +217,25 @@ func (p *page) setHeader(h *header) {
 // pointer to a header structure
 func (p *page) getHeader() *header {
 	return &header{
-		pid:    bin.Uint32((*p)[offPID:]),
-		meta:   bin.Uint32((*p)[offMeta:]),
-		status: bin.Uint16((*p)[offStat:]),
-		slots:  bin.Uint16((*p)[offSlots:]),
-		lower:  bin.Uint16((*p)[offLower:]),
-		upper:  bin.Uint16((*p)[offUpper:]),
+		pid:      bin.Uint32((*p)[offPID:]),
+		size:     bin.Uint32((*p)[offSize:]),
+		reserved: bin.Uint32((*p)[offReserved:]),
+		meta:     bin.Uint32((*p)[offMeta:]),
+		status:   bin.Uint16((*p)[offStat:]),
+		slots:    bin.Uint16((*p)[offSlots:]),
+		lower:    bin.Uint16((*p)[offLower:]),
+		upper:    bin.Uint16((*p)[offUpper:]),
 	}
 }
 
 // getPageID returns the current page ID.
 func (p *page) getPageID() uint32 {
 	return bin.Uint32((*p)[offPID:])
+}
+
+// getPageSize returns the page size.
+func (p *page) getPageSize() uint32 {
+	return bin.Uint32((*p)[offSize:])
 }
 
 // freeSpace returns the amount of contiguous free space left in the
@@ -255,24 +273,24 @@ func (p *page) getSlotSet() []*slot {
 	// Start looping, decoding, and adding slots to our slot set.
 	for sid := uint16(0); sid < slotCount; sid++ {
 		// Append the slot to the slot set.
-		slots = append(slots, p._getSlot(sid))
+		slots = append(slots, p.getSlot(sid))
 	}
 	// Finally, return our slot set.
 	return slots
 }
 
-// setSlotSet encodes a set of slot pointers into this page. It will
+// __setSlotSet encodes a set of slot pointers into this page. It will
 // return an error if there is not enough room to write the set of slots
 // to the underlying page.
-func (p *page) setSlotSet(_ []*slot) error {
+func (p *page) __setSlotSet(_ []*slot) error {
 	// Not sure if I want to append or overwrite this at the moment...
 	return nil
 }
 
-// _setSlot writes the provided slot to the location derived using
-// the supplied slot index ID. _setSlot panics if the provided sid
+// setSlot writes the provided slot to the location derived using
+// the supplied slot index ID. setSlot panics if the provided sid
 // is out of bounds.
-func (p *page) _setSlot(sl *slot, sid uint16) {
+func (p *page) setSlot(sl *slot, sid uint16) {
 	// get the slot offset
 	off := szHd + (sid * szSl)
 	// make sure it is in bounds
@@ -289,16 +307,14 @@ func (p *page) _setSlot(sl *slot, sid uint16) {
 	bin.PutUint16((*p)[offLength:], sl.length)
 }
 
-// _getSlot reads the slot at the provided slot location derived using
+// getSlot reads the slot at the provided slot location derived using
 // the supplied slot index ID. getSlot panics if the provided sid
 // is out of bounds.
-func (p *page) _getSlot(sid uint16) *slot {
+func (p *page) getSlot(sid uint16) *slot {
 	// get the slot offset
 	off := szHd + (sid * szSl)
 	// make sure it is in bounds
 	if lo := bin.Uint16((*p)[offLower:]); off > lo {
-		// log.Printf(">>>>>>>> sid=%d, off=%d, lower=%d\n", sid, off, bin.Uint16((*p)[offLower:]))
-		log.Println(">>>", p)
 		panic("slot id or offset is out of bounds")
 	}
 	// for clarity
@@ -313,8 +329,8 @@ func (p *page) _getSlot(sid uint16) *slot {
 	}
 }
 
-// _addSlot appends a new slot to the page
-func (p *page) _addSlot(size uint16) (uint16, *slot) {
+// addSlot appends a new slot to the page
+func (p *page) addSlot(size uint16) (uint16, *slot) {
 	// get page header
 	h := p.getHeader()
 	// grab the slot id for later
@@ -332,29 +348,29 @@ func (p *page) _addSlot(size uint16) (uint16, *slot) {
 	// write header back to page
 	p.setHeader(h)
 	// encode slot onto page
-	p._setSlot(sl, sid)
+	p.setSlot(sl, sid)
 	// finally, return sid and slot
 	return sid, sl
 }
 
-// _acquireSlot adds or locates a free slot that will fit the record size
+// acquireSlot adds or locates a free slot that will fit the record size
 // provided. It returns a slot along with the slot index.
-func (p *page) _acquireSlot(size uint16) (uint16, *slot) {
+func (p *page) acquireSlot(size uint16) (uint16, *slot) {
 	// try to find a free slot we can use
 	slotCount := bin.Uint16((*p)[offSlots:])
 	for sid := uint16(0); sid < slotCount; sid++ {
-		sl := p._getSlot(sid)
+		sl := p.getSlot(sid)
 		if sl.status == stFree && size <= sl.length {
 			// we can use this slot, but first we update and save it
 			sl.status = stUsed
 			sl.length = size
-			p._setSlot(sl, sid)
+			p.setSlot(sl, sid)
 			// and then we return it for use
 			return sid, sl
 		}
 	}
 	// otherwise, we append and return a fresh slot
-	return p._addSlot(size)
+	return p.addSlot(size)
 }
 
 // addRecord writes a new record to the page. It returns a *recID which
@@ -370,7 +386,7 @@ func (p *page) addRecord(data []byte) (*recID, error) {
 		return nil, err
 	}
 	// get a new (or used) slot to index the record
-	sid, sl := p._acquireSlot(rsize)
+	sid, sl := p.acquireSlot(rsize)
 	// get the record bounds from the slot index
 	beg, end := sl.bounds()
 	// write the record to the page (using record bounds)
@@ -406,7 +422,7 @@ func (p *page) getRecord(id *recID) ([]byte, error) {
 		return nil, err
 	}
 	// find the associated slot index (ensure it is a used slot)
-	sl := p._getSlot(id.sid)
+	sl := p.getSlot(id.sid)
 	if sl.status == stFree {
 		return nil, ErrRecordNotFound
 	}
@@ -420,11 +436,11 @@ func (p *page) getRecord(id *recID) ([]byte, error) {
 	return buff, nil
 }
 
-// _delSlot updates the status of the slot found at the provided
+// delSlot updates the status of the slot found at the provided
 // slot ID, and returns the slot for use in the delete operation.
-func (p *page) _delSlot(sid uint16) *slot {
+func (p *page) delSlot(sid uint16) *slot {
 	// get the slot using the sid
-	sl := p._getSlot(sid)
+	sl := p.getSlot(sid)
 	// if the slot status is free, return nil
 	if sl.status == stFree {
 		return nil
@@ -432,7 +448,7 @@ func (p *page) _delSlot(sid uint16) *slot {
 	// update slot status
 	sl.status = stFree
 	// save the status of the found slot
-	p._setSlot(sl, sid)
+	p.setSlot(sl, sid)
 	// and return
 	return sl
 }
@@ -451,7 +467,7 @@ func (p *page) delRecord(id *recID) error {
 		return err
 	}
 	// find the associated slot index (ensure it is a used slot)
-	sl := p._delSlot(id.sid)
+	sl := p.delSlot(id.sid)
 	if sl == nil {
 		return nil
 	}
@@ -587,7 +603,7 @@ func (p *page) DumpPage(showPageData bool) string {
 	)
 	ss += fmt.Sprintf("+------------------[ slots index ]------------------+\n")
 	for sid := uint16(0); sid < h.slots; sid++ {
-		sl := p._getSlot(sid)
+		sl := p.getSlot(sid)
 		ss += fmt.Sprintf("%s\n", sl)
 	}
 	if showPageData {

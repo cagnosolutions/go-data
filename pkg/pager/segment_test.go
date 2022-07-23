@@ -34,7 +34,7 @@ func TestSegmentHeader_WriteAndRead(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if n != segmentHeaderSize {
+	if n != int(segmentHeaderSize) {
 		t.Error("wrote incorrect segment header length")
 	}
 
@@ -48,7 +48,7 @@ func TestSegmentHeader_WriteAndRead(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if n != segmentHeaderSize {
+	if n != int(segmentHeaderSize) {
 		t.Error("read incorrect segment header length")
 	}
 
@@ -74,7 +74,7 @@ func TestSegmentHeader_WriteToAndReadFrom(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if n != segmentHeaderSize {
+	if int(n) != int(segmentHeaderSize) {
 		t.Error("wrote incorrect segment header length")
 	}
 
@@ -88,7 +88,7 @@ func TestSegmentHeader_WriteToAndReadFrom(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if n != segmentHeaderSize {
+	if int(n) != int(segmentHeaderSize) {
 		t.Error("read incorrect segment header length")
 	}
 
