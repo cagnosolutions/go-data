@@ -7,6 +7,9 @@ import (
 	"strings"
 )
 
+// orig: https://go.dev/play/p/8bBWDUfUgYZ
+// newer: https://go.dev/play/p/KmvLbgzIN83 (in progress)
+
 const (
 	filePerm = 0644
 	fileFlag = os.O_RDWR | os.O_CREATE | os.O_SYNC
@@ -92,8 +95,12 @@ func (d *diskStore) write(pid uint32, p []byte) error {
 	// locate proper segment
 	if !d.ptr.addrInSegment(addr) {
 		sid := d.findSegment(addr)
-		panic(fmt.Sprintf("addr=%d, not in current segment (%d), but should be in segment %d\n",
-			addr, d.active, sid))
+		panic(
+			fmt.Sprintf(
+				"addr=%d, not in current segment (%d), but should be in segment %d\n",
+				addr, d.active, sid,
+			),
+		)
 	}
 	// write data
 	_, err := d.ptr.WriteAt(p, int64(addr))

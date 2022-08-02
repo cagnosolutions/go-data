@@ -17,15 +17,20 @@ const (
 	segmentPerm = 0644
 	segmentFlag = os.O_RDWR | os.O_SYNC
 
-	filePrefix = "seg"
-	fileSuffix = ".db"
+	defaultSegmentName = "main"
+	filePrefix         = "seg"
+	fileSuffix         = ".db"
 
 	minSegmentSize = 1024 // 64 << 10
 	maxSegmentSize = 32 << 20
 )
 
 func getSegName(seqID uint32) string {
-	return fmt.Sprintf("seg-%.5d-%.4s%.3s", seqID, filePrefix, fileSuffix)
+	return fmt.Sprintf("%s-%.5d-%.4s%.3s", filePrefix, seqID, defaultSegmentName, fileSuffix)
+}
+
+func getSegByName(name string, seqID uint) string {
+	return fmt.Sprintf("%s-%.5d-%.4s%.3s", filePrefix, seqID, name, fileSuffix)
 }
 
 func getSegID(name string) uint32 {
