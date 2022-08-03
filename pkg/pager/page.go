@@ -56,9 +56,9 @@ const (
 )
 
 const (
-	szMinRec = 8 // minimum record size
-	// szMaxRec = 2048 // maximum record size
-	szMaxRec = szPg - szHd - szSl
+// szMinRec = 8 // minimum record size
+// szMaxRec = 2048 // maximum record size
+// szMaxRec = szPg - szHd - szSl
 )
 
 // Binary offsets for page header
@@ -279,11 +279,8 @@ func (p *page) freeSpace() uint16 {
 
 // checkRecord performs sanity and error checking on a record size
 func (p *page) checkRecord(size uint16) error {
-	if size < szMinRec {
+	if size < szSl {
 		return ErrRecordTooSmall
-	}
-	if size > szMaxRec {
-		return ErrRecordTooBig
 	}
 	//free := p.freeSpace() - szSl
 	//util.DEBUG("checkRecord, free=%d, size=%d", free, size)
