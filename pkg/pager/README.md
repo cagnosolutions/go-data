@@ -26,6 +26,10 @@ layout of 2mb segment sizes with 4kb page sizes, and 32mb segment sizes with 64k
 |:---------:|:----------------:|:---------------:|
 |   8 KiB   |   8  (64 KiB)    |       16        |
 
+--
+
+also useful [https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout#Extent_Tree](https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout#Extent_Tree)
+
 And other inspirations...
 ---
 
