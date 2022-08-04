@@ -224,22 +224,38 @@ func (p *page) setHeader(h *header) {
 func (p *page) printHeader() {
 	h := p.getHeader()
 	fmt.Printf("header:\n")
-	fmt.Printf("\tpid=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.pid, 4, offPID, offPID+4,
-		(*p)[offPID:offPID+4])
-	fmt.Printf("\tsize=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.size, 4, offSize, offSize+4,
-		(*p)[offSize:offSize+4])
-	fmt.Printf("\treserved=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.reserved, 4, offReserved, offReserved+4,
-		(*p)[offReserved:offReserved+4])
-	fmt.Printf("\tmeta=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.meta, 4, offMeta, offMeta+4,
-		(*p)[offMeta:offMeta+4])
-	fmt.Printf("\tstatus=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.status, 2, offStat, offStat+2,
-		(*p)[offStat:offStat+2])
-	fmt.Printf("\tslots=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.slots, 2, offSlots, offSlots+2,
-		(*p)[offSlots:offSlots+2])
-	fmt.Printf("\tlower=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.lower, 2, offLower, offLower+2,
-		(*p)[offLower:offLower+2])
-	fmt.Printf("\tupper=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.upper, 2, offUpper, offUpper+2,
-		(*p)[offUpper:offUpper+2])
+	fmt.Printf(
+		"\tpid=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.pid, 4, offPID, offPID+4,
+		(*p)[offPID:offPID+4],
+	)
+	fmt.Printf(
+		"\tsize=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.size, 4, offSize, offSize+4,
+		(*p)[offSize:offSize+4],
+	)
+	fmt.Printf(
+		"\treserved=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.reserved, 4, offReserved, offReserved+4,
+		(*p)[offReserved:offReserved+4],
+	)
+	fmt.Printf(
+		"\tmeta=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.meta, 4, offMeta, offMeta+4,
+		(*p)[offMeta:offMeta+4],
+	)
+	fmt.Printf(
+		"\tstatus=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.status, 2, offStat, offStat+2,
+		(*p)[offStat:offStat+2],
+	)
+	fmt.Printf(
+		"\tslots=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.slots, 2, offSlots, offSlots+2,
+		(*p)[offSlots:offSlots+2],
+	)
+	fmt.Printf(
+		"\tlower=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.lower, 2, offLower, offLower+2,
+		(*p)[offLower:offLower+2],
+	)
+	fmt.Printf(
+		"\tupper=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.upper, 2, offUpper, offUpper+2,
+		(*p)[offUpper:offUpper+2],
+	)
 }
 
 // getHeader decodes (from the underlying page) and returns a
@@ -282,8 +298,8 @@ func (p *page) checkRecord(size uint16) error {
 	if size < szSl {
 		return ErrRecordTooSmall
 	}
-	//free := p.freeSpace() - szSl
-	//util.DEBUG("checkRecord, free=%d, size=%d", free, size)
+	// free := p.freeSpace() - szSl
+	// util.DEBUG("checkRecord, free=%d, size=%d", free, size)
 	if size >= p.freeSpace() {
 		return ErrNoRoom
 	}
@@ -421,7 +437,7 @@ func (p *page) addRecord(data []byte) (*recID, error) {
 	rsize := uint16(len(data))
 	// sanity check the record
 	err := p.checkRecord(rsize)
-	//util.DEBUG("--addRecord(%q) rsize=%d, free=%d, checkRecordErr=%v", data, rsize, p.freeSpace(), err)
+	// util.DEBUG("--addRecord(%q) rsize=%d, free=%d, checkRecordErr=%v", data, rsize, p.freeSpace(), err)
 	if err != nil {
 		return nil, err
 	}

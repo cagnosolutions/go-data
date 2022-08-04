@@ -7,14 +7,27 @@
 If we use 8 pages ber block, 8 blocks per extent, and 8 extents per segment we get a beautiful
 layout of 2mb segment sizes with 4kb page sizes, and 32mb segment sizes with 64kb
 
-| Page Size | Initial Segment Size | Max Segment Size | 
-|:---------:|:--------------------:|:----------------:|
-|   4KiB    |        256kb         |       2mb        |
-|   8KiB    |        512kb         |       4mb        |
-|   16KiB   |         1mb          |       8mb        |
-|   32KiB   |         2mb          |       16mb       |
-|   64KiB   |         4mb          |       32mb       |
+| Page Size |  Initial Segment Size  |  Max Segment Size  | 
+|:---------:|:----------------------:|:------------------:|
+|   4 KiB   |        256 KiB         |       2 MiB        |
+|   8 KiB   |        512 KiB         |       4 MiB        |
+|  16 KiB   |         1 MiB          |       8 MiB        |
+|  32 KiB   |         2 MiB          |       16 MiB       |
+|  64 KiB   |         4 MiB          |       32 MiB       |
 
+## Consider doing what MS SQL does 
+
+- [pages-and-extents-architecture-large-row-support](https://docs.microsoft.com/en-us/sql/relational-databases/pages-and-extents-architecture-guide?view=sql-server-ver16#large-row-support)
+<br>
+- [maximum-capacity-specifications-for-sql-server](https://docs.microsoft.com/en-us/sql/sql-server/maximum-capacity-specifications-for-sql-server?view=sql-server-ver16)
+<br>
+
+| Page Size | Pages Per Extent | Extents Per MiB |
+|:---------:|:----------------:|:---------------:|
+|   8 KiB   |   8  (64 KiB)    |       16        |
+
+And other inspirations...
+---
 
 ![foo bar](../util/pager-sample.png)
 
