@@ -60,7 +60,7 @@ func TestPage_FillPercent(t *testing.T) {
 			err := newp.checkRecord(uint16(rsize))
 			if err != nil {
 				// no more room!
-				if err == ErrNoRoom {
+				if err == errNoRoom {
 					break
 				}
 				t.Errorf("record check failed: %q\n", err)
@@ -371,7 +371,7 @@ func TestPage_NewPage(t *testing.T) {
 		size:     szPg,
 		reserved: 0,
 		meta:     mdSlotted | mdRecDynmc,
-		status:   stUsed,
+		status:   StatUsed,
 		slots:    0,
 		lower:    szHd,
 		upper:    szPg,
@@ -396,7 +396,7 @@ func TestPage_NewEmptyPage(t *testing.T) {
 		size:     szPg,
 		reserved: 0,
 		meta:     mdSlotted | mdRecDynmc,
-		status:   stFree,
+		status:   StatFree,
 		slots:    0,
 		lower:    szHd,
 		upper:    szPg,
@@ -537,7 +537,7 @@ func TestPage_Sync(t *testing.T) {
 	go func() {
 		err := getRecords(pg)
 		if err != nil {
-			if err != ErrRecordNotFound {
+			if err != errRecordNotFound {
 				t.Error(err)
 			}
 		}
@@ -605,7 +605,7 @@ func pageTests() {
 	for _, id := range ids {
 		rec, err := p.getRecord(&id)
 		if err != nil {
-			if err == ErrRecordNotFound {
+			if err == errRecordNotFound {
 				continue
 			}
 			panic(err)
@@ -636,7 +636,7 @@ func pageTests() {
 	for _, id := range ids {
 		rec, err := p.getRecord(&id)
 		if err != nil {
-			if err == ErrRecordNotFound {
+			if err == errRecordNotFound {
 				continue
 			}
 			panic(err)
@@ -650,7 +650,7 @@ func pageTests() {
 		data := fmt.Sprintf("adding another record (%.2d)", i)
 		_, err := p.addRecord([]byte(data))
 		if err != nil {
-			if err == ErrNoRoom {
+			if err == errNoRoom {
 				break
 			}
 			panic(err)

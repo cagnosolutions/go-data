@@ -5,6 +5,10 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+
+	"github.com/cagnosolutions/go-data/pkg/dbms/common"
+	"github.com/cagnosolutions/go-data/pkg/dbms/errs"
+	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
 
 var headerBufPool = sync.Pool{
@@ -183,10 +187,10 @@ const (
 
 // diskManager is a disk storageManager
 type diskManager struct {
-	//header     *fileHeader
+	// header     *fileHeader
 	file       *os.File
 	filePath   string
-	nextPageID pageID
+	nextPageID page.PageID
 	pageSize   uint16
 	fileSize   int64
 }
@@ -230,7 +234,7 @@ func newDiskManagerSize(filePath string, pageSize uint16, pageCount uint16) (*di
 		// },
 		file:       fd,
 		filePath:   fd.Name(),
-		nextPageID: pageID(size / int64(pageSize)),
+		nextPageID: page.PageID(size / int64(pageSize)),
 		pageSize:   pageSize,
 		fileSize:   size,
 	}
@@ -309,7 +313,7 @@ func (dm *diskManager) checkMeta(name string, pageSize, pageCount uint16) error 
 */
 
 // allocatePage returns, then increments the ID or offset of the next entry.
-func (dm *diskManager) allocatePage() pageID {
+func (dm *diskManager) allocatePage() page.PageID {
 	// **TEMPORARY -- JUST NEED IT TO COMPILE FOR NOW**
 	// **ACTUALLY -- WE MIGHT DO AWAY WITH THIS**
 	// dm.header.pageCount++
@@ -325,14 +329,14 @@ func (dm *diskManager) allocatePage() pageID {
 
 // deallocatePage wipes the entry in the location matching the provided ID
 // or offset. If out of bounds, it will return an error.
-func (dm *diskManager) deallocatePage(pid pageID) error {
+func (dm *diskManager) deallocatePage(pid page.PageID) error {
 	// calculate the logical page offset should be.
 	offset := int64(pid * uint32(dm.pageSize))
 	if offset < 0 {
-		return ErrOffsetOutOfBounds
+		return errs.ErrOffsetOutOfBounds
 	}
 	// Create an empty page
-	ep := newEmptyPage(pid)
+	ep := page.NewEmptyPage(pid)
 	// Next, we can attempt to write the contents of an empty page data
 	// directly to the calculated offset.
 	n, err := dm.file.WriteAt(ep, offset)
@@ -341,7 +345,7 @@ func (dm *diskManager) deallocatePage(pid pageID) error {
 	}
 	// Check to ensure that we actually wrote the contents of a full page.
 	if n != int(dm.pageSize) {
-		return ErrPartialPageWrite
+		return errs.ErrPartialPageWrite
 	}
 	// Update the file fileSize if necessary.
 	if offset >= dm.fileSize {
@@ -356,7 +360,7 @@ func (dm *diskManager) deallocatePage(pid pageID) error {
 	return nil
 }
 
-func (dm *diskManager) hasPage(pid pageID) bool {
+func (dm *diskManager) hasPage(pid page.PageID) bool {
 	// First we do a little error checking, and calculate what the page
 	// offset is supposed to be.
 	offset := int64(pid * uint32(dm.pageSize))
@@ -378,7 +382,7 @@ func (dm *diskManager) hasPage(pid pageID) bool {
 // the logical offset where the entry should be located and will attempt to
 // read the entry contents from that location. Any errors encountered will
 // be returned immediately.
-func (dm *diskManager) readPage(pid pageID, p page) error {
+func (dm *diskManager) readPage(pid page.PageID, p page.Page) error {
 	// First we do a little error checking, and calculate what the page
 	// offset is supposed to be.
 	offset := int64(pid * uint32(dm.pageSize))
@@ -396,7 +400,7 @@ func (dm *diskManager) readPage(pid pageID, p page) error {
 		// we want to. For now though, we will error out. I feel that
 		// we will always be wanting to read and write full pages so
 		// in that case an error is a valid response.
-		return ErrPartialPageRead
+		return errs.ErrPartialPageRead
 	}
 	// Finally, we can return a nil error
 	return nil
@@ -406,11 +410,11 @@ func (dm *diskManager) readPage(pid pageID, p page) error {
 // calculate the logical offset where the entry should be inserted
 // and will attempt to write the contents of the provided entry to
 // that location. Any errors encountered will be returned immediately.
-func (dm *diskManager) writePage(pid pageID, p page) error {
+func (dm *diskManager) writePage(pid page.PageID, p page.Page) error {
 	// calculate the logical page offset should be.
 	offset := int64(pid * uint32(dm.pageSize))
 	if offset < 0 {
-		return ErrOffsetOutOfBounds
+		return errs.ErrOffsetOutOfBounds
 	}
 	// Next, we can attempt to write the contents of the page data
 	// directly to the calculated offset.
@@ -424,7 +428,7 @@ func (dm *diskManager) writePage(pid pageID, p page) error {
 	}
 	// Check to ensure that we actually wrote the contents of a full page.
 	if n != int(dm.pageSize) {
-		return ErrPartialPageWrite
+		return errs.ErrPartialPageWrite
 	}
 	// Update the file fileSize if necessary.
 	if offset >= dm.fileSize {
@@ -472,7 +476,7 @@ func (dm *diskManager) size() int {
 // getFreePages searches through the file looking for all the pages
 // that have been deallocated and returns a set of page ID's with
 // any of the deallocated pages.
-func (dm *diskManager) getFreePages() []pageID {
+func (dm *diskManager) getFreePages() []page.PageID {
 	// Check to ensure the file actually contains some kind of data.
 	if dm.fileSize < 1 {
 		return nil
@@ -481,7 +485,7 @@ func (dm *diskManager) getFreePages() []pageID {
 	// and build a list of free page ID's.
 	var pid int64
 	buf := make([]byte, 2)
-	var free []pageID
+	var free []page.PageID
 	for {
 		_, err := dm.file.ReadAt(buf, (pid*int64(dm.pageSize))+4)
 		if err != nil {
@@ -490,9 +494,9 @@ func (dm *diskManager) getFreePages() []pageID {
 			}
 			return nil
 		}
-		magic := bin.Uint16(buf)
-		if magic&stFree > 0 {
-			free = append(free, pageID(pid))
+		magic := common.Binary.Uint16(buf)
+		if magic&page.StatFree > 0 {
+			free = append(free, page.PageID(pid))
 		}
 		pid++
 	}

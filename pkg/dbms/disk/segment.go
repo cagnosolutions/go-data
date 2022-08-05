@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/cagnosolutions/go-data/pkg/dbms/errs"
 )
 
 const (
@@ -26,14 +28,8 @@ const (
 
 var (
 	// segmentSize    uint32 = 16 << 20 // either 2, 4, 8 or 16 mb; 8 or 16 are preferable
-	minSegmentSize uint32 = 2 << 20
-	maxSegmentSize uint32 = 32 << 20
-
-	ErrSegmentSizeTooSmall     = errors.New("segment size is too small (min 2 MiB)")
-	ErrSegmentSizeTooLarge     = errors.New("segment size is too large (max 32 MiB)")
-	ErrSegmentHeaderShortWrite = errors.New("buffer is to small to write segment header into")
-	ErrSegmentHeaderShortRead  = errors.New("buffer is to small to read segment header from")
-	ErrSegmentNotFound         = errors.New("segment has not been found")
+	_minSegmentSize uint32 = 2 << 20
+	_maxSegmentSize uint32 = 32 << 20
 )
 
 // segmentHeader represents the header for a segment.
@@ -114,7 +110,7 @@ func (sh *segmentHeader) WriteTo(w io.Writer) (int64, error) {
 // Read implements the Read interface on the segmentHeader.
 func (sh *segmentHeader) Read(p []byte) (int, error) {
 	if len(p) < int(segmentHeaderSize) {
-		return 0, ErrSegmentHeaderShortRead
+		return 0, errs.ErrSegmentHeaderShortRead
 	}
 	nsh := &segmentHeader{
 		sid:       binary.LittleEndian.Uint16(p[0:2]),
@@ -134,7 +130,7 @@ func (sh *segmentHeader) Read(p []byte) (int, error) {
 // Write implements the Write interface on the segmentHeader.
 func (sh *segmentHeader) Write(p []byte) (int, error) {
 	if len(p) < int(segmentHeaderSize) {
-		return 0, ErrSegmentHeaderShortWrite
+		return 0, errs.ErrSegmentHeaderShortWrite
 	}
 	p[2] = sh.kind
 	p[3] = sh.version
@@ -154,7 +150,7 @@ func (sh *segmentHeader) Write(p []byte) (int, error) {
 func (sh *segmentHeader) logicalPageOffset(pageNo uint16) (uint32, error) {
 	// error check the provided page number
 	if pageNo < sh.firstPage || pageNo > sh.lastPage {
-		return 0, ErrPageNotFound
+		return 0, errs.ErrPageNotFound
 	}
 	// transform the provided page number into a logical address
 	addr := uint32(pageNo * sh.pageSize)
@@ -277,7 +273,7 @@ func (f *file) makeSegment() error {
 func (f *file) openSegment(sid uint16) error {
 	name, found := f.segments[sid]
 	if !found {
-		return ErrSegmentNotFound
+		return errs.ErrSegmentNotFound
 	}
 	fd, err := os.OpenFile(filepath.Join(f.path, name), os.O_RDWR|os.O_SYNC, 0666)
 	if err != nil {

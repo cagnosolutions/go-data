@@ -1,4 +1,4 @@
-package common
+package disk
 
 import (
 	"os"

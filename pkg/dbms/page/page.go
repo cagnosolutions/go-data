@@ -9,26 +9,15 @@ import (
 	"strings"
 	"sync"
 	"text/tabwriter"
+
+	"github.com/cagnosolutions/go-data/pkg/dbms/errs"
 )
 
 // https://go.dev/play/p/gr8RC8vDuSv
 
-var (
-	foo               = fmt.Errorf()
-	ErrRecordTooSmall = fmt.Errorf("[page] record is too small (under min fileSize allowed)")
-	ErrRecordTooBig   = fmt.Errorf("[page] record is too big (over max fileSize allowed)")
-	ErrNoRoom         = fmt.Errorf("[page] the page is full, or has too much fragmentation")
-	ErrEmptyPage      = fmt.Errorf("[page] the page is empty, cannot get any information")
-	ErrInvalidPID     = fmt.Errorf("[page] page ID is not valid, or does not match")
-	ErrInvalidSID     = fmt.Errorf("[page] slot ID is not valid (out of bounds perhaps?)")
-	ErrRecordNotFound = fmt.Errorf("[page] record not found, it may have been deleted")
-)
-
 // Defaults for page size
 const (
-	DefaultPageSize        = szPg  // 4KB
-	MinPageSize     uint16 = 512   // 512B
-	MaxPageSize     uint16 = 65535 // 64KB
+	DefaultPageSize = szPg // 4KB
 )
 
 const (
@@ -51,8 +40,8 @@ const (
 
 // Status flags (page or slot status)
 const (
-	stFree uint16 = 0x0001 // page or slot is free
-	stUsed uint16 = 0x0002 // page or slot to use
+	StatFree uint16 = 0x0001 // page or slot is free
+	StatUsed uint16 = 0x0002 // page or slot to use
 )
 
 // Meta flags for page
@@ -93,7 +82,7 @@ func (s slot) bounds() (uint16, uint16) {
 }
 
 func (s slot) String() string {
-	ss := fmt.Sprintf("off=%.4d, len=%.4d, free=%v", s.offset, s.length, s.status == stFree)
+	ss := fmt.Sprintf("off=%.4d, len=%.4d, free=%v", s.offset, s.length, s.status == StatFree)
 	ss += fmt.Sprintf("\t[0x%.4x,0x%.4x,0x%.4x]", s.offset, s.length, s.status)
 
 	return ss
@@ -117,8 +106,26 @@ type header struct {
 	upper    uint16 // upper free space bound
 }
 
+type (
+	Page  = page
+	RecID = struct {
+		PID PageID
+		SID SlotID
+	}
+	PageID = pageID
+	SlotID = slotID
+)
+
+// pageID is a pageID type
+type pageID = uint32
+type slotID = uint16
+
 // page is a page.
 type page []byte
+
+func (p *Page) Size() int {
+	return p.size()
+}
 
 func (p *page) size() int {
 	if p == nil {
@@ -127,14 +134,22 @@ func (p *page) size() int {
 	return len(*p)
 }
 
+func NewEmptyPage(pid PageID) Page {
+	return newEmptyPageSize(pid, DefaultPageSize)
+}
+
 // newEmptyPage returns a new page instance set with the provided page ID,
-// with a meta byte status of stFree, denoting it as empty and free to use.
+// with a meta byte status of StatFree, denoting it as empty and free to use.
 func newEmptyPage(pid uint32) page {
 	return newEmptyPageSize(pid, DefaultPageSize)
 }
 
+func NewEmptyPageSize(pid PageID, size uint16) Page {
+	return newEmptyPageSize(pid, size)
+}
+
 // newEmptyPageSize returns a new page instance set with the provided page ID, with
-// a meta byte status of stFree, denoting it as empty and free to use. It is sized
+// a meta byte status of StatFree, denoting it as empty and free to use. It is sized
 // according to the provided size.
 func newEmptyPageSize(pid uint32, size uint16) page {
 	pg := make(page, size, size)
@@ -144,7 +159,7 @@ func newEmptyPageSize(pid uint32, size uint16) page {
 			size:     uint32(size),
 			reserved: uint32(0),
 			meta:     mdSlotted | mdRecDynmc,
-			status:   stFree,
+			status:   StatFree,
 			slots:    uint16(0),
 			lower:    szHd,
 			upper:    size,
@@ -153,14 +168,17 @@ func newEmptyPageSize(pid uint32, size uint16) page {
 	return pg
 }
 
-// clear wipes all the data and returns the page to its original form
-func (p *page) clear() {
-	*p = newEmptyPageSize(p.getPageID(), uint16(p.getPageSize()))
+func NewPage(pid PageID) Page {
+	return newPageSize(pid, DefaultPageSize)
 }
 
 // newPage returns a new page instance set with the provided page ID.
 func newPage(pid uint32) page {
 	return newPageSize(pid, DefaultPageSize)
+}
+
+func NewPageSize(pid PageID, size uint16) Page {
+	return newPageSize(pid, size)
 }
 
 // newPageSize returns a new page instance set with the provided page ID, and sized
@@ -173,7 +191,7 @@ func newPageSize(pid uint32, size uint16) page {
 			size:     uint32(size),
 			reserved: uint32(0),
 			meta:     mdSlotted | mdRecDynmc,
-			status:   stUsed,
+			status:   StatUsed,
 			slots:    uint16(0),
 			lower:    szHd,
 			upper:    size,
@@ -249,6 +267,10 @@ func (p *page) getHeader() *header {
 	}
 }
 
+func (p *Page) GetPageID() PageID {
+	return p.getPageID()
+}
+
 // getPageID returns the current page ID.
 func (p *page) getPageID() uint32 {
 	return bin.Uint32((*p)[offPID : offPID+4])
@@ -272,12 +294,12 @@ func (p *page) freeSpace() uint16 {
 // checkRecord performs sanity and error checking on a record size
 func (p *page) checkRecord(size uint16) error {
 	if size < szSl {
-		return ErrRecordTooSmall
+		return errs.ErrRecordTooSmall
 	}
 	// free := p.freeSpace() - szSl
 	// util.DEBUG("checkRecord, free=%d, size=%d", free, size)
 	if size >= p.freeSpace() {
-		return ErrNoRoom
+		return errs.ErrNoRoom
 	}
 	return nil
 }
@@ -365,7 +387,7 @@ func (p *page) addSlot(size uint16) (uint16, *slot) {
 	h.upper -= size
 	// create new slot structure
 	sl := &slot{
-		status: stUsed,
+		status: StatUsed,
 		offset: h.upper,
 		length: size,
 	}
@@ -391,9 +413,9 @@ func (p *page) acquireSlot(size uint16) (uint16, *slot) {
 	for sid := slotCount; sid > 0; sid-- {
 		// for sid := uint16(0); sid < slotCount; sid++ {
 		sl := p.getSlot(sid)
-		if sl.status == stFree && size <= sl.length {
+		if sl.status == StatFree && size <= sl.length {
 			// we can use this slot, but first we update and save it
-			sl.status = stUsed
+			sl.status = StatUsed
 			sl.length = size
 			p.setSlot(sl, sid)
 			// and then we return it for use
@@ -402,6 +424,17 @@ func (p *page) acquireSlot(size uint16) (uint16, *slot) {
 	}
 	// otherwise, we append and return a fresh slot
 	return p.addSlot(size)
+}
+
+func (p *Page) AddRecord(data []byte) (*RecID, error) {
+	rid, err := p.addRecord(data)
+	if err != nil {
+		return nil, err
+	}
+	return &RecID{
+		PID: rid.pid,
+		SID: rid.sid,
+	}, nil
 }
 
 // addRecord writes a new record to the page. It returns a *recID which
@@ -434,12 +467,19 @@ func (p *page) addRecord(data []byte) (*recID, error) {
 // record ID.
 func (p *page) checkRID(id *recID) error {
 	if id.pid != bin.Uint32((*p)[offPID:offPID+4]) {
-		return ErrInvalidPID
+		return errs.ErrInvalidPID
 	}
 	if id.sid > bin.Uint16((*p)[offSlots:offSlots+2]) {
-		return ErrInvalidSID
+		return errs.ErrInvalidSID
 	}
 	return nil
+}
+
+func (p *Page) GetRecord(rid *RecID) ([]byte, error) {
+	return p.getRecord(&recID{
+		pid: rid.PID,
+		sid: rid.SID,
+	})
 }
 
 // getRecord reads a record from the page. It returns the record data
@@ -455,8 +495,8 @@ func (p *page) getRecord(id *recID) ([]byte, error) {
 	}
 	// find the associated slot index (ensure it is a used slot)
 	sl := p.getSlot(id.sid)
-	if sl.status == stFree {
-		return nil, ErrRecordNotFound
+	if sl.status == StatFree {
+		return nil, errs.ErrRecordNotFound
 	}
 	// create a buffer to copy the record into (safety)
 	buff := make([]byte, sl.length)
@@ -474,15 +514,22 @@ func (p *page) delSlot(sid uint16) *slot {
 	// get the slot using the sid
 	sl := p.getSlot(sid)
 	// if the slot status is free, return nil
-	if sl.status == stFree {
+	if sl.status == StatFree {
 		return nil
 	}
 	// update slot status
-	sl.status = stFree
+	sl.status = StatFree
 	// save the status of the found slot
 	p.setSlot(sl, sid)
 	// and return
 	return sl
+}
+
+func (p *Page) DelRecord(rid *RecID) error {
+	return p.delRecord(&recID{
+		pid: rid.PID,
+		sid: rid.SID,
+	})
 }
 
 // delRecord removes a record from the page. It overwrites the record
@@ -513,6 +560,11 @@ func (p *page) delRecord(id *recID) error {
 	return nil
 }
 
+// clear wipes all the data and returns the page to its original form
+func (p *page) clear() {
+	*p = newEmptyPageSize(p.getPageID(), uint16(p.getPageSize()))
+}
+
 // iterator is a basic iterator
 type iterator struct {
 	slots    []*slot
@@ -525,7 +577,7 @@ type iterator struct {
 func (p *page) newIter(skipFree bool) (*iterator, error) {
 	slots := p.getSlotSet()
 	if slots == nil {
-		return nil, ErrEmptyPage
+		return nil, errs.ErrEmptyPage
 	}
 	return &iterator{
 		slots:    slots,
@@ -547,7 +599,7 @@ func (it *iterator) next() *slot {
 	// slot is not a free slot; if it is a free slot, then skip it.
 	sl := it.slots[it.index]
 	// check if we should skip any slots marked free.
-	if it.skipFree && sl.status == stFree {
+	if it.skipFree && sl.status == StatFree {
 		// slot is free, skip it
 		return it.next()
 	}
