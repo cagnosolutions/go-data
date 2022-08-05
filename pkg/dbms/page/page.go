@@ -18,6 +18,8 @@ import (
 // Defaults for page size
 const (
 	DefaultPageSize = szPg // 4KB
+	MinPageSize     = szSl
+	MaxPageSize     = DefaultPageSize - szHd - szSl
 )
 
 const (

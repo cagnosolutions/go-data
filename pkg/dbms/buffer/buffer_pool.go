@@ -3,6 +3,10 @@ package buffer
 import (
 	"fmt"
 	"sync"
+
+	"github.com/cagnosolutions/go-data/pkg/dbms/disk"
+	"github.com/cagnosolutions/go-data/pkg/dbms/errs"
+	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
 
 /*
@@ -57,29 +61,29 @@ const (
 // bufferPool is an implementation of a page buffer pool, which is also
 // sometimes called a buffer pool page disk in a dbms system.
 type bufferPool struct {
-	bpLatch  sync.Mutex         // latch
-	frames   []frame            // list of loaded page frames
-	replacer *clockReplacer     // page replacement structure (used to find an unpinned page for replacement)
-	disk     *diskManager       // underlying disk storage manager
-	free     []frameID          // used to find a page for replacement
-	table    map[pageID]frameID // used to keep track of pages
-	pageSize uint16             // page size for this buffer pool
+	bpLatch  sync.Mutex              // latch
+	frames   []frame                 // list of loaded page frames
+	replacer *clockReplacer          // page replacement structure (used to find an unpinned page for replacement)
+	disk     *disk.DiskManager       // underlying disk storage manager
+	free     []frameID               // used to find a page for replacement
+	table    map[page.PageID]FrameID // used to keep track of pages
+	pageSize uint16                  // page size for this buffer pool
 }
 
 // newBufferPool initializes and returns a new instance of a bufferPool.
 func newBufferPool(file string, pageSize, pageCount uint16) *bufferPool {
 	// sanitize the page size
 	pageSize = calcPageSize(pageSize)
-	dm, err := newDiskManagerSize(file, pageSize, pageCount)
+	dm, err := disk.NewDiskManagerSize(file, pageSize, pageCount)
 	if err != nil {
-		panic(ErrOpeningDiskManager)
+		panic(errs.ErrOpeningDiskManager)
 	}
 	bm := &bufferPool{
 		frames:   make([]frame, pageCount, pageCount),
 		replacer: newClockReplacer(pageCount),
 		disk:     dm,
 		free:     make([]frameID, pageCount),
-		table:    make(map[pageID]frameID),
+		table:    make(map[page.PageID]frameID),
 		pageSize: pageSize,
 	}
 	for i := uint16(0); i < pageCount; i++ {
@@ -88,7 +92,7 @@ func newBufferPool(file string, pageSize, pageCount uint16) *bufferPool {
 			fid:      0,
 			pinCount: 0,
 			isDirty:  false,
-			page:     nil,
+			Page:     nil,
 		}
 		bm.free[i] = frameID(i)
 	}
@@ -103,15 +107,15 @@ func newBufferPool(file string, pageSize, pageCount uint16) *bufferPool {
 // to the maximum allowable size.
 func calcPageSize(pageSize uint16) uint16 {
 	if pageSize <= 0 {
-		pageSize = DefaultPageSize
+		pageSize = page.DefaultPageSize
 	}
-	if 0 < pageSize && pageSize < MinPageSize {
-		pageSize = MinPageSize
+	if 0 < pageSize && pageSize < page.MinPageSize {
+		pageSize = page.MinPageSize
 	}
-	if MaxPageSize < pageSize {
-		pageSize = MaxPageSize
+	if page.MaxPageSize < pageSize {
+		pageSize = page.MaxPageSize
 	}
-	if pageSize&(DefaultPageSize-1) != 0 {
+	if pageSize&(page.DefaultPageSize-1) != 0 {
 		// must be a power of two
 		var x uint16 = 1
 		for x < pageSize {
@@ -158,7 +162,7 @@ func calcBufferSize(pageSize uint16, bufferSize uint32) uint32 {
 // 	3.0 - Update P's metadata. Zero out memory ad add P to the page table.
 // 	4.0 - Return a pointer to P.
 //
-func (b *bufferPool) newPage() page {
+func (b *bufferPool) newPage() page.Page {
 	// First we need a frameID we can use to proceed. We will call
 	// getUsableFrame which will first check our free list and if we do
 	// not find one in there getUsableFrame will victimize a pageFrame and
@@ -170,28 +174,28 @@ func (b *bufferPool) newPage() page {
 	}
 	// Now that we have an empty pageFrame in the table to load a pageFrame
 	// into, we will ask the storage storageManager to allocate a new page
-	// and return the pageID, so we can proceed.
-	pid := b.disk.allocatePage()
-	// Next, we should create a page frame utilizing the new pageID.
+	// and return the page.PageID, so we can proceed.
+	pid := b.disk.AllocatePage()
+	// Next, we should create a page frame utilizing the new page.PageID.
 	pf := newFrame(pid, *fid, b.pageSize)
-	pg := newPageSize(pid, b.pageSize)
-	copy(pf.page, pg)
+	pg := page.NewPageSize(pid, b.pageSize)
+	copy(pf.Page, pg)
 	// Add the entry to our page table.
 	b.table[pid] = *fid
 	// And update the page frame
 	b.frames[*fid] = pf
 	// Finally, return our page pageFrame.
-	return pf.page
+	return pf.Page
 }
 
 // unpinPage unpins the target page pageFrame from the pageFrameManager
-func (b *bufferPool) unpinPage(pid pageID, isDirty bool) error {
+func (b *bufferPool) unpinPage(pid page.PageID, isDirty bool) error {
 	// First we attempt to locate the requested page pageFrame in the page table using
-	// the supplied pageID.
+	// the supplied page.PageID.
 	fid, found := b.table[pid]
 	if !found {
 		// We have not found it, return an error.
-		return ErrPageNotFound
+		return errs.ErrPageNotFound
 	}
 	// We have located the matching frameID for the page we are looking for. Next, grab
 	// the actual page frame from our set.
@@ -224,7 +228,7 @@ func (b *bufferPool) unpinPage(pid pageID, isDirty bool) error {
 //	3.0 - Delete R from the page table and insert P.
 // 	4.0 - Update P's metadata. Read in page from disk, and return a pointer to P.
 //
-func (b *bufferPool) fetchPage(pid pageID) page {
+func (b *bufferPool) fetchPage(pid page.PageID) page.Page {
 	// Check to see if the frame ID is in the page table.
 	if fid, found := b.table[pid]; found {
 		// It appears to be, so we should get the matching page.
@@ -234,7 +238,7 @@ func (b *bufferPool) fetchPage(pid pageID) page {
 		pf.pinCount++
 		b.replacer.pin(fid)
 		// Finally, return the page.
-		return pf.page
+		return pf.Page
 	}
 	// We did not find the entry in the page table, so now we must get a usable
 	// frame ID from our free list, or the replacer.
@@ -246,7 +250,7 @@ func (b *bufferPool) fetchPage(pid pageID) page {
 	}
 	// Read in the page data using the disk storageManager.
 	data := make([]byte, b.pageSize)
-	err = b.disk.readPage(pid, data)
+	err = b.disk.ReadPage(pid, data)
 	if err != nil {
 		// Something went wrong!
 		// log.Printf("FETCHING PAGE, READING DATA OFF THE DISK: %s\n", err)
@@ -256,7 +260,7 @@ func (b *bufferPool) fetchPage(pid pageID) page {
 	// there is not currently an instance of this page frame in the page table since we had
 	// to victimize one.
 	pf := newFrame(pid, *fid, b.pageSize)
-	copy(pf.page, data)
+	copy(pf.Page, data)
 	// Add the entry to our page table.
 	b.table[pid] = *fid
 	// Update our frame with the new page
@@ -264,22 +268,22 @@ func (b *bufferPool) fetchPage(pid pageID) page {
 	// Fill out any other metadata...
 	//
 	// Lastly, we return our page.
-	return pf.page
+	return pf.Page
 }
 
 // flushPage flushes the target page to the storage storageManager
-func (b *bufferPool) flushPage(pid pageID) error {
+func (b *bufferPool) flushPage(pid page.PageID) error {
 	// First we attempt to locate the matching frame ID using our page table.
 	fid, found := b.table[pid]
 	if !found {
 		// We have not found it, return an error.
-		return ErrPageNotFound
+		return errs.ErrPageNotFound
 	}
 	// Get our the page frame from our frame set using our frame ID.
 	pf := b.frames[fid]
 	// Decrement the pin count and flush it.
 	pf.decrPinCount()
-	err := b.disk.writePage(pf.pid, pf.page)
+	err := b.disk.WritePage(pf.pid, pf.Page)
 	if err != nil {
 		return err
 	}
@@ -289,7 +293,7 @@ func (b *bufferPool) flushPage(pid pageID) error {
 }
 
 // deletePage deletes a page from the pageFrameManager
-func (b *bufferPool) deletePage(pid pageID) error {
+func (b *bufferPool) deletePage(pid page.PageID) error {
 	// First, we should check to see if this page frame is in the page table.
 	// If it is not, then we will not need to do anything.
 	fid, found := b.table[pid]
@@ -302,7 +306,7 @@ func (b *bufferPool) deletePage(pid pageID) error {
 	pf := b.frames[fid]
 	if pf.pinCount > 0 {
 		// Page must be in use (or has not properly been unpinned.)
-		return ErrPageInUse
+		return errs.ErrPageInUse
 	}
 	// If we are here, we have our page pageFrame, and it is not currently in use.
 	// First remove it from the page table.
@@ -312,7 +316,7 @@ func (b *bufferPool) deletePage(pid pageID) error {
 	b.replacer.pin(fid)
 	// Then we will instruct the storage storageManager to deallocate it the page, and
 	// finally we will add the pageFrame back into the free list.
-	if err := b.disk.deallocatePage(pid); err != nil {
+	if err := b.disk.DeallocatePage(pid); err != nil {
 		// Oops, something happened on the disk.
 		return err
 	}
@@ -344,14 +348,14 @@ func (b *bufferPool) getFrameID() (*frameID, bool) {
 // getUsableFrame attempts to return a usable frameID. It is used in the event that
 // the buffer pool is "full." It always checks the free list first, and then it will
 // fall back to using the replacer. In either case, if a frameID is not found an error
-// of type ErrUsableFrameNotFound. Otherwise, a frameID is located and returned along
+// of type errs.ErrUsableFrameNotFound. Otherwise, a frameID is located and returned along
 // with a nil error.
 func (b *bufferPool) getUsableFrame() (*frameID, error) {
 	// First check the free list, then the replacer. Try to obtain a usable frameID.
 	fid, foundInFreeList := b.getFrameID()
 	if fid == nil {
 		// Make sure nothing weird happened.
-		return nil, ErrUsableFrameNotFound
+		return nil, errs.ErrUsableFrameNotFound
 	}
 	// If we are here, we have a frameID, but we don't yet know if it came out of our
 	// free list, or from the allocator. If it is from the allocator then we need to
@@ -364,7 +368,7 @@ func (b *bufferPool) getUsableFrame() (*frameID, error) {
 		if &cf != nil {
 			if cf.isDirty {
 				// Our page pageFrame is dirty; write it.
-				err := b.disk.writePage(cf.pid, cf.page)
+				err := b.disk.WritePage(cf.pid, cf.Page)
 				if err != nil {
 					return nil, err // error on write
 				}
@@ -399,7 +403,7 @@ func (b *bufferPool) close() error {
 	if err != nil {
 		return err
 	}
-	err = b.disk.close()
+	err = b.disk.Close()
 	if err != nil {
 		return err
 	}

@@ -185,6 +185,8 @@ const (
 	dbMetaSuffix = `.meta`
 )
 
+type DiskManager = diskManager
+
 // diskManager is a disk storageManager
 type diskManager struct {
 	// header     *fileHeader
@@ -195,10 +197,18 @@ type diskManager struct {
 	fileSize   int64
 }
 
+func NewDiskManager(filePath string, pageSize uint16) (*DiskManager, error) {
+	return newDiskManagerSize(filePath, pageSize, defaultPageCount)
+}
+
 // newDiskManagerSize initializes and returns a new diskManager instance using the specified
 // pageSize the default maxPageCount.
 func newDiskManager(filePath string, pageSize uint16) (*diskManager, error) {
 	return newDiskManagerSize(filePath, pageSize, defaultPageCount)
+}
+
+func NewDiskManagerSize(filePath string, pageSize uint16, pageCount uint16) (*DiskManager, error) {
+	return newDiskManagerSize(filePath, pageSize, pageCount)
 }
 
 // newDiskManagerSize initializes and returns a new diskManager instance using the specified
@@ -312,6 +322,10 @@ func (dm *diskManager) checkMeta(name string, pageSize, pageCount uint16) error 
 }
 */
 
+func (dm *DiskManager) AllocatePage() page.PageID {
+	return dm.allocatePage()
+}
+
 // allocatePage returns, then increments the ID or offset of the next entry.
 func (dm *diskManager) allocatePage() page.PageID {
 	// **TEMPORARY -- JUST NEED IT TO COMPILE FOR NOW**
@@ -325,6 +339,10 @@ func (dm *diskManager) allocatePage() page.PageID {
 	// next := dm.nextPageID
 	// dm.nextPageID++
 	// return next
+}
+
+func (dm *DiskManager) DeallocatePage(pid page.PageID) error {
+	return dm.deallocatePage(pid)
 }
 
 // deallocatePage wipes the entry in the location matching the provided ID
@@ -360,6 +378,10 @@ func (dm *diskManager) deallocatePage(pid page.PageID) error {
 	return nil
 }
 
+func (dm *DiskManager) HasPage(pid page.PageID) bool {
+	return dm.hasPage(pid)
+}
+
 func (dm *diskManager) hasPage(pid page.PageID) bool {
 	// First we do a little error checking, and calculate what the page
 	// offset is supposed to be.
@@ -376,6 +398,10 @@ func (dm *diskManager) hasPage(pid page.PageID) bool {
 	}
 	// the page is most likely there
 	return true
+}
+
+func (dm *DiskManager) ReadPage(pid page.PageID, p page.Page) error {
+	return dm.readPage(pid, p)
 }
 
 // readPage attempts to read the entry. It uses the ID provided to calculate
@@ -404,6 +430,10 @@ func (dm *diskManager) readPage(pid page.PageID, p page.Page) error {
 	}
 	// Finally, we can return a nil error
 	return nil
+}
+
+func (dm *DiskManager) WritePage(pid page.PageID, p page.Page) error {
+	return dm.writePage(pid, p)
 }
 
 // writePage attempts to write an entry. It uses the ID provided to
@@ -453,6 +483,10 @@ func (dm *diskManager) writePage(pid page.PageID, p page.Page) error {
 	return nil
 }
 
+func (dm *DiskManager) Close() error {
+	return dm.close()
+}
+
 // close attempts to finalize and close any open streams. Any errors
 // encountered will be returned immediately.
 func (dm *diskManager) close() error {
@@ -462,6 +496,10 @@ func (dm *diskManager) close() error {
 		return err
 	}
 	return nil
+}
+
+func (dm *DiskManager) Size() int {
+	return dm.size()
 }
 
 // size returns the number of bytes the storage disk is current using.
