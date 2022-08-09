@@ -1,5 +1,5 @@
-github.com/scottcagno/go-scratch v0.0.0-20220330190932-5466c7733236 h1:fKYfgb5kbPnhwBd7xsafrnSRfmMdQM3pfDlxDReKQWg=
-github.com/scottcagno/go-scratch v0.0.0-20220330190932-5466c7733236/go.mod h1:Fl15W2gAHzS2CaRVUhRRVfKy8DZiIqEXLP1fcZG2e7g=
+github.com/scottcagno/go-scratch v0.0.0-20220723223820-47f00f6c2468 h1:CJv3AeT6o6XLXC1k/dcc16IGzh3NwwLVb9kSVDGliV8=
+github.com/scottcagno/go-scratch v0.0.0-20220723223820-47f00f6c2468/go.mod h1:Fl15W2gAHzS2CaRVUhRRVfKy8DZiIqEXLP1fcZG2e7g=
 golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 h1:kQgndtyPBW/JIYERgdxfwMYh3AVStj88WQTlNDi2a+o=
 golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3/go.mod h1:3p9vT2HGsQu2K1YbXdKPJLVgG5VJdoTa1poYQBtP1AY=
 golang.org/x/sys v0.0.0-20211019181941-9d821ace8654 h1:id054HUawV2/6IGm2IV8KZQjqtwAOo2CYlOToYqa0d0=

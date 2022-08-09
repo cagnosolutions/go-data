@@ -3,7 +3,7 @@ module github.com/cagnosolutions/go-data
 go 1.18
 
 require (
-	github.com/scottcagno/go-scratch v0.0.0-20220330190932-5466c7733236
+	github.com/scottcagno/go-scratch v0.0.0-20220723223820-47f00f6c2468
 	golang.org/x/tools v0.1.10
 )
 

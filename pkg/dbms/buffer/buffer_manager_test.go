@@ -16,7 +16,7 @@ func TestBufferPool_All(t *testing.T) {
 	pageCount := uint16(10)
 	testFile := "testing/bp_all_test.db"
 
-	bpm := newBufferPool(testFile, pageSize, pageCount)
+	bpm := newBufferManager(testFile, pageSize, pageCount)
 
 	page0 := page.Page(bpm.newPage())
 	// fmt.Println(page0)
@@ -116,7 +116,7 @@ func _TestBufferPool_All(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	bpm := newBufferPool(uint16(pageSize), pageCount, dm)
+	bpm := newBufferManager(uint16(pageSize), pageCount, dm)
 
 	page0 := bpm.newPage()
 	// fmt.Println(page0)
@@ -216,7 +216,7 @@ var cleanup = func(testFile string) error {
 	return nil
 }
 
-var addBPRecords = func(bp *bufferPool, pid page.PageID) error {
+var addBPRecords = func(bp *bufferManager, pid page.PageID) error {
 	pg := page.Page(bp.fetchPage(pid))
 	if pg == nil {
 		return errs.ErrPageNotFound
@@ -231,7 +231,7 @@ var addBPRecords = func(bp *bufferPool, pid page.PageID) error {
 	return nil
 }
 
-var getBPRecords = func(bp *bufferPool, pid page.PageID) error {
+var getBPRecords = func(bp *bufferManager, pid page.PageID) error {
 	pg := page.Page(bp.fetchPage(pid))
 	if pg == nil {
 		return errs.ErrPageNotFound
@@ -249,7 +249,7 @@ var getBPRecords = func(bp *bufferPool, pid page.PageID) error {
 	return nil
 }
 
-var delBPRecords = func(bp *bufferPool, pid page.PageID) error {
+var delBPRecords = func(bp *bufferManager, pid page.PageID) error {
 	pg := page.Page(bp.fetchPage(pid))
 	if pg == nil {
 		return errs.ErrPageNotFound
@@ -272,7 +272,7 @@ func TestBufferPool_Sync(t *testing.T) {
 	pageCount := uint16(10)
 	testFile := "testing/bp_race_test.db"
 
-	bp := newBufferPool(testFile, pageSize, pageCount)
+	bp := newBufferManager(testFile, pageSize, pageCount)
 	_ = bp.newPage()
 	err := addBPRecords(bp, 0)
 	if err != nil {

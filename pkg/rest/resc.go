@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"path"
 	"sort"
-
-	"github.com/scottcagno/go-scratch/pkg/web/api/rest"
 )
 
 // resource is an internal representation wrapping a user supplied ResourceHandler
@@ -37,7 +35,7 @@ func (re *resource) getAll() http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		// return all items
 		re.col.Filter()
-		rest.WriteAsJSON(w, b.Books)
+		WriteAsJSON(w, b.Books)
 	}
 	return http.HandlerFunc(fn)
 }
@@ -52,7 +50,7 @@ func (re *resource) getOne(id string) http.Handler {
 	book := b.Books[i]
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		// return book
-		rest.WriteAsJSON(w, book)
+		WriteAsJSON(w, book)
 	}
 	return http.HandlerFunc(fn)
 }
@@ -75,7 +73,7 @@ func (re *resource) addOne(req *http.Request) http.Handler {
 			return
 		}
 		// return books
-		rest.WriteAsJSON(w, b.Books)
+		WriteAsJSON(w, b.Books)
 	}
 	return http.HandlerFunc(fn)
 }
@@ -101,7 +99,7 @@ func (re *resource) setOne(req *http.Request, id string) http.Handler {
 			return
 		}
 		// return books
-		rest.WriteAsJSON(w, b.Books)
+		WriteAsJSON(w, b.Books)
 	}
 	return http.HandlerFunc(fn)
 }
@@ -112,7 +110,7 @@ func (re *resource) delOne(id string) http.Handler {
 	// now we can start handling...
 	fn := func(w http.ResponseWriter, r *http.Request) {
 
-		rest.WriteAsJSON(w, b.Books)
+		WriteAsJSON(w, b.Books)
 	}
 	return http.HandlerFunc(fn)
 }

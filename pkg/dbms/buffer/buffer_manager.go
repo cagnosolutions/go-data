@@ -58,9 +58,9 @@ const (
 	Size16MB = 1 << 20
 )
 
-// bufferPool is an implementation of a page buffer pool, which is also
+// bufferManager is an implementation of a page buffer pool, which is also
 // sometimes called a buffer pool page disk in a dbms system.
-type bufferPool struct {
+type bufferManager struct {
 	bpLatch  sync.Mutex              // latch
 	frames   []frame                 // list of loaded page frames
 	replacer *clockReplacer          // page replacement structure (used to find an unpinned page for replacement)
@@ -70,15 +70,15 @@ type bufferPool struct {
 	pageSize uint16                  // page size for this buffer pool
 }
 
-// newBufferPool initializes and returns a new instance of a bufferPool.
-func newBufferPool(file string, pageSize, pageCount uint16) *bufferPool {
+// newBufferManager initializes and returns a new instance of a bufferManager.
+func newBufferManager(file string, pageSize, pageCount uint16) *bufferManager {
 	// sanitize the page size
 	pageSize = calcPageSize(pageSize)
 	dm, err := disk.NewDiskManagerSize(file, pageSize, pageCount)
 	if err != nil {
 		panic(errs.ErrOpeningDiskManager)
 	}
-	bm := &bufferPool{
+	bm := &bufferManager{
 		frames:   make([]frame, pageCount, pageCount),
 		replacer: newClockReplacer(pageCount),
 		disk:     dm,
@@ -152,7 +152,7 @@ func calcBufferSize(pageSize uint16, bufferSize uint32) uint32 {
 	return bufferSize
 }
 
-// newPage attempts to allocate and return a new page in the bufferPool.
+// newPage attempts to allocate and return a new page in the bufferManager.
 //
 // It undertakes the following steps in order to accomplish this task. Steps:
 // 	1.0 - If the buffer pool is full and all pages are pinned return nil.
@@ -162,7 +162,7 @@ func calcBufferSize(pageSize uint16, bufferSize uint32) uint32 {
 // 	3.0 - Update P's metadata. Zero out memory ad add P to the page table.
 // 	4.0 - Return a pointer to P.
 //
-func (b *bufferPool) newPage() page.Page {
+func (b *bufferManager) newPage() page.Page {
 	// First we need a frameID we can use to proceed. We will call
 	// getUsableFrame which will first check our free list and if we do
 	// not find one in there getUsableFrame will victimize a pageFrame and
@@ -189,7 +189,7 @@ func (b *bufferPool) newPage() page.Page {
 }
 
 // unpinPage unpins the target page pageFrame from the pageFrameManager
-func (b *bufferPool) unpinPage(pid page.PageID, isDirty bool) error {
+func (b *bufferManager) unpinPage(pid page.PageID, isDirty bool) error {
 	// First we attempt to locate the requested page pageFrame in the page table using
 	// the supplied page.PageID.
 	fid, found := b.table[pid]
@@ -216,7 +216,7 @@ func (b *bufferPool) unpinPage(pid page.PageID, isDirty bool) error {
 	return nil
 }
 
-// fetchPage attempts to locate and return a page from the bufferPool.
+// fetchPage attempts to locate and return a page from the bufferManager.
 // It undertakes the following steps in order to accomplish this task. Steps:
 //
 //	1.0 - Search the page table for the requested page (P).
@@ -228,7 +228,7 @@ func (b *bufferPool) unpinPage(pid page.PageID, isDirty bool) error {
 //	3.0 - Delete R from the page table and insert P.
 // 	4.0 - Update P's metadata. Read in page from disk, and return a pointer to P.
 //
-func (b *bufferPool) fetchPage(pid page.PageID) page.Page {
+func (b *bufferManager) fetchPage(pid page.PageID) page.Page {
 	// Check to see if the frame ID is in the page table.
 	if fid, found := b.table[pid]; found {
 		// It appears to be, so we should get the matching page.
@@ -272,7 +272,7 @@ func (b *bufferPool) fetchPage(pid page.PageID) page.Page {
 }
 
 // flushPage flushes the target page to the storage storageManager
-func (b *bufferPool) flushPage(pid page.PageID) error {
+func (b *bufferManager) flushPage(pid page.PageID) error {
 	// First we attempt to locate the matching frame ID using our page table.
 	fid, found := b.table[pid]
 	if !found {
@@ -293,7 +293,7 @@ func (b *bufferPool) flushPage(pid page.PageID) error {
 }
 
 // deletePage deletes a page from the pageFrameManager
-func (b *bufferPool) deletePage(pid page.PageID) error {
+func (b *bufferManager) deletePage(pid page.PageID) error {
 	// First, we should check to see if this page frame is in the page table.
 	// If it is not, then we will not need to do anything.
 	fid, found := b.table[pid]
@@ -326,14 +326,14 @@ func (b *bufferPool) deletePage(pid page.PageID) error {
 }
 
 // addFreeFrame takes a frameID and adds it to the set of free frames.
-func (b *bufferPool) addFreeFrame(f frameID) {
+func (b *bufferManager) addFreeFrame(f frameID) {
 	b.free = append(b.free, f)
 }
 
 // getFrameID attempts to return a frameID. It first checks the free list
 // to see if there are any free frames in there. If none are found, it will
 // then go on to the replacer in search of one.
-func (b *bufferPool) getFrameID() (*frameID, bool) {
+func (b *bufferManager) getFrameID() (*frameID, bool) {
 	// check free list first
 	if len(b.free) > 0 {
 		// return one from our free list
@@ -350,7 +350,7 @@ func (b *bufferPool) getFrameID() (*frameID, bool) {
 // fall back to using the replacer. In either case, if a frameID is not found an error
 // of type errs.ErrUsableFrameNotFound. Otherwise, a frameID is located and returned along
 // with a nil error.
-func (b *bufferPool) getUsableFrame() (*frameID, error) {
+func (b *bufferManager) getUsableFrame() (*frameID, error) {
 	// First check the free list, then the replacer. Try to obtain a usable frameID.
 	fid, foundInFreeList := b.getFrameID()
 	if fid == nil {
@@ -384,7 +384,7 @@ func (b *bufferPool) getUsableFrame() (*frameID, error) {
 }
 
 // flushAll flushes all the pinned pages to the storage storageManager
-func (b *bufferPool) flushAll() error {
+func (b *bufferManager) flushAll() error {
 	// Very simply, we will just range all the entries in the
 	// page pageFrame table, and call flushPage for each of them.
 	var err error
@@ -398,7 +398,7 @@ func (b *bufferPool) flushAll() error {
 }
 
 // close attempts to close the buffer pool
-func (b *bufferPool) close() error {
+func (b *bufferManager) close() error {
 	err := b.flushAll()
 	if err != nil {
 		return err
@@ -411,7 +411,7 @@ func (b *bufferPool) close() error {
 }
 
 // String is the string method for this type
-func (b *bufferPool) String() string {
+func (b *bufferManager) String() string {
 	ss := fmt.Sprintf("Buffer Pool Manager\n")
 	ss += fmt.Sprintf("\tframes:\n")
 	for i := range b.frames {

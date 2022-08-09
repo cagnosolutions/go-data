@@ -1,0 +1,1 @@
+see https://github.com/scottcagno/go-scratch/tree/main/pkg/web/api/rest
