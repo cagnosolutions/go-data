@@ -15,12 +15,12 @@ import (
 
 // https://go.dev/play/p/gr8RC8vDuSv
 
-// Defaults for page size
-const (
-	DefaultPageSize = szPg // 4KB
-	MinPageSize     = szSl
-	MaxPageSize     = DefaultPageSize - szHd - szSl
-)
+// // Defaults for page size
+// const (
+// 	DefaultPageSize = szPg // 4KB
+// 	MinPageSize     = szSl
+// 	MaxPageSize     = DefaultPageSize - szHd - szSl
+// )
 
 const (
 	szHd = 24      // fileSize of page header (in bytes)
@@ -86,7 +86,6 @@ func (s slot) bounds() (uint16, uint16) {
 func (s slot) String() string {
 	ss := fmt.Sprintf("off=%.4d, len=%.4d, free=%v", s.offset, s.length, s.status == StatFree)
 	ss += fmt.Sprintf("\t[0x%.4x,0x%.4x,0x%.4x]", s.offset, s.length, s.status)
-
 	return ss
 }
 
@@ -136,14 +135,16 @@ func (p *page) size() int {
 	return len(*p)
 }
 
+const PageSize = 16 << 10
+
 func NewEmptyPage(pid PageID) Page {
-	return newEmptyPageSize(pid, DefaultPageSize)
+	return newEmptyPageSize(pid, PageSize)
 }
 
 // newEmptyPage returns a new page instance set with the provided page ID,
 // with a meta byte status of StatFree, denoting it as empty and free to use.
 func newEmptyPage(pid uint32) page {
-	return newEmptyPageSize(pid, DefaultPageSize)
+	return newEmptyPageSize(pid, PageSize)
 }
 
 func NewEmptyPageSize(pid PageID, size uint16) Page {
@@ -171,12 +172,12 @@ func newEmptyPageSize(pid uint32, size uint16) page {
 }
 
 func NewPage(pid PageID) Page {
-	return newPageSize(pid, DefaultPageSize)
+	return newPageSize(pid, PageSize)
 }
 
 // newPage returns a new page instance set with the provided page ID.
 func newPage(pid uint32) page {
-	return newPageSize(pid, DefaultPageSize)
+	return newPageSize(pid, PageSize)
 }
 
 func NewPageSize(pid PageID, size uint16) Page {

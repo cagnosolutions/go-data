@@ -37,7 +37,7 @@ func fileTouch(path string) error {
 	return nil
 }
 
-func pathCleanAndTrimSUffix(path string) (string, error) {
+func PathCleanAndTrimSUffix(path string) (string, error) {
 	nosuffix := strings.TrimSuffix(path, filepath.Ext(path))
 	return filepath.Abs(filepath.ToSlash(nosuffix))
 }
@@ -50,7 +50,7 @@ func fileOpen(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_RDWR|os.O_SYNC, permMode)
 }
 
-func fileOpenOrCreate(path string) (*os.File, error) {
+func FileOpenOrCreate(path string) (*os.File, error) {
 	full, err := filepath.Abs(filepath.ToSlash(path))
 	if err != nil {
 		panic("pathClean: " + err.Error())

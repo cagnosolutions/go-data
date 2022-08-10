@@ -2,8 +2,16 @@ package dbms
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 
+	"github.com/cagnosolutions/go-data/pkg/dbms/disk"
 	"github.com/cagnosolutions/go-data/pkg/dbms/frame"
 	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
@@ -35,12 +43,139 @@ type Replacer interface {
 	Unpin(fid frame.FrameID)
 }
 
-type FileManager struct{}
+const (
+	maxSegmentSize = 16 << 20
+	currentSegment = "seg-current.db"
+	extentSize     = 64 << 10
+)
+
+// seg-000001-.db
+// seg-current.db
+
+// FileManager is a structure responsible for creating and managing files and segments
+// on disk. A file manager instance is only responsible for one namespace at a time.
+type FileManager struct {
+	namespace     string
+	file          *os.File
+	nextPageID    page.PageID
+	nextSegmentID int
+	size          int64
+	maxSize       int64
+}
+
+// CreateSegmentFileName takes a namespace, and an integer as an ID, and returns a segment file name.
+func CreateSegmentFileName(namespace string, id int) string {
+	return fmt.Sprintf("seg-%6d-%4s.db", id, namespace)
+}
+
+func GetSegmentIDs(dir string) ([]int, error) {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var sids []int
+	for _, file := range files {
+		if file.IsDir() || !strings.HasPrefix(file.Name(), "seg-") {
+			continue
+		}
+		if strings.HasPrefix(file.Name(), "seg-") {
+			if strings.Contains(file.Name(), currentSegment) {
+				sids = append(sids, -1)
+				continue
+			}
+			sid, err := strconv.ParseInt(file.Name(), 16, 64)
+			if err != nil {
+				return nil, err
+			}
+			sids = append(sids, int(sid))
+		}
+	}
+	sort.Ints(sids)
+	return sids, nil
+}
+
+// OpenFileManager opens an existing file manager instance if one exists with the same
+// namespace otherwise it creates a new instance and returns it along with any potential
+// errors encountered.
+func OpenFileManager(namespace string) (*FileManager, error) {
+	// clean namespace path
+	path, err := disk.PathCleanAndTrimSUffix(namespace)
+	if err != nil {
+		return nil, err
+	}
+	// get the current segment id's
+	sids, err := GetSegmentIDs(path)
+	if err != nil {
+		return nil, err
+	}
+	// open the current file segment
+	fd, err := disk.FileOpenOrCreate(filepath.Join(path, currentSegment))
+	if err != nil {
+		return nil, err
+	}
+	// get the size of the current file segment
+	fi, err := os.Stat(fd.Name())
+	if err != nil {
+		return nil, err
+	}
+	size := fi.Size()
+	// fill and return a new FileManager instance
+	m := &FileManager{
+		namespace:     path,
+		file:          fd,
+		nextPageID:    page.PageID(size / page.PageSize),
+		nextSegmentID: len(sids),
+		size:          size,
+		maxSize:       maxSegmentSize,
+	}
+	return m, nil
+}
+
+func (f *FileManager) LoadSegment(id int) error {
+	return nil
+}
+
+// AllocateExtent adds a new extent to the current file segment. If adding a new extent
+// to the current file segment would cause it to be above the maximum size threshold, a
+// new current segment will be created, and swapped in.
+func (f *FileManager) AllocateExtent() error {
+	// first, we check to make sure there is enough room in the current segment file to
+	// allocate an additional extent.
+	if f.size+extentSize < maxSegmentSize {
+		// we have room to add an extent
+		err := f.file.Truncate(extentSize)
+		if err != nil {
+			return err
+		}
+	} else {
+		// otherwise, there is not enough room in the current file segment to allocate another
+		// extent, so first we close the current file segment
+		err := f.file.Close()
+		if err != nil {
+			return err
+		}
+		// next, we rename the current file segment to be the nextSegmentID
+		err = os.Rename(currentSegment, CreateSegmentFileName(f.namespace, f.nextSegmentID))
+		if err != nil {
+			return err
+		}
+		// then, we increment the nextSegmentID
+		f.nextSegmentID++
+		// and, finally, we create and open a new current segment file
+		f.file, err = disk.FileOpenOrCreate(filepath.Join(f.namespace, currentSegment))
+		if err != nil {
+			return err
+		}
+	}
+	// finally, we can return
+	return nil
+}
 
 // AllocatePage makes sure there is space for a new page, allocating space if
 // necessary, and returning the next logical page ID.
 func (f *FileManager) AllocatePage() page.PageID {
-	return 0
+	// increment and return the next PageID
+	return atomic.SwapUint32(&f.nextPageID, f.nextPageID+1)
 }
 
 // DeallocatePage writes zeros to the page located at the logical address
@@ -70,14 +205,9 @@ var (
 	PageCounts = []uint16{64, 128, 256, 512}
 )
 
-var ErrBadPageCount = errors.New("bad page count, must be a multiple of 64 between 64 and 1024")
-
-func checkPageCount(pageCount uint16) error {
-	if pageCount%64 != 0 || pageCount/64 > 16 {
-		return ErrBadPageCount
-	}
-	return nil
-}
+var (
+	ErrBadPageCount = errors.New("bad page count, must be a multiple of 64 between 64 and 1024")
+)
 
 // BufferManager is the access level structure wrapping up the BufferPool, and FileManager,
 // along with a page table, and replacement policy.
@@ -93,11 +223,12 @@ type BufferManager struct {
 // Open opens an existing storage manager instance if one exists with the same namespace
 // otherwise it creates a new instance and returns it.
 func Open(base string, pageCount uint16) (*BufferManager, error) {
-	// check for a valid page count
-	err := checkPageCount(pageCount)
-	if err != nil {
-		return nil, err
+	// validate page count
+	if pageCount%64 != 0 || pageCount/64 > 16 {
+		return nil, ErrBadPageCount
 	}
+	// open disk manager
+
 	return nil, nil
 }
 
