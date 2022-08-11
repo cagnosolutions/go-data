@@ -23,9 +23,13 @@ import (
 // )
 
 const (
-	szHd = 24      // fileSize of page header (in bytes)
-	szSl = 6       // fileSize of slot index (in bytes)
-	szPg = 4 << 10 // fileSize of page (default)
+	szHd = 24       // fileSize of page header (in bytes)
+	szSl = 6        // fileSize of slot index (in bytes)
+	szPg = 16 << 10 // fileSize of page (default)
+
+	SizeHeader = szHd
+	SizeSlot   = szSl
+	SizePage   = szPg
 )
 
 // Binary offsets for page header
@@ -219,7 +223,7 @@ func (p *page) setHeader(h *header) {
 }
 
 func (p *page) printHeader() {
-	h := p.getHeader()
+	h := p.GetHeader()
 	fmt.Printf("header:\n")
 	fmt.Printf(
 		"\tpid=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.pid, 4, offPID, offPID+4,
@@ -255,9 +259,13 @@ func (p *page) printHeader() {
 	)
 }
 
-// getHeader decodes (from the underlying page) and returns a
+func InUse(status []byte) bool {
+	return bin.Uint16(status) == StatUsed
+}
+
+// GetHeader decodes (from the underlying page) and returns a
 // pointer to a header structure
-func (p *page) getHeader() *header {
+func (p *page) GetHeader() *header {
 	return &header{
 		pid:      bin.Uint32((*p)[offPID : offPID+4]),
 		size:     bin.Uint32((*p)[offSize : offSize+4]),
@@ -381,7 +389,7 @@ func (p *page) getSlot(sid uint16) *slot {
 // addSlot appends a new slot to the page
 func (p *page) addSlot(size uint16) (uint16, *slot) {
 	// get page header
-	h := p.getHeader()
+	h := p.GetHeader()
 	// grab the slot id for later
 	sid := h.slots
 	// update page header
@@ -668,7 +676,7 @@ func (p *page) String() string {
 	if err != nil {
 		panic(err)
 	}
-	h := p.getHeader()
+	h := p.GetHeader()
 	_, err = fmt.Fprintf(w, "%.4d\t%.4d\t%.4d\t%.4d\t%.4d\t%.4d", h.pid, h.meta, h.status, h.slots, h.lower, h.upper)
 	if err != nil {
 		panic(err)
@@ -682,7 +690,7 @@ func (p *page) String() string {
 }
 
 func (p *page) DumpPage(showPageData bool) string {
-	h := p.getHeader()
+	h := p.GetHeader()
 	ss := fmt.Sprintf("+------------------[ page header ]------------------+\n")
 	ss += fmt.Sprintf(
 		"pid=%.2d, size=%.2d, reserved=%.2d, meta=%.2d, status=%.2d, slots=%.2d, "+

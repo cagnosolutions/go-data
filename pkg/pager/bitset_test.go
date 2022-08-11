@@ -2,7 +2,11 @@ package pager
 
 import (
 	"encoding/binary"
+	"fmt"
+	"reflect"
 	"testing"
+
+	"github.com/cagnosolutions/go-data/pkg/util"
 )
 
 const size = 64
@@ -188,8 +192,15 @@ func TestBitset_Aligns(t *testing.T) {
 }
 
 func TestBitset_RealSize(t *testing.T) {
-	bm := newBitset(127)
-	_ = bm
-	// fmt.Println(bm)
-	// fmt.Println("actual fileSize in memory: ", bm.sizeof())
+	bm := newBitset(1024)
+	// _ = bm
+	fmt.Println(bm)
+	fmt.Println(len(bm.bits))
+	s := make([]uint64, 16, 16)
+	sz := calcSize(s)
+	fmt.Println("actual fileSize in memory: ", bm.sizeof(), util.Sizeof(s), sz)
+}
+
+func calcSize(v []uint64) int {
+	return int(uintptr(len(v)) * reflect.TypeOf(v).Elem().Size())
 }

@@ -37,7 +37,7 @@ func fileTouch(path string) error {
 	return nil
 }
 
-func PathCleanAndTrimSUffix(path string) (string, error) {
+func PathCleanAndTrimSuffix(path string) (string, error) {
 	nosuffix := strings.TrimSuffix(path, filepath.Ext(path))
 	return filepath.Abs(filepath.ToSlash(nosuffix))
 }

@@ -377,7 +377,7 @@ func TestPage_NewPage(t *testing.T) {
 		lower:    szHd,
 		upper:    szPg,
 	}
-	hdr := pg.getHeader()
+	hdr := pg.GetHeader()
 	if *hdr != tmp || hdr == nil {
 		t.Errorf("got %v, expected %v\n", hdr, tmp)
 	}
@@ -402,7 +402,7 @@ func TestPage_NewEmptyPage(t *testing.T) {
 		lower:    szHd,
 		upper:    szPg,
 	}
-	hdr := epg.getHeader()
+	hdr := epg.GetHeader()
 	if *hdr != tmp || hdr == nil {
 		t.Errorf("got %v, expected %v\n", hdr, tmp)
 	}

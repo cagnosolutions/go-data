@@ -215,7 +215,7 @@ func NewDiskManagerSize(filePath string, pageSize uint16, pageCount uint16) (*Di
 // pageSize and maxPageCount.
 func newDiskManagerSize(filePath string, pageSize uint16, pageCount uint16) (*diskManager, error) {
 	// sanitize the provided path, and trim the provided file suffix (if it has any)
-	path, err := PathCleanAndTrimSUffix(filePath)
+	path, err := PathCleanAndTrimSuffix(filePath)
 	if err != nil {
 		return nil, err
 	}
