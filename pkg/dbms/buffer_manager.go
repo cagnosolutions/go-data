@@ -1,6 +1,7 @@
 package dbms
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -45,40 +46,47 @@ type Replacer interface {
 }
 
 const (
-	maxSegmentSize  = 16 << 20
-	pagesPerSegment = maxSegmentSize / page.PageSize
-	currentSegment  = "dat-current.seg"
-	segmentPrefix   = "dat-"
-	segmentSuffix   = ".seg"
-	extentSize      = 64 << 10
+	maxSegmentSize     = 16 << 20
+	pagesPerSegment    = maxSegmentSize / page.PageSize
+	currentSegment     = "dat-current.seg"
+	segmentPrefix      = "dat-"
+	segmentSuffix      = ".seg"
+	segmentIndexSuffix = ".idx"
+	extentSize         = 64 << 10
 )
 
-type BitsetIndex [16]uint64
+const (
+	bitsetWS   = 64
+	bitsetL2   = 6
+	bitsetSize = 16
+)
+
+type BitsetIndex [bitsetSize]uint64
 
 func NewBitsetIndex() *BitsetIndex {
 	return new(BitsetIndex)
 }
 
 func (b *BitsetIndex) HasBit(i uint) bool {
-	return ((*b)[i>>6] & (1 << (i & 63))) != 0
+	return ((*b)[i>>bitsetL2] & (1 << (i & (bitsetWS - 1)))) != 0
 }
 
 func (b *BitsetIndex) SetBit(i uint) {
-	(*b)[i>>6] |= 1 << (i & 63)
+	(*b)[i>>bitsetL2] |= 1 << (i & (bitsetWS - 1))
 }
 
 func (b *BitsetIndex) GetBit(i uint) uint64 {
-	return (*b)[i>>6] & (1 << (i & 63))
+	return (*b)[i>>bitsetL2] & (1 << (i & (bitsetWS - 1)))
 }
 
 func (b *BitsetIndex) UnsetBit(i uint) {
-	(*b)[i>>6] &^= 1 << (i & 63)
+	(*b)[i>>bitsetL2] &^= 1 << (i & (bitsetWS - 1))
 }
 
 func (b *BitsetIndex) GetFree() int {
 	for j, n := range b {
 		if n < ^uint64(0) {
-			for bit := uint(j * 64); bit < uint((j*64)+64); bit++ {
+			for bit := uint(j * bitsetWS); bit < uint((j*bitsetWS)+bitsetWS); bit++ {
 				if !b.HasBit(bit) {
 					return int(bit)
 				}
@@ -88,30 +96,63 @@ func (b *BitsetIndex) GetFree() int {
 	return -1
 }
 
+func (b *BitsetIndex) ReadFile(name string) error {
+	// error checking
+	if b == nil {
+		return io.ErrNoProgress
+	}
+	// read data from file
+	data, err := os.ReadFile(name)
+	if err != nil {
+		return err
+	}
+	for i, j := 0, 0; i < len(data) && j < bitsetSize; i, j = i+8, j+1 {
+		// decode all the bytes back into the uint64 bitset
+		(*b)[j] = binary.LittleEndian.Uint64(data[i : i+8])
+	}
+	// empty the buffer
+	data = nil
+	// return nil
+	return err
+}
+
+func (b *BitsetIndex) WriteFile(name string) error {
+	// error checking
+	if b == nil {
+		return io.ErrNoProgress
+	}
+	// make new buffer
+	data := make([]byte, (bitsetSize*bitsetWS)/8, (bitsetSize*bitsetWS)/8)
+	for i, j := 0, 0; i < len(data) && j < bitsetSize; i, j = i+8, j+1 {
+		// encode each uint64 into the buffer
+		binary.LittleEndian.PutUint64(data[i:i+8], (*b)[j])
+	}
+	// write buffer to file
+	err := os.WriteFile(name, data, 0644)
+	if err != nil {
+		return err
+	}
+	// empty the buffer
+	data = nil
+	// return nil
+	return nil
+}
+
+// Clear clears all the bits
+func (b *BitsetIndex) Clear() {
+	for i := range b {
+		(*b)[i] = 0
+	}
+}
+
+// Bits returns the number of bits the bitset index can hold
+func (b *BitsetIndex) Bits() int {
+	return bitsetSize * bitsetWS
+}
+
 func (b *BitsetIndex) String() string {
 	resstr := strconv.Itoa(64)
 	return fmt.Sprintf("%."+resstr+"b (%d bits)", *b, 64*len(*b))
-}
-
-type FileIndex struct {
-	ID          int
-	Name        string
-	FirstPageID page.PageID
-	LastPageID  page.PageID
-	Index       *BitsetIndex
-}
-
-// FileManager is a structure responsible for creating and managing files and segments
-// on disk. A file manager instance is only responsible for one namespace at a time.
-type FileManager struct {
-	latch         sync.Mutex
-	namespace     string
-	file          *os.File
-	nextPageID    page.PageID
-	nextSegmentID int
-	segments      []FileIndex
-	size          int64
-	maxSize       int64
 }
 
 func MakeFileNameFromID(index int) string {
@@ -126,87 +167,6 @@ func GetIDFromFileName(name string) int {
 		panic("GetIDFromFileName: " + err.Error())
 	}
 	return int(id)
-}
-
-func IndexFile(path string) (*FileIndex, error) {
-	// check to make sure path exists before continuing
-	_, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
-	// attempt to open existing segment file for reading
-	fd, err := os.OpenFile(path, os.O_RDONLY, 0666)
-	if err != nil {
-		return nil, err
-	}
-	// defer file close
-	defer func(fd *os.File) {
-		_ = fd.Close()
-	}(fd)
-	// get the id from the file name
-	id := GetIDFromFileName(fd.Name())
-	// get the page boundaries
-	first, last := PageRangeForFile(id)
-	// create a new index to start filling out
-	idx := &FileIndex{
-		ID:          id,
-		Name:        fd.Name(),
-		FirstPageID: page.PageID(first),
-		LastPageID:  page.PageID(last),
-		Index:       NewBitsetIndex(),
-	}
-	// fill out the bitset index
-	var pageNo int64
-	status := make([]byte, 2)
-	for {
-		// read the page header into the buffer
-		_, err := fd.ReadAt(status, (pageNo*page.PageSize)+16)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, err
-		}
-		// decode the page status
-		if page.InUse(status) {
-			// if the page is marked as used, then we must
-			// set the bit for this page
-			idx.Index.SetBit(uint(pageNo))
-		}
-		// increment to the next page number
-		pageNo++
-	}
-	// we have our file index built, so return it
-	return idx, nil
-}
-
-func LoadSegmentIndexes(dir string) ([]FileIndex, error) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-	var idxs []FileIndex
-	for _, file := range files {
-		if file.IsDir() || !strings.HasPrefix(file.Name(), segmentPrefix) {
-			continue
-		}
-		if strings.HasPrefix(file.Name(), segmentPrefix) {
-			if strings.Contains(file.Name(), currentSegment) {
-				idx, err := IndexFile(filepath.Join(dir, file.Name()))
-				if err != nil {
-					return nil, err
-				}
-				idxs = append(idxs, *idx)
-				continue
-			}
-			idx, err := IndexFile(filepath.Join(dir, file.Name()))
-			if err != nil {
-				return nil, err
-			}
-			idxs = append(idxs, *idx)
-		}
-	}
-	return idxs, nil
 }
 
 func GetSegmentIDs(dir string) ([]int, error) {
@@ -249,6 +209,129 @@ func PageRangeForFile(sid int) (int, int) {
 	return pagesPerSegment * sid, (pagesPerSegment * sid) + pagesPerSegment - 1
 }
 
+// FileSegment is an in memory index of a file segment.
+type FileSegment struct {
+	ID       int
+	Name     string
+	FirstPID page.PageID
+	LastPID  page.PageID
+	Size     int64
+	Index    *BitsetIndex
+}
+
+// NewFileSegment creates and returns a new *FileSegment struct
+func NewFileSegment(path string) *FileSegment {
+	// get the base filename
+	base := filepath.Base(path)
+	// get the id from the file name
+	var id int
+	if strings.Contains(base, currentSegment) {
+		id = -1
+	} else {
+		id = GetIDFromFileName(base)
+	}
+	// get the page boundaries
+	first, last := PageRangeForFile(id)
+	// create and return new *FileSegment instance.
+	return &FileSegment{
+		ID:       id,
+		Name:     path,
+		FirstPID: page.PageID(first),
+		LastPID:  page.PageID(last),
+		Index:    NewBitsetIndex(),
+	}
+}
+
+// LoadIndex checks to see if it can find a matching index file on disk, if it finds
+// one, the index will be loaded from that index file. Otherwise, it will rebuild the
+// index by reading from the data file segment directly.
+func (fs *FileSegment) LoadIndex() error {
+	// check for an index file
+	indexName := strings.Replace(fs.Name, segmentSuffix, segmentIndexSuffix, 1)
+	_, err := os.Stat(indexName)
+	if os.IsExist(err) {
+		// found a matching index file, load the index file directly
+		err = fs.Index.ReadFile(indexName)
+		if err != nil {
+			return err
+		}
+		// all good, we can return
+		return nil
+	}
+	// otherwise, we must manually rebuild the index so first attempt to open
+	// the existing data segment file for reading
+	fd, err := os.OpenFile(fs.Name, os.O_RDONLY, 0666)
+	if err != nil {
+		return err
+	}
+	// defer file close
+	defer func(fd *os.File) {
+		_ = fd.Close()
+	}(fd)
+	// create a buffer to hold each page, and a page counter
+	var pageNo int64
+	pg := page.Page(make([]byte, page.PageSize))
+	for {
+		// read the page
+		_, err = fd.Read(pg)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		// check to see if the page is marked as used
+		if pg.IsUsed() {
+			// if the page is marked as used, then we must
+			// set the bit for this page
+			fs.Index.SetBit(uint(pageNo))
+		}
+		// increment to the next page number
+		pageNo++
+	}
+	// we have our file index built and since we had to rebuild it, we
+	// should write it out, so we do not have to rebuild it next time.
+	err = fs.Index.WriteFile(indexName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// OpenFileSegment opens the named FileSegment. If it can find a matching index file
+// on disk the on disk index will be loaded directly from file. Otherwise, it will
+// build the index by reading from data file segment directly. If the named data file
+// segment does not  exist, an error will be returned.
+func OpenFileSegment(path string) (*FileSegment, error) {
+	// check to make sure path exists before continuing
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil, err
+	}
+	// create a new FileSegment instance.
+	fs := NewFileSegment(path)
+	// load file segment index
+	err = fs.LoadIndex()
+	if err != nil {
+		return nil, err
+	}
+	// we are finished
+	return fs, nil
+}
+
+// FileManager is a structure responsible for creating and managing files and segments
+// on disk. A file manager instance is only responsible for one namespace at a time.
+type FileManager struct {
+	latch         sync.Mutex
+	namespace     string
+	file          *os.File
+	nextPageID    page.PageID
+	nextSegmentID int
+	segments      []FileSegment
+	size          int64
+	maxSize       int64
+}
+
 // OpenFileManager opens an existing file manager instance if one exists with the same
 // namespace otherwise it creates a new instance and returns it along with any potential
 // errors encountered.
@@ -258,6 +341,10 @@ func OpenFileManager(namespace string) (*FileManager, error) {
 	if err != nil {
 		return nil, err
 	}
+	// current, err := OpenFileSegment(filepath.Join(path, currentSegment))
+	// if err != nil {
+	//	return nil, err
+	// }
 	// open the current file segment
 	fd, err := disk.FileOpenOrCreate(filepath.Join(path, currentSegment))
 	if err != nil {
@@ -274,25 +361,49 @@ func OpenFileManager(namespace string) (*FileManager, error) {
 		return nil, err
 	}
 	size := fi.Size()
-	// fill and return a new FileManager instance
+	// initialize a new *FileManager instance
 	m := &FileManager{
 		namespace:     path,
 		file:          fd,
 		nextPageID:    page.PageID(size / page.PageSize),
 		nextSegmentID: len(sids),
-		segments:      make([]FileIndex, 0),
+		segments:      make([]FileSegment, 0),
 		size:          size,
 		maxSize:       maxSegmentSize,
 	}
-	// m.segments = FileIndex{
-	// 	ID:          m.nextSegmentID,
-	// 	FirstPageID: page.PageID(pagesPerSegment * m.nextSegmentID),
-	// 	LastPageID:  page.PageID((pagesPerSegment * m.nextSegmentID) + pagesPerSegment - 1),
-	// }
+	// populate the FileSegment set
+	err = m.LoadFileSegments()
+	if err != nil {
+		return nil, err
+	}
+	// finished, return file manager instance
 	return m, nil
 }
 
-func (f *FileManager) LoadSegmentIndex(id int) error {
+// LoadFileSegments walks the base namespace directory and attempts to populate
+// the FileManager's segment file set with all the necessary file segment and
+// file segment index data.
+func (f *FileManager) LoadFileSegments() error {
+	// read the directory
+	files, err := os.ReadDir(f.namespace)
+	if err != nil {
+		return err
+	}
+	// range the files in the base namespace directory
+	for _, file := range files {
+		// skip any directories or non-segment files
+		if file.IsDir() || !strings.HasSuffix(file.Name(), segmentSuffix) {
+			continue
+		}
+		// handle loading a segment
+		if strings.HasSuffix(file.Name(), segmentSuffix) {
+			fs, err := OpenFileSegment(filepath.Join(f.namespace, file.Name()))
+			if err != nil {
+				return err
+			}
+			f.segments = append(f.segments, *fs)
+		}
+	}
 	return nil
 }
 

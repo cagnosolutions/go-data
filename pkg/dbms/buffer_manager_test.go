@@ -4,10 +4,72 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
+
+func TestBitsetIndex_Clear(t *testing.T) {
+	bs := NewBitsetIndex()
+	want := make([]uint64, bitsetSize)
+	copy(want, bs[:])
+	for i := 0; i < bs.Bits(); i += 8 {
+		bs.SetBit(uint(i))
+	}
+	for j := range bs {
+		if (*bs)[j] == want[j] {
+			t.Error("bitset failed to populate")
+		}
+	}
+	bs.Clear()
+	for j := range bs {
+		if (*bs)[j] != want[j] {
+			t.Error("bitset failed to clear")
+		}
+	}
+}
+
+func TestBitsetIndex_ReadWrite(t *testing.T) {
+	// make new bitset
+	bs := NewBitsetIndex()
+	for i := 0; i < bs.Bits(); i += 2 {
+		// populate
+		bs.SetBit(uint(i))
+	}
+	// make our thing to test against
+	want := make([]uint64, bitsetSize)
+	copy(want, bs[:])
+	// check bitset population
+	for j := range bs {
+		if (*bs)[j] != want[j] {
+			t.Error("bitset failed to populate")
+		}
+	}
+	// write to file
+	err := bs.WriteFile(filepath.Join(basePath, "dat-current.idx"))
+	if err != nil {
+		t.Error(err)
+	}
+	// clear bitset, and check clear
+	bs.Clear()
+	for j := range bs {
+		if (*bs)[j] == want[j] {
+			t.Error("bitset failed to clear")
+		}
+	}
+	// read from file
+	err = bs.ReadFile(filepath.Join(basePath, "dat-current.idx"))
+	if err != nil {
+		t.Error(err)
+	}
+	for j := range bs {
+		if (*bs)[j] != want[j] {
+			t.Error("bitset failed to read file back in correctly")
+		}
+	}
+	fmt.Println(bs)
+}
 
 func TestBitsetIndex(t *testing.T) {
 	bs := NewBitsetIndex()
@@ -52,20 +114,15 @@ func BenchmarkBitsetIndex_GetFree(b *testing.B) {
 	}
 }
 
+const basePath = "testing/file-manager"
+
 func TestFileManager(t *testing.T) {
 
 	// open a file manager instance
-	fm, err := OpenFileManager("testing/file-manager")
+	fm, err := OpenFileManager(basePath)
 	if err != nil {
 		t.Error(err)
 	}
-
-	// var before, after int64
-	// for i := 0; i < 4; i++ {
-	// 	after, err = allocateExtent(fm.file)
-	// 	fmt.Printf("allocated another extent: before=%d, after=%d\n", before, after)
-	// 	before = after
-	// }
 
 	// allocate some pages
 	var pages []page.PageID
@@ -74,9 +131,6 @@ func TestFileManager(t *testing.T) {
 		pages = append(pages, pid)
 		fmt.Printf("allocated page %d (pages=%d, file_size=%d)\n", pid, len(pages), fm.size)
 	}
-
-	pid := fm.AllocatePage()
-	fm.WritePage(pid, page.Page("hello world"))
 
 	// close our file manager instance
 	err = fm.Close()

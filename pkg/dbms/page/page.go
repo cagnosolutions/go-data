@@ -259,10 +259,6 @@ func (p *page) printHeader() {
 	)
 }
 
-func InUse(status []byte) bool {
-	return bin.Uint16(status) == StatUsed
-}
-
 // GetHeader decodes (from the underlying page) and returns a
 // pointer to a header structure
 func (p *page) GetHeader() *header {
@@ -280,6 +276,15 @@ func (p *page) GetHeader() *header {
 
 func (p *Page) GetPageID() PageID {
 	return p.getPageID()
+}
+
+func (p *page) IsUsed() bool {
+	return p.getPageStatus() == StatUsed
+}
+
+// getPageStatus returns the current page status.
+func (p *page) getPageStatus() uint16 {
+	return bin.Uint16((*p)[offStat : offStat+2])
 }
 
 // getPageID returns the current page ID.
