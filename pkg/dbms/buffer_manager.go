@@ -78,26 +78,30 @@ func OpenBufferManager(base string, pageCount uint16) (*BufferManager, error) {
 	return bm, nil
 }
 
+var ErrCountNotLocateOrVictimizeFrame = errors.New("could not find a free or victimized frame")
+
 // NewPage returns a fresh empty page from the pool.
-//
-// 1. If the pool is full and all pages are pinned, return nil
-// 2. Pick a victim page P
-// 		a. First look in the free list for P
-// 		b. If P cannot be found in the free list, use the replacement policy
-// 3. Update P's metadata. Zero out memory and add P to the page table.
-// 4. Return a pointer to P
-//
 func (m *BufferManager) NewPage() page.Page {
+	// First we must acquire a frame.Frame in order to store our page. Calling
+	// GetUsableFrame first checks our freeList and if we cannot find one in there
+	// our replacement policy is used to locate a victimized one frame.Frame.
 	fid, err := m.GetUsableFrame()
 	if err != nil {
-		return nil
+		// Something went wrong, if this happens.
+		panic(err)
 	}
+	// Allocate (get the next sequential page.PageID) so we can use it to initialize
+	// the next page we will use.
 	pid := m.io.AllocatePage()
+	// Create a new frame.Frame initialized with our page.PageID and page.Page.
 	pf := frame.NewFrame(pid, *fid, page.PageSize)
 	pg := page.NewPage(pid)
 	copy(pf.Page, pg)
+	// Add an entry to our pageTable
 	m.pageTable[pid] = *fid
+	// And update the pool
 	m.pool[*fid] = pf
+	// Finally, return our page.Page for use
 	return pf.Page
 }
 
