@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cagnosolutions/go-data/pkg/dbms/errs"
 	"github.com/cagnosolutions/go-data/pkg/dbms/frame"
 	"github.com/cagnosolutions/go-data/pkg/dbms/page"
+	"github.com/cagnosolutions/go-data/pkg/logging"
 )
+
+var out = logging.NewDefaultLogger()
 
 const (
 	maxSegmentSize     = 16 << 20
@@ -38,7 +42,7 @@ type BufferManager struct {
 	latch     sync.Mutex
 	pool      []frame.Frame                 // buffer pool page frames
 	replacer  *ClockReplacer                // page replacement policy structure
-	io        *FileManager                  // underlying file manager
+	disk      *FileManager                  // underlying file manager
 	freeList  []frame.FrameID               // list of frames that are free to use
 	pageTable map[page.PageID]frame.FrameID // table of the current page to frame mappings
 }
@@ -59,7 +63,7 @@ func OpenBufferManager(base string, pageCount uint16) (*BufferManager, error) {
 	bm := &BufferManager{
 		pool:      make([]frame.Frame, pageCount, pageCount),
 		replacer:  NewClockReplacer(pageCount),
-		io:        fm,
+		disk:      fm,
 		freeList:  make([]frame.FrameID, pageCount),
 		pageTable: make(map[page.PageID]frame.FrameID),
 	}
@@ -87,12 +91,12 @@ func (m *BufferManager) NewPage() page.Page {
 	// our replacement policy is used to locate a victimized one frame.Frame.
 	fid, err := m.GetUsableFrame()
 	if err != nil {
-		// Something went wrong, if this happens.
-		panic(err)
+		// Something went terribly wrong if this happens.
+		out.Panic("%s", err)
 	}
 	// Allocate (get the next sequential page.PageID) so we can use it to initialize
 	// the next page we will use.
-	pid := m.io.AllocatePage()
+	pid := m.disk.AllocatePage()
 	// Create a new frame.Frame initialized with our page.PageID and page.Page.
 	pf := frame.NewFrame(pid, *fid, page.PageSize)
 	pg := page.NewPage(pid)
@@ -106,14 +110,96 @@ func (m *BufferManager) NewPage() page.Page {
 }
 
 // FetchPage retrieves specific page from the pool, or storage medium by the page ID.
-func (m *BufferManager) FetchPage(pid page.PageID) page.Page { return nil }
+func (m *BufferManager) FetchPage(pid page.PageID) page.Page {
+	// Check to see if the page.PageID is located in the pageTable.
+	if fid, found := m.pageTable[pid]; found {
+		// We located it, so now we access the frame.Frame and ensure that it will
+		// not be a victim candidate by our replacement policy.
+		pf := m.pool[fid]
+		pf.PinCount++
+		m.replacer.Pin(fid)
+		// And now, we can safely return our page.Page.
+		return pf.Page
+	}
+	// A match was not found in our pageTable, so now we must swap the page.Page in
+	// from disk. But first, we must get a frame.Frame to hold our page.Page. We will
+	// call on GetUsableFrame to check our freeList, and then potentially move on to
+	// return a victimized frame.Frame if we need to.
+	fid, err := m.GetUsableFrame()
+	if err != nil {
+		// Something went terribly wrong if this happens.
+		out.Panic("%s", err)
+	}
+	// Now, we will swap the page.Page in from the disk using the FileManager.
+	data := make([]byte, page.PageSize)
+	err = m.disk.ReadPage(pid, data)
+	if err != nil {
+		// Something went terribly wrong if this happens.
+		out.Panic("%s", err)
+	}
+	// Create a new frame.Frame so we can copy the page.Page data we just swapped
+	// in from off the disk and add the frame.Frame to the pageTable.
+	pf := frame.NewFrame(pid, *fid, page.PageSize)
+	copy(pf.Page, data)
+	// Add the entry to our pageTable
+	m.pageTable[pid] = *fid
+	// And update the pool
+	m.pool[*fid] = pf
+	// Finally, return our page.Page for use
+	return pf.Page
+}
 
 // UnpinPage allows for manual unpinning of a specific page from the pool by the page ID.
-func (m *BufferManager) UnpinPage(pid page.PageID, isDirty bool) error { return nil }
+func (m *BufferManager) UnpinPage(pid page.PageID, isDirty bool) error {
+	// Check to see if the page.PageID is located in the pageTable.
+	fid, found := m.pageTable[pid]
+	if !found {
+		// We have not located it, we will return an error.
+		return errs.ErrPageNotFound
+	}
+	// Otherwise, we located it in the pageTable. Now we access the frame.Frame and
+	// ensure that it can be used as a victim candidate by our replacement policy.
+	pf := m.pool[fid]
+	pf.DecrPinCount()
+	if pf.PinCount == 0 {
+		// After we decrement the pin count, check to see if it is low enough to
+		// completely unpin it, and if so, unpin it.
+		m.replacer.Unpin(fid)
+	}
+	// Now, check to see if the dirty bit needs to be set.
+	if pf.IsDirty || isDirty {
+		pf.IsDirty = true
+		return nil
+	}
+	// If not, we can make sure to unset the dirty bit.
+	pf.IsDirty = false
+	return nil
+}
 
 // FlushPage forces a page to be written onto the storage medium, and decrements the
 // pin count on the frame potentially enabling the frame to be reused.
-func (m *BufferManager) FlushPage(pid page.PageID) error { return nil }
+func (m *BufferManager) FlushPage(pid page.PageID) error {
+	// Check to see if the page.PageID is located in the pageTable.
+	fid, found := m.pageTable[pid]
+	if !found {
+		// We have not located it, we will return an error.
+		return errs.ErrPageNotFound
+	}
+	// Otherwise, we located it in the pageTable. Now we access the frame.Frame and
+	// ensure that it can be used as a victim candidate by our replacement policy.
+	pf := m.pool[fid]
+	pf.DecrPinCount()
+	// Now, we can make sure we flush it to the disk using the FileManager.
+	err := m.disk.WritePage(pf.PID, pf.Page)
+	if err != nil {
+		// Something went terribly wrong if this happens.
+		out.Panic("%s", err)
+	}
+	// Finally, since we have just flushed the page.Page to the underlying file, we
+	// can proceed with unsetting the dirty bit.
+	pf.IsDirty = false
+	return nil
+}
 
 // DeletePage removes the page from the buffer pool, and decrements the pin count on the
 // frame potentially enabling the frame to be reused.
@@ -146,7 +232,7 @@ func (m *BufferManager) GetUsableFrame() (*frame.FrameID, error) {
 		cf := m.pool[*fid]
 		if &cf != nil {
 			if cf.IsDirty {
-				err := m.io.WritePage(cf.PID, cf.Page)
+				err := m.disk.WritePage(cf.PID, cf.Page)
 				if err != nil {
 					return nil, err
 				}
