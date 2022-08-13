@@ -12,7 +12,7 @@ import (
 )
 
 func TestBufferPool_All(t *testing.T) {
-	pageSize := uint16(page.DefaultPageSize)
+	pageSize := uint16(page.PageSize)
 	pageCount := uint16(10)
 	testFile := "testing/bp_all_test.db"
 
@@ -268,7 +268,7 @@ var delBPRecords = func(bp *bufferManager, pid page.PageID) error {
 }
 
 func TestBufferPool_Sync(t *testing.T) {
-	pageSize := uint16(page.DefaultPageSize)
+	pageSize := uint16(page.PageSize)
 	pageCount := uint16(10)
 	testFile := "testing/bp_race_test.db"
 

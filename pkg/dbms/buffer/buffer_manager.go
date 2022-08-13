@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cagnosolutions/go-data/pkg/dbms"
 	"github.com/cagnosolutions/go-data/pkg/dbms/disk"
 	"github.com/cagnosolutions/go-data/pkg/dbms/errs"
 	"github.com/cagnosolutions/go-data/pkg/dbms/frame"
@@ -62,9 +63,10 @@ const (
 // bufferManager is an implementation of a page buffer pool, which is also
 // sometimes called a buffer pool page disk in a dbms system.
 type bufferManager struct {
-	bpLatch  sync.Mutex                    // latch
-	frames   []frame.Frame                 // list of loaded page frames
-	replacer *clockReplacer                // page replacement structure (used to find an unpinned page for replacement)
+	bpLatch  sync.Mutex          // latch
+	frames   []frame.Frame       // list of loaded page frames
+	replacer *dbms.ClockReplacer // page replacement structure (
+	// used to find an unpinned page for replacement)
 	disk     *disk.DiskManager             // underlying disk storage manager
 	free     []frame.FrameID               // used to find a page for replacement
 	table    map[page.PageID]frame.FrameID // used to keep track of pages
@@ -74,14 +76,14 @@ type bufferManager struct {
 // newBufferManager initializes and returns a new instance of a bufferManager.
 func newBufferManager(file string, pageSize, pageCount uint16) *bufferManager {
 	// sanitize the page size
-	pageSize = calcPageSize(pageSize)
+	//pageSize = calcPageSize(pageSize)
 	dm, err := disk.NewDiskManagerSize(file, pageSize, pageCount)
 	if err != nil {
 		panic(errs.ErrOpeningDiskManager)
 	}
 	bm := &bufferManager{
 		frames:   make([]frame.Frame, pageCount, pageCount),
-		replacer: newClockReplacer(pageCount),
+		replacer: dbms.NewClockReplacer(pageCount),
 		disk:     dm,
 		free:     make([]frame.FrameID, pageCount),
 		table:    make(map[page.PageID]frame.FrameID),
@@ -106,33 +108,33 @@ func newBufferManager(file string, pageSize, pageCount uint16) *bufferManager {
 // to the minimum allowable size. If the provided page size
 // is set greater than the maximum, then the page size is set
 // to the maximum allowable size.
-func calcPageSize(pageSize uint16) uint16 {
-	if pageSize <= 0 {
-		pageSize = page.DefaultPageSize
-	}
-	if 0 < pageSize && pageSize < page.MinPageSize {
-		pageSize = page.MinPageSize
-	}
-	if page.MaxPageSize < pageSize {
-		pageSize = page.MaxPageSize
-	}
-	if pageSize&(page.DefaultPageSize-1) != 0 {
-		// must be a power of two
-		var x uint16 = 1
-		for x < pageSize {
-			x *= 2
-		}
-		pageSize = x
-	}
-	return pageSize
-}
+// func calcPageSize(pageSize uint16) uint16 {
+// 	if pageSize <= 0 {
+// 		pageSize = page.PageSize
+// 	}
+// 	if 0 < pageSize && pageSize < page.MinPageSize {
+// 		pageSize = page.MinPageSize
+// 	}
+// 	if page.MaxPageSize < pageSize {
+// 		pageSize = page.MaxPageSize
+// 	}
+// 	if pageSize&(page.DefaultPageSize-1) != 0 {
+// 		// must be a power of two
+// 		var x uint16 = 1
+// 		for x < pageSize {
+// 			x *= 2
+// 		}
+// 		pageSize = x
+// 	}
+// 	return pageSize
+// }
 
 // calcBufferSize ensures the provided buffer size is a power
 // of two that works well with the minimum and maximum allowable
 // buffer sizes. It also ensures that the page size works well
 // with the provided buffer size--otherwise, it will be adjusted.
 func calcBufferSize(pageSize uint16, bufferSize uint32) uint32 {
-	pageSize = calcPageSize(pageSize)
+	//pageSize = calcPageSize(pageSize)
 	if bufferSize <= 0 {
 		bufferSize = DefaultBufferSize
 	}
@@ -204,7 +206,7 @@ func (b *bufferManager) unpinPage(pid page.PageID, isDirty bool) error {
 	// Decrement the pin count and check if we are able to unpin it.
 	pf.DecrPinCount()
 	if pf.PinCount == 0 {
-		b.replacer.unpin(fid)
+		b.replacer.Unpin(fid)
 	}
 	// Next, we must check the page pageFrame to see if the dirty bit
 	// needs to be set.
@@ -237,7 +239,7 @@ func (b *bufferManager) fetchPage(pid page.PageID) page.Page {
 		// Don't forget to increment the pin count, and also pin it (make it
 		// unusable as a victim) in the replacer.
 		pf.PinCount++
-		b.replacer.pin(fid)
+		b.replacer.Pin(fid)
 		// Finally, return the page.
 		return pf.Page
 	}
@@ -314,7 +316,7 @@ func (b *bufferManager) deletePage(pid page.PageID) error {
 	delete(b.table, pid)
 	// Next, we will pin this page frame, so it cannot be returned as a victimized
 	// frame (because we are trying to delete it.)
-	b.replacer.pin(fid)
+	b.replacer.Pin(fid)
 	// Then we will instruct the storage storageManager to deallocate it the page, and
 	// finally we will add the pageFrame back into the free list.
 	if err := b.disk.DeallocatePage(pid); err != nil {
@@ -343,7 +345,7 @@ func (b *bufferManager) getFrameID() (*frame.FrameID, bool) {
 		return &fid, true // bool: fromFreeList == true
 	}
 	// nothing for us in the free list, time to use the replacer
-	return b.replacer.victim(), false // bool: fromFreeList == false
+	return b.replacer.Victim(), false // bool: fromFreeList == false
 }
 
 // getUsableFrame attempts to return a usable frameID. It is used in the event that

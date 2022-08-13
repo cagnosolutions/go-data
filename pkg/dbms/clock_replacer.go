@@ -1,4 +1,4 @@
-package buffer
+package dbms
 
 import (
 	"errors"
@@ -12,10 +12,16 @@ import (
 
 var ErrNoVictimFound = errors.New("replacer may be empty; victim could not be found")
 
+type ClockReplacer = clockReplacer
+
 // clockReplacer represents a clock based replacement cache
 type clockReplacer struct {
 	list *circularList
 	ptr  **node
+}
+
+func NewClockReplacer(size uint16) *ClockReplacer {
+	return newClockReplacer(size)
 }
 
 // newClockReplacer instantiates and returns a new clockReplacer
@@ -25,6 +31,10 @@ func newClockReplacer(size uint16) *clockReplacer {
 		list: list,
 		ptr:  &list.head,
 	}
+}
+
+func (c *ClockReplacer) Pin(fid frame.FrameID) {
+	c.pin(fid)
 }
 
 // pin takes a frame ID and "pins" it, indicating that the caller is now
@@ -47,6 +57,10 @@ func (c *clockReplacer) remove(fid frame.FrameID) {
 	c.pin(fid)
 }
 
+func (c *ClockReplacer) Unpin(fid frame.FrameID) {
+	c.unpin(fid)
+}
+
 // unpin takes a frame ID and "unpins" it, indicating that the caller is no
 // longer using it. Because the caller is no longer using it, the replacer
 // can now add it to make it available for victimization.
@@ -65,6 +79,10 @@ func (c *clockReplacer) unpin(fid frame.FrameID) {
 // sake; I feel the name is more apt in describing the function it is performing.
 func (c *clockReplacer) insert(fid frame.FrameID) {
 	c.unpin(fid)
+}
+
+func (c *ClockReplacer) Victim() *frame.FrameID {
+	return c.victim()
 }
 
 // victim searches for a frame ID in the replacer that it can victimize and

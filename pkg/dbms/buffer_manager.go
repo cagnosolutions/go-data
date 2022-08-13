@@ -2,38 +2,12 @@ package dbms
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/cagnosolutions/go-data/pkg/dbms/frame"
 	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
-
-type BufferPool interface {
-
-	// AddFreeFrame takes a frameID and adds it to the set of free frames list.
-	// USES: freeList
-	AddFreeFrame(fid frame.FrameID)
-
-	// GetFrameID attempts to return a frameID. It first checks the free frame
-	// list to see if there are any free frames in there. If one is found it
-	// will return it along with a boolean indicating true. If none are found,
-	// it will then go on to the replacer in search of one.
-	// USES: freeList, Replacer
-	GetFrameID() (*frame.FrameID, bool)
-}
-
-type Replacer interface {
-	// Pin pins the frame matching the supplied frame ID, indicating that it should
-	// not be victimized until it is unpinned.
-	Pin(fid frame.FrameID)
-
-	// Victim removes and returns the next "victim frame", as defined by the policy.
-	Victim() *frame.FrameID
-
-	// Unpin unpins the frame matching the supplied frame ID, indicating that it may
-	// now be victimized.
-	Unpin(fid frame.FrameID)
-}
 
 const (
 	maxSegmentSize     = 16 << 20
@@ -62,9 +36,9 @@ var (
 // along with a page table, and replacement policy.
 type BufferManager struct {
 	latch     sync.Mutex
-	pool      []frame.FrameID               // buffer pool page frames
-	replacer  Replacer                      // page replacement policy structure
-	io        FileManager                   // underlying file manager
+	pool      []frame.Frame                 // buffer pool page frames
+	replacer  *ClockReplacer                // page replacement policy structure
+	io        *FileManager                  // underlying file manager
 	freeList  []frame.FrameID               // list of frames that are free to use
 	pageTable map[page.PageID]frame.FrameID // table of the current page to frame mappings
 }
@@ -76,13 +50,56 @@ func OpenBufferManager(base string, pageCount uint16) (*BufferManager, error) {
 	if pageCount%64 != 0 || pageCount/64 > 16 {
 		return nil, ErrBadPageCount
 	}
-	// open disk manager
-
-	return nil, nil
+	// open file manager
+	fm, err := OpenFileManager(base)
+	if err != nil {
+		return nil, err
+	}
+	// create buffer manager instance
+	bm := &BufferManager{
+		pool:      make([]frame.Frame, pageCount, pageCount),
+		replacer:  NewClockReplacer(pageCount),
+		io:        fm,
+		freeList:  make([]frame.FrameID, pageCount),
+		pageTable: make(map[page.PageID]frame.FrameID),
+	}
+	// initialize the pool in the buffer manager
+	for i := uint16(0); i < pageCount; i++ {
+		bm.pool[i] = frame.Frame{
+			PID:      0,
+			FID:      0,
+			PinCount: 0,
+			IsDirty:  false,
+			Page:     nil,
+		}
+		bm.freeList[i] = frame.FrameID(i)
+	}
+	// return buffer manager
+	return bm, nil
 }
 
 // NewPage returns a fresh empty page from the pool.
-func (m *BufferManager) NewPage() page.Page { return nil }
+//
+// 1. If the pool is full and all pages are pinned, return nil
+// 2. Pick a victim page P
+// 		a. First look in the free list for P
+// 		b. If P cannot be found in the free list, use the replacement policy
+// 3. Update P's metadata. Zero out memory and add P to the page table.
+// 4. Return a pointer to P
+//
+func (m *BufferManager) NewPage() page.Page {
+	fid, err := m.GetUsableFrame()
+	if err != nil {
+		return nil
+	}
+	pid := m.io.AllocatePage()
+	pf := frame.NewFrame(pid, *fid, page.PageSize)
+	pg := page.NewPage(pid)
+	copy(pf.Page, pg)
+	m.pageTable[pid] = *fid
+	m.pool[*fid] = pf
+	return pf.Page
+}
 
 // FetchPage retrieves specific page from the pool, or storage medium by the page ID.
 func (m *BufferManager) FetchPage(pid page.PageID) page.Page { return nil }
@@ -98,10 +115,40 @@ func (m *BufferManager) FlushPage(pid page.PageID) error { return nil }
 // frame potentially enabling the frame to be reused.
 func (m *BufferManager) DeletePage(pid page.PageID) error { return nil }
 
+// GetFrameID attempts to return a *frame.FrameID. It first checks the freeList set to
+// see if there are any availble frames to pick from. If not, it will proceed to use
+// the replacement policy to locate one.
+func (m *BufferManager) GetFrameID() (*frame.FrameID, bool) {
+	// Check the freeList first, and if it is not empty return one
+	if len(m.freeList) > 0 {
+		fid, newFreeList := m.freeList[0], m.freeList[1:]
+		m.freeList = newFreeList
+		return &fid, true // true == fromFreeList
+	}
+	// Otherwise, there is nothing for us in the free list, so it's time to use our
+	// replacement policy
+	return m.replacer.Victim(), false
+}
+
 // GetUsableFrame attempts to return a usable frameID. It is used in the event that
 // the buffer pool is "full." It always checks the free list first, and then it will
 // fall back to using the replacer.
-func (m *BufferManager) GetUsableFrame() (*frame.FrameID, bool) { return nil, false }
-
-// Close closes the buffer manager.
-func (m *BufferManager) Close() error { return nil }
+func (m *BufferManager) GetUsableFrame() (*frame.FrameID, error) {
+	fid, foundInFreeList := m.GetFrameID()
+	if fid == nil {
+		return nil, fmt.Errorf("usable frame not found")
+	}
+	if !foundInFreeList {
+		cf := m.pool[*fid]
+		if &cf != nil {
+			if cf.IsDirty {
+				err := m.io.WritePage(cf.PID, cf.Page)
+				if err != nil {
+					return nil, err
+				}
+			}
+			delete(m.pageTable, cf.PID)
+		}
+	}
+	return fid, nil
+}
