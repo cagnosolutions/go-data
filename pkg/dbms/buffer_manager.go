@@ -2,7 +2,6 @@ package dbms
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/cagnosolutions/go-data/pkg/dbms/errs"
@@ -36,7 +35,7 @@ var (
 	ErrBadPageCount = errors.New("bad page count, must be a multiple of 64 between 64 and 1024")
 )
 
-// BufferManager is the access level structure wrapping up the BufferPool, and FileManager,
+// BufferManager is the access level structure wrapping up the bufferPool, and FileManager,
 // along with a page table, and replacement policy.
 type BufferManager struct {
 	latch     sync.Mutex
@@ -82,14 +81,12 @@ func OpenBufferManager(base string, pageCount uint16) (*BufferManager, error) {
 	return bm, nil
 }
 
-var ErrCountNotLocateOrVictimizeFrame = errors.New("could not find a free or victimized frame")
-
 // NewPage returns a fresh empty page from the pool.
 func (m *BufferManager) NewPage() page.Page {
 	// First we must acquire a frame.Frame in order to store our page. Calling
 	// GetUsableFrame first checks our freeList and if we cannot find one in there
 	// our replacement policy is used to locate a victimized one frame.Frame.
-	fid, err := m.GetUsableFrame()
+	fid, err := m.getUsableFrameID()
 	if err != nil {
 		// Something went terribly wrong if this happens.
 		out.Panic("%s", err)
@@ -125,7 +122,7 @@ func (m *BufferManager) FetchPage(pid page.PageID) page.Page {
 	// from disk. But first, we must get a frame.Frame to hold our page.Page. We will
 	// call on GetUsableFrame to check our freeList, and then potentially move on to
 	// return a victimized frame.Frame if we need to.
-	fid, err := m.GetUsableFrame()
+	fid, err := m.getUsableFrameID()
 	if err != nil {
 		// Something went terribly wrong if this happens.
 		out.Panic("%s", err)
@@ -203,12 +200,43 @@ func (m *BufferManager) FlushPage(pid page.PageID) error {
 
 // DeletePage removes the page from the buffer pool, and decrements the pin count on the
 // frame potentially enabling the frame to be reused.
-func (m *BufferManager) DeletePage(pid page.PageID) error { return nil }
+func (m *BufferManager) DeletePage(pid page.PageID) error {
+	// Check to see if the page.PageID is located in the pageTable.
+	fid, found := m.pageTable[pid]
+	if !found {
+		// We have not located it, but we don't need to return any error
+		return nil
+	}
+	// Otherwise, we located it in the pageTable. Now we access the frame.Frame and
+	// check to see if it is currently pinned (indicating it is currently in use
+	// elsewhere) and should therefore not be removed just yet.
+	pf := m.pool[fid]
+	if pf.PinCount > 0 {
+		// page.Page must be in use elsewhere (or has otherwise not been properly
+		// unpinned) so we'll return an error for now.
+		return errs.ErrPageInUse
+	}
+	// Now, we have our frame.Frame and it is not currently in use, so first we will
+	// remove it from the pageTable
+	delete(m.pageTable, pid)
+	// Next, we pin it, so it will not be marked as a potential victim--because we
+	// are in the process of remove it altogether.
+	m.replacer.Pin(fid)
+	// After it is pinned, we will deallocate the page.Page on disk (which will make
+	// it free to use again in a pinch.)
+	if err := m.disk.DeallocatePage(pid); err != nil {
+		// Ooops, something went down disk side, return error
+		return err
+	}
+	// Finally, add the current frame.FrameID back onto the free list and return nil
+	m.addFrameID(fid)
+	return nil
+}
 
-// GetFrameID attempts to return a *frame.FrameID. It first checks the freeList set to
+// getFrameID attempts to return a *frame.FrameID. It first checks the freeList set to
 // see if there are any availble frames to pick from. If not, it will proceed to use
 // the replacement policy to locate one.
-func (m *BufferManager) GetFrameID() (*frame.FrameID, bool) {
+func (m *BufferManager) getFrameID() (*frame.FrameID, bool) {
 	// Check the freeList first, and if it is not empty return one
 	if len(m.freeList) > 0 {
 		fid, newFreeList := m.freeList[0], m.freeList[1:]
@@ -220,25 +248,72 @@ func (m *BufferManager) GetFrameID() (*frame.FrameID, bool) {
 	return m.replacer.Victim(), false
 }
 
-// GetUsableFrame attempts to return a usable frameID. It is used in the event that
-// the buffer pool is "full." It always checks the free list first, and then it will
-// fall back to using the replacer.
-func (m *BufferManager) GetUsableFrame() (*frame.FrameID, error) {
-	fid, foundInFreeList := m.GetFrameID()
+// addFrameID takes a frame.FrameID and adds it back onto our freeList for later use.
+func (m *BufferManager) addFrameID(fid frame.FrameID) {
+	m.freeList = append(m.freeList, fid)
+}
+
+// getUsableFrameID attempts to return a usable frame.FrameID. It is used in the event
+// that the buffer pool is "full." It always checks the free list first, and then it
+// will fall back to using the replacer.
+func (m *BufferManager) getUsableFrameID() (*frame.FrameID, error) {
+	// First, we will check our freeList.
+	fid, foundInFreeList := m.getFrameID()
 	if fid == nil {
-		return nil, fmt.Errorf("usable frame not found")
+		return nil, errs.ErrUsableFrameNotFound
 	}
+	// If we find ourselves here we have a frame.FrameID, but we do not yet know if
+	// it came from our free list, or from our replacement policy. If it came due to
+	// our replacement policy, then we will need to check to make sure it has not
+	// been marked dirty, otherwise we must flush the contents to disk before reusing
+	// the frame.FrameID; so let us check on that.
 	if !foundInFreeList {
 		cf := m.pool[*fid]
 		if &cf != nil {
+			// We've located the correct frame.Frame in the pool.
 			if cf.IsDirty {
+				// And it appears that it is in fact holding a dirty page.Page. We must
+				// flush the dirty page.Page to disk before recycling this frame.Frame.
 				err := m.disk.WritePage(cf.PID, cf.Page)
 				if err != nil {
 					return nil, err
 				}
 			}
+			// In either case, we will now be able to remove this pageTable mapping
+			// because it is no longer valid, and the caller should be creating a new
+			// entry soon regardless.
 			delete(m.pageTable, cf.PID)
 		}
 	}
+	// Finally, return our *frame.FrameID, and a nil error
 	return fid, nil
+}
+
+// flushAll attempts to flush any dirty page.Page data.
+func (m *BufferManager) flushAll() error {
+	// We will range all the entries in the pageTable and call Flush on each one.
+	for pid := range m.pageTable {
+		err := m.FlushPage(pid)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Close attempts to close the BufferManager along with the underlying FileManager
+// and associated dependencies. Close makes sure to flush any dirty page.Page data
+// before closing everything down.
+func (m *BufferManager) Close() error {
+	// Make sure all dirty page.Page data is written
+	err := m.flushAll()
+	if err != nil {
+		return err
+	}
+	// Close the FileManager
+	err = m.disk.Close()
+	if err != nil {
+		return err
+	}
+	return nil
 }

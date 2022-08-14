@@ -5,27 +5,23 @@ import (
 	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
 
-type IOManager interface {
-	AllocatePage() page.PageID
-	DeallocatePage(pid page.PageID) error
-	ReadPage(pid page.PageID, p page.Page) error
-	WritePage(pid page.PageID, p page.Page) error
-	Close() error
+// bufferPool is an interface describing the basic operations that the buffer pool
+// is responsible for handling. The bufferPool is used by the bufferPoolManager.
+type bufferPool interface {
+	// getFrameID attempts to return a frame.FrameID from the free list. If
+	// one is found it will return it along with a boolean indicating true.
+	getFrameID() (*frame.FrameID, bool)
+	// addFrameID takes a frameID and adds it to the set of free frames list.
+	addFrameID(fid frame.FrameID)
+	// getUsableFrameID attempts to return a frame.FrameID. It first checks
+	// calls getFrameID to try to return one from the freeList. If the first
+	// call fails, it will then go on to the replacer in search of one.
+	getUsableFrameID() (*frame.FrameID, error)
 }
 
-type BufferPool interface {
-	// AddFreeFrame takes a frameID and adds it to the set of free frames list.
-	// USES: freeList
-	AddFreeFrame(fid frame.FrameID)
-	// GetFrameID attempts to return a frameID. It first checks the free frame
-	// list to see if there are any free frames in there. If one is found it
-	// will return it along with a boolean indicating true. If none are found,
-	// it will then go on to the replacer in search of one.
-	// USES: freeList, Replacer
-	GetFrameID() (*frame.FrameID, bool)
-}
-
-type Replacer interface {
+// replacer is an interface describing the basic operations that make up a replacement
+// policy. The replacer is used by the bufferPoolManager.
+type replacer interface {
 	// Pin pins the frame matching the supplied frame ID, indicating that it should
 	// not be victimized until it is unpinned.
 	Pin(fid frame.FrameID)
@@ -34,4 +30,54 @@ type Replacer interface {
 	// Unpin unpins the frame matching the supplied frame ID, indicating that it may
 	// now be victimized.
 	Unpin(fid frame.FrameID)
+}
+
+// diskManager is an interface describing the basic operations that the
+// disk manager is responsible for handling. The diskManager is usually
+// something that is used by a bufferPoolManager.
+type diskManager interface {
+	// AllocatePage allocates and returns the next sequential page.PageID.
+	// in some cases, if there are a lot of empty fragmented pages, it may
+	// return a non-sequential page.PageID.
+	AllocatePage() page.PageID
+	// DeallocatePage takes a page.PageID and attempts to locate and mark
+	// the associated page status as free to use in the future. The data
+	// may be wiped, so this is a destructive call and should be used with
+	// care.
+	DeallocatePage(pid page.PageID) error
+	// ReadPage takes a page.PageID, as well as a (preferably empty) page.Page,
+	// attempts to locate and copy the contents into p.
+	ReadPage(pid page.PageID, p page.Page) error
+	// WritePage takes a page.PageID, as well as a page.Page, attempts to locate
+	// and copy and flush the contents of p onto the disk.
+	WritePage(pid page.PageID, p page.Page) error
+	// Close closes the disk manager.
+	Close() error
+}
+
+// bufferPoolManager is an interface for describing the basic operations that
+// the buffer pool manager is responsible for handling.
+type bufferPoolManager interface {
+	bufferPool
+	replacer
+	diskManager
+	// NewPage returns a new "fresh" page.Page for use.
+	NewPage() page.Page
+	// FetchPage takes a page.PageID, and attempts to locate it (either in the
+	// buffer pool, or on disk) and return the associated page.Page.
+	FetchPage(pid page.PageID) page.Page
+	// UnpinPage takes a page.PageID, and a boolean hinting at the page.Page
+	// associated with the supplied page.pageID being dirty or not. It instructs
+	// the replacer to unpin the page making it available for victimization.
+	UnpinPage(pid page.PageID, isDirty bool) error
+	// FlushPage takes a page.PageID, and attempts to locate and flush the
+	// associated page.Page to disk but, it does not remove it from the pageTable.
+	FlushPage(pid page.PageID) error
+	// DeletePage takes a page.PageID and attempts to locate and remove the
+	// associated page.Page from the pageTable (if it is not pinned) and also
+	// clears it on the disk.
+	DeletePage(pid page.PageID) error
+	// Close flushes and dirty page.Page data to the underlying disk, and then
+	// shuts down the bufferPoolManager.
+	Close() error
 }
