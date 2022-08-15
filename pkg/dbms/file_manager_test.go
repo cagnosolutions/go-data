@@ -7,11 +7,11 @@ import (
 	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
 
-const basePath = "testing/file-manager"
+const basePath = "testing/current-manager"
 
-func TestFileManager(t *testing.T) {
+func TestFileManager_All(t *testing.T) {
 
-	// open a file manager instance
+	// open a current manager instance
 	fm, err := OpenFileManager(basePath)
 	if err != nil {
 		t.Error(err)
@@ -25,6 +25,6 @@ func TestFileManager(t *testing.T) {
 		fmt.Printf("allocated page %d (pages=%d, file_size=%d)\n", pid, len(pages), fm.size)
 	}
 
-	// close our file manager instance
+	// close our current manager instance
 	err = fm.Close()
 }

@@ -41,7 +41,7 @@ type BufferManager struct {
 	latch     sync.Mutex
 	pool      []frame.Frame                 // buffer pool page frames
 	replacer  *ClockReplacer                // page replacement policy structure
-	disk      *FileManager                  // underlying file manager
+	disk      *FileManager                  // underlying current manager
 	freeList  []frame.FrameID               // list of frames that are free to use
 	pageTable map[page.PageID]frame.FrameID // table of the current page to frame mappings
 }
@@ -53,7 +53,7 @@ func OpenBufferManager(base string, pageCount uint16) (*BufferManager, error) {
 	if pageCount%64 != 0 || pageCount/64 > 16 {
 		return nil, ErrBadPageCount
 	}
-	// open file manager
+	// open current manager
 	fm, err := OpenFileManager(base)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,12 @@ func (m *BufferManager) NewPage() page.Page {
 	// our replacement policy is used to locate a victimized one frame.Frame.
 	fid, err := m.getUsableFrameID()
 	if err != nil {
-		// Something went terribly wrong if this happens.
+		// This can happen when the BufferManager is full, so let's make sure that
+		// it's something like that, and not something more sinister.
+		if len(m.freeList) == 0 && m.replacer.size() == 0 {
+			return nil
+		}
+		// Nope, it's something more sinister... shoot.
 		out.Panic("%s", err)
 	}
 	// Allocate (get the next sequential page.PageID) so we can use it to initialize
@@ -192,7 +197,7 @@ func (m *BufferManager) FlushPage(pid page.PageID) error {
 		// Something went terribly wrong if this happens.
 		out.Panic("%s", err)
 	}
-	// Finally, since we have just flushed the page.Page to the underlying file, we
+	// Finally, since we have just flushed the page.Page to the underlying current, we
 	// can proceed with unsetting the dirty bit.
 	pf.IsDirty = false
 	return nil

@@ -54,7 +54,7 @@ func (b *BitsetIndex) ReadFile(name string) error {
 	if b == nil {
 		return io.ErrNoProgress
 	}
-	// read data from file
+	// read data from current
 	data, err := os.ReadFile(name)
 	if err != nil {
 		return err
@@ -80,7 +80,7 @@ func (b *BitsetIndex) WriteFile(name string) error {
 		// encode each uint64 into the buffer
 		binary.LittleEndian.PutUint64(data[i:i+8], (*b)[j])
 	}
-	// write buffer to file
+	// write buffer to current
 	err := os.WriteFile(name, data, 0644)
 	if err != nil {
 		return err

@@ -1,10 +1,19 @@
 package dbms
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cagnosolutions/go-data/pkg/dbms/frame"
 )
+
+func TestClockReplacer_Size(t *testing.T) {
+	cr := newClockReplacer(10)
+	fmt.Println(cr.size())
+	cr.unpin(1)
+	fmt.Println(cr.size())
+
+}
 
 func TestClockReplacer_All(t *testing.T) {
 	cr := newClockReplacer(10)

@@ -66,7 +66,7 @@ func PageRangeForFile(sid int) (int, int) {
 	return pagesPerSegment * sid, (pagesPerSegment * sid) + pagesPerSegment - 1
 }
 
-// FileSegment is an in memory index of a file segment.
+// FileSegment is an in memory index of a current segment.
 type FileSegment struct {
 	ID       int
 	Name     string
@@ -77,15 +77,12 @@ type FileSegment struct {
 }
 
 // NewFileSegment creates and returns a new *FileSegment struct
-func NewFileSegment(path string) *FileSegment {
+func NewFileSegment(path string, id int) *FileSegment {
 	// get the base filename
 	base := filepath.Base(path)
-	// get the id from the file name
-	var id int
-	if strings.Contains(base, currentSegment) {
-		id = -1
-	} else {
-		id = GetIDFromFileName(base)
+	// get the id from the current name
+	if strings.Contains(base, currentSegment) || id < 0 {
+		id = 0
 	}
 	// get the page boundaries
 	first, last := PageRangeForFile(id)
@@ -99,15 +96,15 @@ func NewFileSegment(path string) *FileSegment {
 	}
 }
 
-// LoadIndex checks to see if it can find a matching index file on disk, if it finds
-// one, the index will be loaded from that index file. Otherwise, it will rebuild the
-// index by reading from the data file segment directly.
+// LoadIndex checks to see if it can find a matching index current on disk, if it finds
+// one, the index will be loaded from that index current. Otherwise, it will rebuild the
+// index by reading from the data current segment directly.
 func (fs *FileSegment) LoadIndex() error {
-	// check for an index file
+	// check for an index current
 	indexName := strings.Replace(fs.Name, segmentSuffix, segmentIndexSuffix, 1)
 	_, err := os.Stat(indexName)
 	if os.IsExist(err) {
-		// found a matching index file, load the index file directly
+		// found a matching index current, load the index current directly
 		err = fs.Index.ReadFile(indexName)
 		if err != nil {
 			return err
@@ -116,12 +113,12 @@ func (fs *FileSegment) LoadIndex() error {
 		return nil
 	}
 	// otherwise, we must manually rebuild the index so first attempt to open
-	// the existing data segment file for reading
+	// the existing data segment current for reading
 	fd, err := os.OpenFile(fs.Name, os.O_RDONLY, 0666)
 	if err != nil {
 		return err
 	}
-	// defer file close
+	// defer current close
 	defer func(fd *os.File) {
 		_ = fd.Close()
 	}(fd)
@@ -146,7 +143,7 @@ func (fs *FileSegment) LoadIndex() error {
 		// increment to the next page number
 		pageNo++
 	}
-	// we have our file index built and since we had to rebuild it, we
+	// we have our current index built and since we had to rebuild it, we
 	// should write it out, so we do not have to rebuild it next time.
 	err = fs.Index.WriteFile(indexName)
 	if err != nil {
@@ -155,9 +152,19 @@ func (fs *FileSegment) LoadIndex() error {
 	return nil
 }
 
-// OpenFileSegment opens the named FileSegment. If it can find a matching index file
-// on disk the on disk index will be loaded directly from file. Otherwise, it will
-// build the index by reading from data file segment directly. If the named data file
+func (fs *FileSegment) ReadIndex() error {
+	indexName := strings.Replace(fs.Name, segmentSuffix, segmentIndexSuffix, 1)
+	return fs.Index.ReadFile(indexName)
+}
+
+func (fs *FileSegment) WriteIndex() error {
+	indexName := strings.Replace(fs.Name, segmentSuffix, segmentIndexSuffix, 1)
+	return fs.Index.WriteFile(indexName)
+}
+
+// OpenFileSegment opens the named FileSegment. If it can find a matching index current
+// on disk the on disk index will be loaded directly from current. Otherwise, it will
+// build the index by reading from data current segment directly. If the named data current
 // segment does not  exist, an error will be returned.
 func OpenFileSegment(path string) (*FileSegment, error) {
 	// check to make sure path exists before continuing
@@ -165,9 +172,11 @@ func OpenFileSegment(path string) (*FileSegment, error) {
 	if os.IsNotExist(err) {
 		return nil, err
 	}
+	// get the file segment id from the file name
+	id := GetIDFromFileName(filepath.Base(path))
 	// create a new FileSegment instance.
-	fs := NewFileSegment(path)
-	// load file segment index
+	fs := NewFileSegment(path, id)
+	// load current segment index
 	err = fs.LoadIndex()
 	if err != nil {
 		return nil, err

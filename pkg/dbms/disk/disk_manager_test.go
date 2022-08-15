@@ -11,7 +11,7 @@ var dManFile = "testing/dman.db"
 var r1, r2, r3 *page.RecID
 var err error
 
-var pageSize uint16 = page.DefaultPageSize
+var pageSize uint16 = page.PageSize
 var pageCount uint16 = 16
 
 func TestDiskManager_All(t *testing.T) {
@@ -60,7 +60,7 @@ func TestDiskManager_All(t *testing.T) {
 		t.Error(err)
 	}
 	// read the page we just wrote
-	np := make(page.Page, page.DefaultPageSize)
+	np := make(page.Page, page.PageSize)
 	err = dm.readPage(pid, np)
 	if err != nil {
 		panic(err)
@@ -98,7 +98,7 @@ func TestDiskManager_All(t *testing.T) {
 	}
 
 	// read the page we just wrote (again, after deallocating)
-	np2 := make(page.Page, page.DefaultPageSize)
+	np2 := make(page.Page, page.PageSize)
 	err = dm.readPage(pid, np2)
 	if err != nil {
 		panic(err)

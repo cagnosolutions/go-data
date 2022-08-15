@@ -42,7 +42,7 @@ func TestBitsetIndex_ReadWrite(t *testing.T) {
 			t.Error("bitset failed to populate")
 		}
 	}
-	// write to file
+	// write to current
 	err := bs.WriteFile(filepath.Join(basePath, "dat-current.idx"))
 	if err != nil {
 		t.Error(err)
@@ -54,14 +54,14 @@ func TestBitsetIndex_ReadWrite(t *testing.T) {
 			t.Error("bitset failed to clear")
 		}
 	}
-	// read from file
+	// read from current
 	err = bs.ReadFile(filepath.Join(basePath, "dat-current.idx"))
 	if err != nil {
 		t.Error(err)
 	}
 	for j := range bs {
 		if (*bs)[j] != want[j] {
-			t.Error("bitset failed to read file back in correctly")
+			t.Error("bitset failed to read current back in correctly")
 		}
 	}
 	fmt.Println(bs)
