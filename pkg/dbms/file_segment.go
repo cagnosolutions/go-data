@@ -5,95 +5,113 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
 
-func MakeFileNameFromID(index int) string {
+func MakeFileNameFromID(index uint32) string {
 	hexa := strconv.FormatInt(int64(index), 16)
 	return fmt.Sprintf("%s%04s%s", segmentPrefix, hexa, segmentSuffix)
 }
 
-func GetIDFromFileName(name string) int {
+func GetIDFromFileName(name string) uint32 {
 	hexa := name[len(segmentPrefix) : len(name)-len(segmentSuffix)]
-	id, err := strconv.ParseInt(hexa, 16, 32)
+	id, err := strconv.ParseUint(hexa, 16, 32)
 	if err != nil {
 		panic("GetIDFromFileName: " + err.Error())
 	}
-	return int(id)
+	return uint32(id)
 }
 
-func GetSegmentIDs(dir string) ([]int, error) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-	var sids []int
-	for _, file := range files {
-		if file.IsDir() || !strings.HasPrefix(file.Name(), segmentPrefix) {
-			continue
-		}
-		if strings.HasPrefix(file.Name(), segmentPrefix) {
-			if strings.Contains(file.Name(), currentSegment) {
-				sids = append(sids, -1)
-				continue
-			}
-			sids = append(sids, GetIDFromFileName(file.Name()))
-		}
-	}
-	sort.Ints(sids)
-	return sids, nil
-}
+// func GetSegmentIDs(dir string) ([]uint32, error) {
+// 	files, err := os.ReadDir(dir)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	var sids []uint32
+// 	for _, file := range files {
+// 		if file.IsDir() || !strings.HasPrefix(file.Name(), segmentPrefix) {
+// 			continue
+// 		}
+// 		if strings.HasPrefix(file.Name(), segmentPrefix) {
+// 			if strings.Contains(file.Name(), currentSegment) {
+// 				sids = append(sids, -1)
+// 				continue
+// 			}
+// 			sids = append(sids, GetIDFromFileName(file.Name()))
+// 		}
+// 	}
+// 	sort.Slice(
+// 		sids, func(i, j int) bool {
+// 			return sids[i] < sids[j]
+// 		},
+// 	)
+// 	return sids, nil
+// }
 
 // PageInFile returns a boolean indicating true if the provided PageID is within the
 // bounds of the provided segment ID, and false if they are outside the bounds.
-func PageInFile(pid page.PageID, sid int) bool {
-	return (pagesPerSegment*sid) <= int(pid) && int(pid) <= ((pagesPerSegment*sid)+pagesPerSegment-1)
+func PageInFile(pid page.PageID, sid uint32) bool {
+	return (pagesPerSegment*sid) <= pid && pid <= ((pagesPerSegment*sid)+pagesPerSegment-1)
 }
 
 // FileForPage takes a PageID and returns the ID of the segment where that page should
 // be found.
-func FileForPage(pid page.PageID) int {
-	return int(pid) / pagesPerSegment
+func FileForPage(pid page.PageID) uint32 {
+	return pid / pagesPerSegment
 }
 
 // PageRangeForFile takes a segment ID and returns the beginning and ending page ID's
 // that the segment with the provided ID should contain.
-func PageRangeForFile(sid int) (int, int) {
+func PageRangeForFile(sid uint32) (uint32, uint32) {
 	return pagesPerSegment * sid, (pagesPerSegment * sid) + pagesPerSegment - 1
 }
 
 // FileSegment is an in memory index of a current segment.
 type FileSegment struct {
-	ID       int
+	ID       uint32
 	Name     string
 	FirstPID page.PageID
 	LastPID  page.PageID
 	Size     int64
 	Index    *BitsetIndex
+	Cursor   int64
 }
 
-// NewFileSegment creates and returns a new *FileSegment struct
-func NewFileSegment(path string, id int) *FileSegment {
-	// get the base filename
-	base := filepath.Base(path)
-	// get the id from the current name
-	// if strings.Contains(base, currentSegment) || id < 0 {
-	// 	id = 0
-	// }
-	// get the page boundaries
-	first, last := PageRangeForFile(id)
-	// create and return new *FileSegment instance.
-	return &FileSegment{
-		ID:       GetIDFromFileName(base),
-		Name:     path,
-		FirstPID: page.PageID(first),
-		LastPID:  page.PageID(last),
-		Index:    NewBitsetIndex(),
+// LoadFileSegment opens the named FileSegment. If it can find a matching index current
+// on disk the on disk index will be loaded directly from current. Otherwise, it will
+// build the index by reading from data current segment directly. If the named data current
+// segment does not  exist, an error will be returned.
+func LoadFileSegment(path string) (*FileSegment, error) {
+	// Check to make sure path exists before continuing
+	fi, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil, err
 	}
+	// Get the file segment size for later
+	size := fi.Size()
+	// Get the file segment id from the file name
+	id := GetIDFromFileName(filepath.Base(path))
+	// Find the PageID boundaries
+	first, last := PageRangeForFile(id)
+	// Create a new FileSegment instance.
+	fs := &FileSegment{
+		ID:       id,
+		Name:     path,
+		FirstPID: first,
+		LastPID:  last,
+		Size:     size,
+		Index:    nil,
+	}
+	// load current segment index
+	err = fs.LoadIndex()
+	if err != nil {
+		return nil, err
+	}
+	// we are finished
+	return fs, nil
 }
 
 // LoadIndex checks to see if it can find a matching index current on disk, if it finds
@@ -162,25 +180,10 @@ func (fs *FileSegment) WriteIndex() error {
 	return fs.Index.WriteFile(indexName)
 }
 
-// OpenFileSegment opens the named FileSegment. If it can find a matching index current
-// on disk the on disk index will be loaded directly from current. Otherwise, it will
-// build the index by reading from data current segment directly. If the named data current
-// segment does not  exist, an error will be returned.
-func OpenFileSegment(path string) (*FileSegment, error) {
-	// check to make sure path exists before continuing
-	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return nil, err
-	}
-	// get the file segment id from the file name
-	id := GetIDFromFileName(filepath.Base(path))
-	// create a new FileSegment instance.
-	fs := NewFileSegment(path, id)
-	// load current segment index
-	err = fs.LoadIndex()
-	if err != nil {
-		return nil, err
-	}
-	// we are finished
-	return fs, nil
+// PageOffset returns the next page offset for writing. It will attempt to use any
+// free space that has been deallocated first. Otherwise, sequential access is used.
+func (fs *FileSegment) PageOffset() uint32 {
+	// First, we will get the population count for the amount of pages that are
+	// being used in this file segment.
+	return 0
 }

@@ -3,7 +3,6 @@ package dbms
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -12,6 +11,8 @@ import (
 	"github.com/cagnosolutions/go-data/pkg/dbms/errs"
 	"github.com/cagnosolutions/go-data/pkg/dbms/page"
 )
+
+type SegmentID uint32
 
 type FileSegments []FileSegment
 
@@ -30,117 +31,122 @@ func (fs FileSegments) Swap(i, j int) {
 // FileManager is a structure responsible for creating and managing files and segments
 // on disk. A current manager instance is only responsible for one namespace at a time.
 type FileManager struct {
-	latch      sync.Mutex
-	namespace  string
-	file       *os.File
-	nextPageID page.PageID
-	segments   FileSegments
-	current    *FileSegment
-	size       int64
-	maxSize    int64
+	latch     sync.Mutex
+	namespace string
+	file      *os.File
+	nextPID   uint32
+	nextSID   uint32
+	segments  FileSegments
+	current   *FileSegment
+	size      int64
+	maxSize   int64
 }
 
 // OpenFileManager opens an existing current manager instance if one exists with the same
 // namespace otherwise it creates a new instance and returns it along with any potential
 // errors encountered.
 func OpenFileManager(namespace string) (*FileManager, error) {
-	// clean namespace path
+	// Clean namespace path
 	path, err := disk.PathCleanAndTrimSuffix(namespace)
 	if err != nil {
 		return nil, err
 	}
+	// Create any directories that may not exist
 	err = os.MkdirAll(path, 0644)
 	if err != nil {
 		return nil, err
 	}
-	// // open the current file segment
-	// fd, err := disk.FileOpenOrCreate(filepath.Join(path, currentSegment))
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// // get the size of the current file segment
-	// fi, err := os.Stat(fd.Name())
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// size := fi.Size()
-	// initialize a new *FileManager instance
-	m := &FileManager{
+	// Initialize a new *FileManager instance
+	f := &FileManager{
 		namespace: path,
-		// file:       fd,
-		// nextPageID: page.PageID(size / page.PageSize),
-		segments: make(FileSegments, 0),
-		current:  nil,
-		// size:       size,
-		maxSize: maxSegmentSize,
+		nextPID:   0,
+		nextSID:   1,
+		segments:  make(FileSegments, 0),
+		current:   nil,
+		maxSize:   maxSegmentSize,
 	}
-	// populate the FileSegment set
-	err = m.LoadFileSegments()
+	// Load the segments list along with their indexes
+	err = f.LoadFileSegments()
 	if err != nil {
 		return nil, err
 	}
-	m.nextPageID = page.PageID(m.segments[len(m.segments)-1].Index.GetFree())
-	// finished, return current manager instance
-	return m, nil
+	// Finished, return *FileManager instance
+	return f, nil
 }
 
 // LoadFileSegments walks the base namespace directory and attempts to populate
 // the FileManager's segment current set with all the necessary current segment and
 // current segment index data.
 func (f *FileManager) LoadFileSegments() error {
-	// read the directory
+	// Enable the latch, while we load
+	f.latch.Lock()
+	defer f.latch.Unlock()
+	// Read the file listing in the namespace directory
 	files, err := os.ReadDir(f.namespace)
 	if err != nil {
 		return err
 	}
-	// handle case where we are just starting out
-	if len(files) == 0 {
-		// create our initial file
-		fd, err := disk.FileOpenOrCreate(filepath.Join(f.namespace, MakeFileNameFromID(0)))
-		if err != nil {
-			return err
-		}
-		// don't forget to close
-		defer func(fd *os.File) {
-			err := fd.Close()
-			if err != nil {
-				panic(err)
-			}
-		}(fd)
-		// create a new current segment, and return
-		f.current = NewFileSegment(f.namespace, 0)
-		return nil
-	}
-	// range the files in the base namespace directory
+	// Iterate over the directory listing, and only act on the segment files
 	for _, file := range files {
-		// skip any directories or non-segment files
+		// Skip non segment files
 		if file.IsDir() || !strings.HasSuffix(file.Name(), segmentSuffix) {
 			continue
 		}
-		// handle loading a segment
-		if strings.HasSuffix(file.Name(), segmentSuffix) {
-			fs, err := OpenFileSegment(filepath.Join(f.namespace, file.Name()))
-			if err != nil {
-				return err
-			}
-			f.segments = append(f.segments, *fs)
+		// Attempt to load the segment file
+		segment, err := LoadFileSegment(filepath.Join(f.namespace, file.Name()))
+		if err != nil {
+			return err
 		}
+		// Add file segment to our segments list
+		f.segments = append(f.segments, *segment)
 	}
-	// check to see if we need to add any
+	// Check the segment file list; if none were found, initialize a new one.
 	if len(f.segments) == 0 {
-		// create a new current segment, and return
-		f.current = NewFileSegment(f.namespace, 0)
-		return nil
+		// No segments were found; initialize a new one.
+		segment, err := f.MakeFileSegment(f.nextSID)
+		if err != nil {
+			return err
+		}
+		// New file segment has been created successfully; add to our segments list.
+		f.segments = append(f.segments, *segment)
 	}
-	// sort them by id
-	sort.Stable(f.segments)
-	// set the current file
+	// Now, we update the current segment pointer to point to the tail segment.
 	f.current = &f.segments[len(f.segments)-1]
-	f.file, err = disk.FileOpenOrCreate(f.current.Name)
-	if err != nil {
-		return err
-	}
+	// Next, we must update the nextPID, and nextSID
+	f.nextPID = f.current.PageOffset()
+	f.nextSID = f.current.ID
 	return nil
+}
+
+func (f *FileManager) LoadFileSegment(path string) (*FileSegment, error) {
+	return nil, nil
+}
+
+// MakeFileSegment takes an ID and uses it to create and return a new *FileSegment
+func (f *FileManager) MakeFileSegment(id uint32) (*FileSegment, error) {
+	// Create the filename
+	name := filepath.Join(f.namespace, MakeFileNameFromID(id))
+	// Create a new file for this file segment
+	fd, err := os.Create(name)
+	if err != nil {
+		return nil, err
+	}
+	// Don't forget to close!
+	err = fd.Close()
+	if err != nil {
+		return nil, err
+	}
+	// Get the page boundaries
+	first, last := PageRangeForFile(id)
+	// Create and return new *FileSegment
+	fs := &FileSegment{
+		ID:       id,
+		Name:     name,
+		FirstPID: first,
+		LastPID:  last,
+		Index:    NewBitsetIndex(),
+	}
+	return fs, nil
 }
 
 // CheckSpace takes a segment ID and checks to make sure there is room in the matching
@@ -188,7 +194,7 @@ func (f *FileManager) LoadFileSegments() error {
 // AllocatePage simply returns the next logical page ID that is can be written to.
 func (f *FileManager) AllocatePage() page.PageID {
 	// increment and return the next PageID
-	return atomic.SwapUint32(&f.nextPageID, f.nextPageID+1)
+	return atomic.SwapUint32(&f.nextPID, f.current.PageOffset())
 }
 
 // DeallocatePage writes zeros to the page located at the logical address
@@ -200,7 +206,7 @@ func (f *FileManager) DeallocatePage(pid page.PageID) error {
 	if f.current.ID != id {
 		// The provided pid does not match the current file segment, so we must try
 		// to locate and load the correct one.
-		if len(f.segments) > id {
+		if len(f.segments) > int(id) {
 			// The file segment that would match up with the proper ID does not exist,
 			// so we should now return an error
 			return errs.ErrSegmentNotFound
@@ -253,7 +259,7 @@ func (f *FileManager) ReadPage(pid page.PageID, p page.Page) error {
 	if f.current.ID != id {
 		// The provided pid does not match the current file segment, so we must try
 		// to locate and load the correct one.
-		if len(f.segments) > id {
+		if len(f.segments) > int(id) {
 			// The file segment that would match up with the proper ID does not exist,
 			// so we should now return an error
 			return errs.ErrSegmentNotFound
@@ -294,7 +300,7 @@ func (f *FileManager) WritePage(pid page.PageID, p page.Page) error {
 	if f.current.ID != id {
 		// The provided pid does not match the current file segment, so we must try
 		// to locate and load the correct one.
-		if len(f.segments) > id {
+		if len(f.segments) > int(id) {
 			// The file segment that would match up with the proper ID does not exist,
 			// so we should now return an error
 			return errs.ErrSegmentNotFound
