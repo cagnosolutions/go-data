@@ -81,14 +81,14 @@ func NewFileSegment(path string, id int) *FileSegment {
 	// get the base filename
 	base := filepath.Base(path)
 	// get the id from the current name
-	if strings.Contains(base, currentSegment) || id < 0 {
-		id = 0
-	}
+	// if strings.Contains(base, currentSegment) || id < 0 {
+	// 	id = 0
+	// }
 	// get the page boundaries
 	first, last := PageRangeForFile(id)
 	// create and return new *FileSegment instance.
 	return &FileSegment{
-		ID:       id,
+		ID:       GetIDFromFileName(base),
 		Name:     path,
 		FirstPID: page.PageID(first),
 		LastPID:  page.PageID(last),

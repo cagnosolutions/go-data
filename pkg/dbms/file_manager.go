@@ -49,32 +49,37 @@ func OpenFileManager(namespace string) (*FileManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	// open the current file segment
-	fd, err := disk.FileOpenOrCreate(filepath.Join(path, currentSegment))
+	err = os.MkdirAll(path, 0644)
 	if err != nil {
 		return nil, err
 	}
-	// get the size of the current file segment
-	fi, err := os.Stat(fd.Name())
-	if err != nil {
-		return nil, err
-	}
-	size := fi.Size()
+	// // open the current file segment
+	// fd, err := disk.FileOpenOrCreate(filepath.Join(path, currentSegment))
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// // get the size of the current file segment
+	// fi, err := os.Stat(fd.Name())
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// size := fi.Size()
 	// initialize a new *FileManager instance
 	m := &FileManager{
-		namespace:  path,
-		file:       fd,
-		nextPageID: page.PageID(size / page.PageSize),
-		segments:   make(FileSegments, 0),
-		current:    nil,
-		size:       size,
-		maxSize:    maxSegmentSize,
+		namespace: path,
+		// file:       fd,
+		// nextPageID: page.PageID(size / page.PageSize),
+		segments: make(FileSegments, 0),
+		current:  nil,
+		// size:       size,
+		maxSize: maxSegmentSize,
 	}
 	// populate the FileSegment set
 	err = m.LoadFileSegments()
 	if err != nil {
 		return nil, err
 	}
+	m.nextPageID = page.PageID(m.segments[len(m.segments)-1].Index.GetFree())
 	// finished, return current manager instance
 	return m, nil
 }
@@ -87,6 +92,24 @@ func (f *FileManager) LoadFileSegments() error {
 	files, err := os.ReadDir(f.namespace)
 	if err != nil {
 		return err
+	}
+	// handle case where we are just starting out
+	if len(files) == 0 {
+		// create our initial file
+		fd, err := disk.FileOpenOrCreate(filepath.Join(f.namespace, MakeFileNameFromID(0)))
+		if err != nil {
+			return err
+		}
+		// don't forget to close
+		defer func(fd *os.File) {
+			err := fd.Close()
+			if err != nil {
+				panic(err)
+			}
+		}(fd)
+		// create a new current segment, and return
+		f.current = NewFileSegment(f.namespace, 0)
+		return nil
 	}
 	// range the files in the base namespace directory
 	for _, file := range files {
@@ -111,6 +134,12 @@ func (f *FileManager) LoadFileSegments() error {
 	}
 	// sort them by id
 	sort.Stable(f.segments)
+	// set the current file
+	f.current = &f.segments[len(f.segments)-1]
+	f.file, err = disk.FileOpenOrCreate(f.current.Name)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
