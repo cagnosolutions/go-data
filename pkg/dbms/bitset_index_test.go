@@ -120,7 +120,7 @@ func BenchmarkBitsetIndex_GetFree0(b *testing.B) {
 	}
 }
 
-func BenchmarkBitsetIndex_GetFree1(b *testing.B) {
+func BenchmarkBitsetIndex_GetFree(b *testing.B) {
 	bs := NewBitsetIndex()
 	// for i := 0; i < 16; i++ {
 	// 	(*bs)[i] = ^uint64(0)
@@ -132,24 +132,6 @@ func BenchmarkBitsetIndex_GetFree1(b *testing.B) {
 	// fmt.Println(bs)
 	for i := 0; i < b.N; i++ {
 		free := bs.GetFree()
-		if free != 1023 {
-			b.Error("did not find the correct free bit")
-		}
-	}
-}
-
-func BenchmarkBitsetIndex_GetFree2(b *testing.B) {
-	bs := NewBitsetIndex()
-	// for i := 0; i < 16; i++ {
-	// 	(*bs)[i] = ^uint64(0)
-	// }
-	for i := uint(0); i < 1024; i++ {
-		bs.SetBit(i)
-	}
-	bs.UnsetBit(1023)
-	// fmt.Println(bs)
-	for i := 0; i < b.N; i++ {
-		free := bs.GetFree2()
 		if free != 1023 {
 			b.Error("did not find the correct free bit")
 		}
@@ -211,6 +193,87 @@ func TestBitsetIndex_PageOffsetAfter(t *testing.T) {
 	fmt.Printf("page offset after %d is %d\n", after, n)
 	after = n
 
+}
+
+func BenchmarkBitsetIndex_GetBit(b *testing.B) {
+	bs := NewBitsetIndex()
+	bs.SetAll()
+	b.ResetTimer()
+	var bit uint64
+	for i := 0; i < b.N; i++ {
+		for j := uint(0); j < 1024; j++ {
+			bit = bs.GetBit(j)
+			fmt.Println(bit)
+			if bit == 0 {
+				b.Error("something happened")
+			}
+		}
+	}
+	_ = bit
+}
+
+func BenchmarkBitsetIndex_FindBit(b *testing.B) {
+	bs := NewBitsetIndex()
+	bs.SetAll()
+	b.ResetTimer()
+	var slot, index uint64
+	for i := 0; i < b.N; i++ {
+		for j := uint(0); j < 1024; j++ {
+			bit := bs.FindBit(j)
+			_ = bit
+			// fmt.Printf("slot=%d, index=%d\n", slot, index)
+		}
+	}
+	_ = slot
+	_ = index
+}
+
+func BenchmarkBitsetIndex_Range(b *testing.B) {
+	bs := NewBitsetIndex()
+	bs.SetAll()
+	var count int
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		bs.Range(
+			64, 512, func(index int, bit uint64) bool {
+				if bit == 0 {
+					count = 1
+					return false
+				}
+				return true
+			},
+		)
+		if count != 0 {
+			b.Error("something went wrong")
+		}
+		count = 0
+	}
+	_ = count
+}
+
+func TestBitsetIndex_Loop(t *testing.T) {
+	bs := NewBitsetIndex()
+	bs.SetAll()
+	fmt.Println(bs)
+	bs.UnsetBit(65)
+	bs.UnsetBit(129)
+	bs.UnsetBit(257)
+	bs.UnsetBit(385)
+	bs.Range(
+		64, 512, func(index int, bit uint64) bool {
+			fmt.Printf(">>> bit[%d]=%d\n", index, bit)
+			return true
+		},
+	)
+
+	// for i := beg; i < end; i++ {
+	// 	fmt.Printf("beg=%d, end=%d, find=%d, mask=%d, i=%d\n", beg, end, find, mask, i)
+	// 	if bs[i] > 0 {
+	// 		find |= mask
+	// 	}
+	// 	mask <<= 1
+	// }
 }
 
 func TestBitsetIndex_Info(t *testing.T) {

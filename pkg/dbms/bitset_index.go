@@ -13,47 +13,57 @@ const (
 	bitsetWS   = 64
 	bitsetL2   = 6
 	bitsetSize = 16
+	allOn      = 0xffffffffffffffff
+	allOff     = 0x0000000000000000
 )
 
+// BitsetIndex is a fixed sized bitset index structure
 type BitsetIndex [bitsetSize]uint64
 
+// NewBitsetIndex returns a new *BitsetIndex
 func NewBitsetIndex() *BitsetIndex {
 	return new(BitsetIndex)
 }
 
-// (n >> i) & 1
-// (1 << (i & (bitsetWS - 1)))
-
+// HasBit returns a boolean indicating true if the bit at the provided
+// index is "on" and false in the bit at the provided index is "off"
 func (b *BitsetIndex) HasBit(i uint) bool {
 	return ((*b)[i>>bitsetL2] & (1 << (i & (bitsetWS - 1)))) != 0
 }
 
+// SetBit turns the bit at the provided index on
 func (b *BitsetIndex) SetBit(i uint) {
 	(*b)[i>>bitsetL2] |= 1 << (i & (bitsetWS - 1))
 }
 
+// GetBit returns the value of the bit at the provided index
 func (b *BitsetIndex) GetBit(i uint) uint64 {
 	return (*b)[i>>bitsetL2] & (1 << (i & (bitsetWS - 1)))
 }
 
+// i - ((i / bitsetWS) * bitsetWS)
+
+// UnsetBit turns off the bit at the provided index
 func (b *BitsetIndex) UnsetBit(i uint) {
 	(*b)[i>>bitsetL2] &^= 1 << (i & (bitsetWS - 1))
 }
 
-func (b *BitsetIndex) GetFree() int {
-	for j, n := range b {
-		if n < ^uint64(0) {
-			for bit := uint(j * bitsetWS); bit < uint((j*bitsetWS)+bitsetWS); bit++ {
-				if !b.HasBit(bit) {
-					return int(bit)
-				}
-			}
-		}
+// SetAll turns all the bits on
+func (b *BitsetIndex) SetAll() {
+	for i := range b {
+		(*b)[i] |= allOn
 	}
-	return -1
 }
 
-func (b *BitsetIndex) GetFree2() int {
+// Clear clears all the bits
+func (b *BitsetIndex) Clear() {
+	for i := range b {
+		(*b)[i] |= allOff
+	}
+}
+
+// GetFree locates and returns the first free bit index set to 0
+func (b *BitsetIndex) GetFree() int {
 	for j, n := range b {
 		if n < ^uint64(0) {
 			for i := 0; i < bitsetWS; i++ {
@@ -67,21 +77,33 @@ func (b *BitsetIndex) GetFree2() int {
 	return -1
 }
 
-// BitsetIndexInfo contains information about the index, such as the number of
-// pages that are currently in use, the number of trailing pages not in use,
-// the next unused page offset, and the percent full number (between 0 and 100)
-type BitsetIndexInfo struct {
-	PagesInUse            int
-	TrailingPagesNotInUse int
-	NextUnusedPageOffset  int
-	PercentFull           int
+// FindWord returns the index of where the word for the i'th bit can be found
+func (b *BitsetIndex) FindWord(i uint) uint {
+	return i >> bitsetL2
 }
 
-func (bi *BitsetIndexInfo) String() string {
-	return fmt.Sprintf(
-		"PagesInUse=%d\nTrailingPagesNotInUse=%d\nNextUnusedPageOffset=%d\nPercentFull=%d\n",
-		bi.PagesInUse, bi.TrailingPagesNotInUse, bi.NextUnusedPageOffset, bi.PercentFull,
-	)
+// BitInWord takes a word index, and returns the index of where the i'th bit
+// can be found within the word
+func (b *BitsetIndex) BitInWord(w, i uint) uint {
+	return i ^ (w << bitsetL2)
+}
+
+func (b *BitsetIndex) FindBit(i uint) uint {
+	return i ^ ((i >> bitsetL2) << bitsetL2)
+}
+
+// Range is a function for ranging the bitset index
+func (b *BitsetIndex) Range(beg, end int, fn func(idx int, bit uint64) bool) {
+	for i := beg >> bitsetL2; i < end>>bitsetL2; i++ {
+		word := (*b)[i] // word in bit set
+		for j := beg - bitsetWS; j < bitsetWS; j++ {
+			idx := (i << bitsetL2) ^ j // index of bit
+			bit := (word >> j) & 1     // value of bit
+			if !fn(idx, bit) {
+				break
+			}
+		}
+	}
 }
 
 // Info returns a new BitsetIndexInfo struct containing the number of pages that
@@ -130,6 +152,8 @@ func (b *BitsetIndex) Info() *BitsetIndexInfo {
 	return bi
 }
 
+// ReadFile reads the named file and attempts to populate the bitset
+// index from the file data
 func (b *BitsetIndex) ReadFile(name string) error {
 	// error checking
 	if b == nil {
@@ -150,6 +174,7 @@ func (b *BitsetIndex) ReadFile(name string) error {
 	return err
 }
 
+// WriteFile writes the bitset index to the named file
 func (b *BitsetIndex) WriteFile(name string) error {
 	// error checking
 	if b == nil {
@@ -172,21 +197,9 @@ func (b *BitsetIndex) WriteFile(name string) error {
 	return nil
 }
 
-// Clear clears all the bits
-func (b *BitsetIndex) Clear() {
-	for i := range b {
-		(*b)[i] = 0
-	}
-}
-
 // Bits returns the number of bits the bitset index can hold
 func (b *BitsetIndex) Bits() int {
 	return bitsetSize * bitsetWS
-}
-
-func (b *BitsetIndex) String() string {
-	resstr := strconv.Itoa(64)
-	return fmt.Sprintf("%."+resstr+"b (%d bits)", *b, 64*len(*b))
 }
 
 // PageOffsetAfter takes id and returns the next page offset after the page
@@ -206,4 +219,27 @@ func (b *BitsetIndex) PageOffsetAfter(id int) int {
 		}
 	}
 	return -1
+}
+
+// String is our string method
+func (b *BitsetIndex) String() string {
+	resstr := strconv.Itoa(64)
+	return fmt.Sprintf("%."+resstr+"b (%d bits)", *b, 64*len(*b))
+}
+
+// BitsetIndexInfo contains information about the index, such as the number of
+// pages that are currently in use, the number of trailing pages not in use,
+// the next unused page offset, and the percent full number (between 0 and 100)
+type BitsetIndexInfo struct {
+	PagesInUse            int
+	TrailingPagesNotInUse int
+	NextUnusedPageOffset  int
+	PercentFull           int
+}
+
+func (bi *BitsetIndexInfo) String() string {
+	return fmt.Sprintf(
+		"PagesInUse=%d\nTrailingPagesNotInUse=%d\nNextUnusedPageOffset=%d\nPercentFull=%d\n",
+		bi.PagesInUse, bi.TrailingPagesNotInUse, bi.NextUnusedPageOffset, bi.PercentFull,
+	)
 }
