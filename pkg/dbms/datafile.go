@@ -173,6 +173,14 @@ func OpenDataFile(namespace string, id uint32) (*DataFile, error) {
 		DataFileHeader: new(DataFileHeader),
 		fp:             fp,
 	}
+	// Fill out some header information out in case this is our first
+	// go around, it doesn't really matter since the header will be
+	// overwritten anyway if there is already a header that exists.
+	df.FileID = id
+	copy(df.Namespace[:], namespace)
+	copy(df.FileName[:], makeFileName(id))
+	df.NextPage = 1
+	df.Index = *new(bitset)
 	// Load our file header, and index and then return
 	err = df.load()
 	if err != nil {
@@ -193,15 +201,10 @@ func (df *DataFile) load() error {
 		return err
 	}
 	if fi.Size() == 0 {
-		// This is a brand-new file, there is no header to load yet. Update
-		// the header information manually, and actually write file header
-		// so next time we go to open the file, there is something to read.
-		df.FileID = getFileID(filepath.Base(df.fp.Name()))
-		copy(df.Namespace[:], filepath.Dir(df.fp.Name())[:lenNamespace])
-		copy(df.FileName[:], filepath.Base(df.fp.Name())[:lenFileName])
-		df.NextPage = 1
-		df.Index = *new(bitset)
-		// Write the header
+		// This is a brand-new file, there is no header to load yet. We
+		// already have some initial values for the header that we set in
+		// the caller, so we can simply write the header so next time we
+		// go to open the file, there is something to read.
 		err = WriteDataFileHeader(df.fp, df.DataFileHeader)
 		if err != nil {
 			return err
