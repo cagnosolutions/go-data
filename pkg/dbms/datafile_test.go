@@ -1,7 +1,10 @@
 package dbms
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"os"
@@ -9,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/cagnosolutions/go-data/pkg/util"
 )
 
 func TestDataFile_All(t *testing.T) {
@@ -155,4 +160,228 @@ func TestDataFile_Namespace(t *testing.T) {
 			t.Error(err)
 		}
 	}(ns)
+}
+
+// map index: (index: map[int]bitset) - meta struct in bytes: 8754 (64 indexes)
+// segment index: (index: []segment) - meta struct in bytes: 8898 (64 indexes)
+// bitset index: (index: []bitmap) - meta struct in bytes: 8258 (64 indexes)
+func TestMeta_All(t *testing.T) {
+	fmt.Println(">>>", util.Sizeof(Meta{}))
+	m, err := NewMeta("data/db", "users")
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(m)
+}
+
+// type segment struct {
+// 	id        uint16 // segment list
+// 	begOffset uint32 //
+// 	endOffset uint32
+// 	index     [16]uint64
+// }
+
+const (
+	maxBaseLen     = 72
+	maxNameLen     = 24
+	metaHeaderSize = 256
+)
+
+var (
+	ErrBasePathTooLong = fmt.Errorf("base is too long, max size id %d bytes", maxBaseLen)
+	ErrNameTooLong     = fmt.Errorf("name is too long, max size is %d bytes", maxNameLen)
+)
+
+type Meta struct {
+	base       [maxBaseLen]byte // base path
+	name       [maxNameLen]byte // namespace
+	fstSegment uint16           // first segment
+	lstSegment uint16           // last segment
+	nxtSegment uint16           // next segment
+	nxtOffset  uint32           // next page offset
+	pad1       uint64
+	pad2       uint64
+	pad3       uint32
+	pad4       uint16
+	index      bitset // index of the most current segment
+}
+
+func NewMeta(base, name string) (*Meta, error) {
+	// Check the base and name length and return error if necessary
+	if len(base) > maxBaseLen {
+		return nil, ErrBasePathTooLong
+	}
+	if len(name) > maxNameLen {
+		return nil, ErrNameTooLong
+	}
+	// Add name to base to make complete path
+	path := filepath.Join(base, name)
+	// Strip of any suffixes (if there are any) from the path
+	path = strings.Replace(path, filepath.Ext(path), "", -1)
+	// And, finally clean the path
+	path, err := filepath.Abs(filepath.ToSlash(path))
+	if err != nil {
+		log.Panicf("cleaning path: %s\n", err)
+	}
+	// Create a new Meta instance we can return later
+	m := &Meta{
+		fstSegment: 0,
+		lstSegment: 0,
+		nxtSegment: 1,
+		nxtOffset:  0,
+	}
+	copy(m.base[:], base)
+	copy(m.name[:], name)
+	// Set up our filenames and file pointers for later
+	fileName := filepath.Join(path, metaFile)
+	var fd *os.File
+	// Check to see if we need to create the files
+	_, err = os.Stat(fileName)
+	if os.IsNotExist(err) {
+		// Touch any directories and/or file
+		err = os.MkdirAll(path, os.ModeDir|dataFilePerm)
+		if err != nil {
+			return nil, err
+		}
+		// Open our file
+		fd, err = os.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, dataFilePerm)
+		if err != nil {
+			return nil, err
+		}
+		// Write our data
+		_, err = m.WriteTo(fd)
+		if err != nil {
+			return nil, err
+		}
+		// Sync the data
+		err = fd.Sync()
+		if err != nil {
+			return nil, err
+		}
+		// Close our file
+		err = fd.Close()
+		if err != nil {
+			return nil, err
+		}
+		// And now, we can return our meta struct
+		return m, nil
+	}
+	// Open our file
+	fd, err = os.OpenFile(fileName, os.O_RDWR|os.O_SYNC, dataFilePerm)
+	if err != nil {
+		return nil, err
+	}
+	// Read our data
+	_, err = m.ReadFrom(fd)
+	if err != nil {
+		return nil, err
+	}
+	// Close our file
+	err = fd.Close()
+	if err != nil {
+		return nil, err
+	}
+	// And now, we can return our meta struct
+	return m, nil
+}
+
+func (m *Meta) WriteTo(w io.Writer) (int64, error) {
+	if m == nil {
+		return -1, os.ErrInvalid
+	}
+	b := make([]byte, metaHeaderSize)
+	var n int64
+	copy(b[n:n+maxBaseLen], m.base[:])
+	n += maxBaseLen
+	copy(b[n:n+maxNameLen], m.name[:])
+	n += maxNameLen
+	binary.LittleEndian.PutUint16(b[n:n+2], m.fstSegment)
+	n += 2
+	binary.LittleEndian.PutUint16(b[n:n+2], m.lstSegment)
+	n += 2
+	binary.LittleEndian.PutUint16(b[n:n+2], m.nxtSegment)
+	n += 2
+	binary.LittleEndian.PutUint32(b[n:n+4], m.nxtOffset)
+	n += 4
+	binary.LittleEndian.PutUint64(b[n:n+8], m.pad1)
+	n += 8
+	binary.LittleEndian.PutUint64(b[n:n+8], m.pad2)
+	n += 8
+	binary.LittleEndian.PutUint32(b[n:n+4], m.pad3)
+	n += 4
+	binary.LittleEndian.PutUint16(b[n:n+2], m.pad4)
+	n += 2
+	for i := range m.index {
+		binary.LittleEndian.PutUint64(b[n:n+8], m.index[i])
+		n += 8
+	}
+	wrote, err := w.Write(b)
+	if err != nil {
+		return int64(wrote), err
+	}
+	if n != int64(wrote) {
+		return n, io.ErrShortWrite
+	}
+	return n, nil
+}
+
+func (m *Meta) ReadFrom(r io.Reader) (int64, error) {
+	if m == nil {
+		return -1, os.ErrInvalid
+	}
+	b := make([]byte, metaHeaderSize)
+	read, err := r.Read(b)
+	if err != nil {
+		return int64(read), err
+	}
+	var n int64
+	copy(b[n:n+maxBaseLen], m.base[:])
+	n += maxBaseLen
+	copy(b[n:n+maxNameLen], m.name[:])
+	n += maxNameLen
+	m.fstSegment = binary.LittleEndian.Uint16(b[n : n+2])
+	n += 2
+	m.lstSegment = binary.LittleEndian.Uint16(b[n : n+2])
+	n += 2
+	m.nxtSegment = binary.LittleEndian.Uint16(b[n : n+2])
+	n += 2
+	m.nxtOffset = binary.LittleEndian.Uint32(b[n : n+4])
+	n += 4
+	m.pad1 = binary.LittleEndian.Uint64(b[n : n+8])
+	n += 8
+	m.pad2 = binary.LittleEndian.Uint64(b[n : n+8])
+	n += 8
+	m.pad3 = binary.LittleEndian.Uint32(b[n : n+4])
+	n += 4
+	m.pad4 = binary.LittleEndian.Uint16(b[n : n+2])
+	n += 2
+	for i := range m.index {
+		m.index[i] = binary.LittleEndian.Uint64(b[n : n+8])
+		n += 8
+	}
+	if n != int64(read) {
+		return n, io.ErrShortBuffer
+	}
+	return n, nil
+}
+
+func (m *Meta) String() string {
+	s1 := string(m.base[:bytes.IndexByte(m.base[:], 0x00)])
+	s2 := string(m.name[:bytes.IndexByte(m.name[:], 0x00)])
+	ss := fmt.Sprintf("metadata:\n")
+	ss += fmt.Sprintf("  base:\t\t\t\t%q\n", s1)
+	ss += fmt.Sprintf("  name:\t\t\t\t%q\n", s2)
+	ss += fmt.Sprintf("  first-segment:\t0x%.4x\n", m.fstSegment)
+	ss += fmt.Sprintf("  last segment:\t\t0x%.4x\n", m.lstSegment)
+	ss += fmt.Sprintf("  next segment:\t\t0x%.4x\n", m.nxtSegment)
+	ss += fmt.Sprintf("  next offset:\t\t0x%.8x\n", m.nxtOffset)
+	ss += fmt.Sprintf("  padding 1:\t\t0x%.16x\n", m.pad1)
+	ss += fmt.Sprintf("  padding 2:\t\t0x%.16x\n", m.pad2)
+	ss += fmt.Sprintf("  padding 3:\t\t0x%.8x\n", m.pad3)
+	ss += fmt.Sprintf("  padding 4:\t\t0x%.4x\n", m.pad4)
+	ss += fmt.Sprintf("  index:\n")
+	for i := range m.index {
+		ss += fmt.Sprintf("    extent[%.2d]=%.64b\n", i, m.index[i])
+	}
+	return ss
 }
