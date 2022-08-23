@@ -1,15 +1,9 @@
 #!/usr/bin/env bash
 
-# create table reference: https://www.sqlite.org/lang_createtable.html
-# ---
-# CREATE TABLE [IF NOT EXISTS] [schema_name].table_name (
-#	    column_1 data_type PRIMARY KEY,
-#   	column_2 data_type NOT NULL,
-#	    column_3 data_type DEFAULT 0,
-#	    table_constraints
-#) [WITHOUT ROWID];
-
+# database file name
 db="sqlite3-data.db"
+
+# create users table and indexes
 read -r -d '' create_users << EOF
 CREATE TABLE IF NOT EXISTS user (\n
 \tid INTEGER PRIMARY KEY,\n
@@ -17,8 +11,10 @@ CREATE TABLE IF NOT EXISTS user (\n
 \tlast_name TEXT NOT NULL,\n
 \temail TEXT NOT NULL UNIQUE\n
 );\n
+CREATE INDEX IF NOT EXISTS 'idx_user_pks' ON 'user' (id);
 EOF
 
+# create address table and indexes
 read -r -d '' create_address << EOF
 CREATE TABLE IF NOT EXISTS address (\n
 \tid INTEGER PRIMARY KEY,\n
@@ -27,8 +23,10 @@ CREATE TABLE IF NOT EXISTS address (\n
 \tstate TEXT NOT NULL,\n
 \tzip TEXT NOT NULL\n
 );\n
+CREATE INDEX IF NOT EXISTS 'idx_address_pks' ON 'address' (id);
 EOF
 
+# create table and indexes
 read -r -d '' create_user_address << EOF
 CREATE TABLE IF NOT EXISTS user_address (\n
   \tuser_id INTEGER,\n
@@ -43,15 +41,20 @@ CREATE TABLE IF NOT EXISTS user_address (\n
       \t\t\tON DELETE CASCADE\n
       \t\t\tON UPDATE NO ACTION\n
 );\n
+CREATE INDEX IF NOT EXISTS 'idx_user_address_pks' ON 'user_address' (user_id, address_id);
 EOF
 
+# actually run the commands to create the tables and indexes
 sqlite3 "$db" "$(echo -en $create_users)"
 sqlite3 "$db" "$(echo -en $create_address)"
 sqlite3 "$db" "$(echo -en $create_user_address)"
-echo "listing tables"
-echo "--------------"
-sqlite3 "$db" .tables
 
-# insert statement
-#sqlite3 "$db" "INSERT INTO $table VALUES ('$fname', '$lname', '$email', '$street', '$city', '$state', '$zip')"
+# import user data into the user table
+sqlite3 "$db" ".mode csv" ".import user_data.csv user" ".exit"
+
+# import address data into the address table
+sqlite3 "$db" ".mode csv" ".import address_data.csv address" ".exit"
+
+# drop the database
+rm "$db"
 
