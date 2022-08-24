@@ -26,24 +26,24 @@ func Trace() string {
 	return fmt.Sprintf("[%s:%d %s]", sfile[len(sfile)-1], line, sname[len(sname)-1])
 }
 
-func BtoKB(b uint64) uint64 {
-	return b / 1024
+func BtoKB(b uint64) float64 {
+	return float64(b) / 1024
 }
 
-func BtoMB(b uint64) uint64 {
-	return b / 1024 / 1024
+func BtoMB(b uint64) float64 {
+	return float64(b) / 1024 / 1024
 }
 
-func BtoGB(b uint64) uint64 {
-	return b / 1024 / 1024 / 1024
+func BtoGB(b uint64) float64 {
+	return float64(b) / 1024 / 1024 / 1024
 }
 
 func PrintStats(mem runtime.MemStats) {
 	runtime.ReadMemStats(&mem)
 	fmt.Printf("\t[MEASURMENT]\t[BYTES]\t\t[KB]\t\t[MB]\t[GC=%d]\n", mem.NumGC)
-	fmt.Printf("\tmem.Alloc:\t\t%d\t%d\t\t%d\n", mem.Alloc, BtoKB(mem.Alloc), BtoMB(mem.Alloc))
-	fmt.Printf("\tmem.TotalAlloc:\t%d\t%d\t\t%d\n", mem.TotalAlloc, BtoKB(mem.TotalAlloc), BtoMB(mem.TotalAlloc))
-	fmt.Printf("\tmem.HeapAlloc:\t%d\t%d\t\t%d\n", mem.HeapAlloc, BtoKB(mem.HeapAlloc), BtoMB(mem.HeapAlloc))
+	fmt.Printf("\tmem.Alloc:\t\t%d\t%.2f\t\t%.2f\n", mem.Alloc, BtoKB(mem.Alloc), BtoMB(mem.Alloc))
+	fmt.Printf("\tmem.TotalAlloc:\t%d\t%.2f\t\t%.2f\n", mem.TotalAlloc, BtoKB(mem.TotalAlloc), BtoMB(mem.TotalAlloc))
+	fmt.Printf("\tmem.HeapAlloc:\t%d\t%.2f\t\t%.2f\n", mem.HeapAlloc, BtoKB(mem.HeapAlloc), BtoMB(mem.HeapAlloc))
 	fmt.Printf("\t-----\n\n")
 }
 
@@ -51,8 +51,8 @@ func PrintStatsTab(mem runtime.MemStats) {
 	runtime.ReadMemStats(&mem)
 	w := new(tabwriter.Writer)
 	w.Init(os.Stdout, 5, 4, 4, ' ', tabwriter.AlignRight)
-	fmt.Fprintln(w, "Alloc\tTotalAlloc\tHeapAlloc\tNumGC\t")
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t\n", mem.Alloc, mem.TotalAlloc, mem.HeapAlloc, mem.NumGC)
+	fmt.Fprintln(w, "Alloc (KB)\tTotalAlloc (KB)\tHeapAlloc (KB)\tNumGC\t")
+	fmt.Fprintf(w, "%.2f\t%.2f\t%.2f\t%v\t\n", BtoKB(mem.Alloc), BtoKB(mem.TotalAlloc), BtoKB(mem.HeapAlloc), mem.NumGC)
 	fmt.Fprintln(w, "-----\t-----\t-----\t-----\t")
 	w.Flush()
 }
