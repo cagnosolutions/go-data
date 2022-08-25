@@ -1,4 +1,4 @@
-package v2
+package engine
 
 import (
 	"encoding/binary"
@@ -16,7 +16,7 @@ import (
 const (
 	FilePrefix               = "dat-"
 	FileSuffix               = ".seg"
-	defaultMaxFileSize int64 = 16 << 10 // 16 KB
+	defaultMaxFileSize int64 = 256 << 10 // 16 KB
 	defaultBasePath          = "log"
 	defaultSyncOnWrite       = false
 	remainingTrigger         = 64

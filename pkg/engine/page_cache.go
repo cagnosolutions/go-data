@@ -292,3 +292,7 @@ func (m *PageCache) Close() error {
 	}
 	return nil
 }
+
+func (m *PageCache) JSON() string {
+	return ""
+}
