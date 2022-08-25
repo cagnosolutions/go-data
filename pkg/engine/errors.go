@@ -5,6 +5,10 @@ import (
 	"fmt"
 )
 
+var ErrPageIDHasNotBeenAllocated = func(pid PageID) error {
+	return fmt.Errorf("page ID has not been allocated yet (pid=%d)", pid)
+}
+
 // page errors
 var (
 	ErrRecordTooSmall = fmt.Errorf("[page] record is too small")

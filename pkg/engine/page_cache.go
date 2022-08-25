@@ -126,8 +126,13 @@ func (m *PageCache) FetchPage(pid PageID) Page {
 	// return a victimized Frame if we need to.
 	fid, err := m.getUsableFrameID()
 	if err != nil {
-		// Something went terribly wrong if this happens.
-		out.Panic("%s", err)
+		// TODO: think about a more graceful way of handling this whole situation
+		// Check the EXACT error
+		if err != ErrUsableFrameNotFound {
+			// Something went terribly wrong if this happens.
+			out.Panic("%s", err)
+		}
+		return nil
 	}
 	// Now, we will swap the Page in from the disk using the FileManager.
 	data := make([]byte, PageSize)
@@ -160,7 +165,7 @@ func (m *PageCache) UnpinPage(pid PageID, isDirty bool) error {
 	// ensure that it can be used as a victim candidate by our replacement policy.
 	pf := m.pool[fid]
 	pf.decrPinCount()
-	if pf.PinCount == 0 {
+	if pf.PinCount <= 0 {
 		// After we decrement the pin count, check to see if it is low enough to
 		// completely unpin it, and if so, unpin it.
 		m.replacer.Unpin(fid)

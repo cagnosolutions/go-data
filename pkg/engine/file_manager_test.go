@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
@@ -80,9 +81,14 @@ func TestFileManager_WritePage(t *testing.T) {
 	if len(pages) != 8 {
 		t.Errorf("write: error did not allocated 8 pages, got %d", len(pages))
 	}
+	fmt.Printf("page id's allocated: %v\n", pages)
 
 	for _, pid := range pages {
 		pg := newPage(pid)
+		_, err = pg.addRecord([]byte(fmt.Sprintf("some data for page #%.4d", pid)))
+		if err != nil {
+			t.Errorf("write: error writing page record: %s", err)
+		}
 		err = fm.WritePage(pid, pg)
 		if err != nil {
 			t.Errorf("write: error writing page: %s", err)
@@ -117,23 +123,30 @@ func TestFileManager_ReadPage(t *testing.T) {
 	if len(pages) != 8 {
 		t.Errorf("read: error did not allocated 8 pages, got %d", len(pages))
 	}
+	fmt.Printf("page id's allocated: %v\n", pages)
 
 	for _, pid := range pages {
-		err = fm.WritePage(pid, newPage(pid))
+		pg := newPage(pid)
+		_, err = pg.addRecord([]byte(fmt.Sprintf("some data for page #%.4d", pid)))
+		if err != nil {
+			t.Errorf("read: error writing page record: %s", err)
+		}
+		err = fm.WritePage(pid, pg)
 		if err != nil {
 			t.Errorf("read: error writing page: %s", err)
 		}
 	}
 
 	for _, pid := range pages {
-		var pg Page
+		pg := newPage(pid)
 		err = fm.ReadPage(pid, pg)
 		if err != nil {
 			t.Errorf("read: error writing page: %s", err)
 		}
 		if pg == nil {
-			t.Errorf("write: page should not be nil")
+			t.Errorf("read: page should not be nil")
 		}
+		fmt.Printf("page header: %+v\n", pg.GetHeader())
 	}
 
 	err = fm.Close()

@@ -83,9 +83,9 @@ func (f *FileManager) load() error {
 // logicalOffset checks for any out of bounds errors, and returns an error if there
 // is one. Otherwise, it takes a page ID and returns a logical page offset.
 func (f *FileManager) logicalOffset(pid PageID) (int64, error) {
-	// Check to see if the requested pid falls within the bounds of our file.
-	if int64(pid*PageSize) > f.size {
-		return -1, ErrPageNotFound
+	// Check to see if the requested pid falls within the set that has been distributed
+	if pid > f.nextPID {
+		return -1, ErrPageIDHasNotBeenAllocated(pid)
 	}
 	// We are good, so we will calculate the logical page offset.
 	return int64(pid * PageSize), nil
