@@ -9,9 +9,9 @@ import (
 
 const dataFilePerm = 1466
 
-// FileManager is a structure responsible for creating and managing access to a file
-// on disk. The current file manager instance is only responsible for dealing with
-// one data file at a time.
+// FileManager is a structure responsible for creating and managing access to a io
+// on io. The current io manager instance is only responsible for dealing with
+// one data io at a time.
 type FileManager struct {
 	sync.RWMutex
 	file    *os.File
@@ -19,7 +19,7 @@ type FileManager struct {
 	size    int64
 }
 
-// OpenFileManager opens an existing file manager instance if one exists with the same
+// OpenFileManager opens an existing io manager instance if one exists with the same
 // name, otherwise it creates a new instance and returns it along with any potential
 // errors encountered.
 func OpenFileManager(path string) (*FileManager, error) {
@@ -45,12 +45,12 @@ func OpenFileManager(path string) (*FileManager, error) {
 			return nil, err
 		}
 	}
-	// Open file at the fully cleaned path
+	// Open io at the fully cleaned path
 	fp, err = os.OpenFile(path, os.O_RDWR|os.O_SYNC, dataFilePerm)
 	if err != nil {
 		return nil, err
 	}
-	// Get the current file size
+	// Get the current io size
 	fi, err := fp.Stat()
 	if err != nil {
 		return nil, err
@@ -164,6 +164,6 @@ func (f *FileManager) WritePage(pid PageID, p Page) error {
 
 // Close closes the current manager instance
 func (f *FileManager) Close() error {
-	// Close the underlying file
+	// Close the underlying io
 	return f.file.Close()
 }

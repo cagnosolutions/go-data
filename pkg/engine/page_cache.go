@@ -1,35 +1,7 @@
 package engine
 
 import (
-	"errors"
 	"sync"
-
-	"github.com/cagnosolutions/go-data/pkg/logging"
-)
-
-var out = logging.NewDefaultLogger()
-
-const (
-	maxSegmentSize     = 16 << 20
-	pagesPerSegment    = maxSegmentSize / PageSize
-	currentSegment     = "dat-current.seg"
-	segmentPrefix      = "dat-"
-	segmentSuffix      = ".seg"
-	segmentIndexSuffix = ".idx"
-	extentSize         = 64 << 10
-)
-
-var (
-	PageSizes = []uint16{
-		4096,  // 4KB
-		8192,  // 8KB
-		16384, // 16KB
-	}
-	PageCounts = []uint16{64, 128, 256, 512}
-)
-
-var (
-	ErrBadPageCount = errors.New("bad page count, must be a multiple of 64 between 64 and 1024")
 )
 
 // PageCache is the access level structure wrapping up the bufferPool, and FileManager,
@@ -38,7 +10,7 @@ type PageCache struct {
 	latch     sync.Mutex
 	pool      []frame            // buffer pool page frames
 	replacer  *ClockReplacer     // page replacement policy structure
-	disk      *FileManager       // underlying current manager
+	io        *FileManager       // underlying current manager
 	freeList  []frameID          // list of frames that are free to use
 	pageTable map[PageID]frameID // table of the current page to frame mappings
 }
@@ -46,10 +18,6 @@ type PageCache struct {
 // OpenPageCache opens an existing storage manager instance if one exists with the same namespace
 // otherwise it creates a new instance and returns it.
 func OpenPageCache(base string, pageCount uint16) (*PageCache, error) {
-	// validate page count
-	if pageCount%64 != 0 || pageCount/64 > 16 {
-		return nil, ErrBadPageCount
-	}
 	// open current manager
 	fm, err := OpenFileManager(base)
 	if err != nil {
@@ -59,7 +27,7 @@ func OpenPageCache(base string, pageCount uint16) (*PageCache, error) {
 	bm := &PageCache{
 		pool:      make([]frame, pageCount, pageCount),
 		replacer:  NewClockReplacer(pageCount),
-		disk:      fm,
+		io:        fm,
 		freeList:  make([]frameID, pageCount),
 		pageTable: make(map[PageID]frameID),
 	}
@@ -91,11 +59,11 @@ func (m *PageCache) NewPage() Page {
 			return nil
 		}
 		// Nope, it's something more sinister... shoot.
-		out.Panic("%s", err)
+		DefaultLogger.Panic("%s", err)
 	}
 	// Allocate (get the next sequential PageID) so we can use it to initialize
 	// the next page we will use.
-	pid := m.disk.AllocatePage()
+	pid := m.io.AllocatePage()
 	// Create a new Frame initialized with our PageID and Page.
 	pf := newFrame(pid, *fid, PageSize)
 	pg := NewPage(pid)
@@ -121,7 +89,7 @@ func (m *PageCache) FetchPage(pid PageID) Page {
 		return pf.Page
 	}
 	// A match was not found in our pageTable, so now we must swap the Page in
-	// from disk. But first, we must get a Frame to hold our Page. We will
+	// from io. But first, we must get a Frame to hold our Page. We will
 	// call on GetUsableFrame to check our freeList, and then potentially move on to
 	// return a victimized Frame if we need to.
 	fid, err := m.getUsableFrameID()
@@ -130,19 +98,19 @@ func (m *PageCache) FetchPage(pid PageID) Page {
 		// Check the EXACT error
 		if err != ErrUsableFrameNotFound {
 			// Something went terribly wrong if this happens.
-			out.Panic("%s", err)
+			DefaultLogger.Panic("%s", err)
 		}
 		return nil
 	}
-	// Now, we will swap the Page in from the disk using the FileManager.
+	// Now, we will swap the Page in from the io using the FileManager.
 	data := make([]byte, PageSize)
-	err = m.disk.ReadPage(pid, data)
+	err = m.io.ReadPage(pid, data)
 	if err != nil {
 		// Something went terribly wrong if this happens.
-		out.Panic("%s", err)
+		DefaultLogger.Panic("%s", err)
 	}
-	// Create a new Frame so we can copy the Page data we just swapped
-	// in from off the disk and add the Frame to the pageTable.
+	// Create a new frame, so we can copy the page data we just swapped
+	// in from off the io and add the Frame to the pageTable.
 	pf := newFrame(pid, *fid, PageSize)
 	copy(pf.Page, data)
 	// Add the entry to our pageTable
@@ -193,11 +161,11 @@ func (m *PageCache) FlushPage(pid PageID) error {
 	// ensure that it can be used as a victim candidate by our replacement policy.
 	pf := m.pool[fid]
 	pf.decrPinCount()
-	// Now, we can make sure we flush it to the disk using the FileManager.
-	err := m.disk.WritePage(pf.PID, pf.Page)
+	// Now, we can make sure we flush it to the io using the FileManager.
+	err := m.io.WritePage(pf.PID, pf.Page)
 	if err != nil {
 		// Something went terribly wrong if this happens.
-		out.Panic("%s", err)
+		DefaultLogger.Panic("%s", err)
 	}
 	// Finally, since we have just flushed the Page to the underlying current, we
 	// can proceed with unsetting the dirty bit.
@@ -223,16 +191,16 @@ func (m *PageCache) DeletePage(pid PageID) error {
 		// unpinned) so we'll return an error for now.
 		return ErrPageInUse
 	}
-	// Now, we have our Frame and it is not currently in use, so first we will
+	// Now, we have our frame, and it is not currently in use, so first we will
 	// remove it from the pageTable
 	delete(m.pageTable, pid)
 	// Next, we pin it, so it will not be marked as a potential victim--because we
 	// are in the process of remove it altogether.
 	m.replacer.Pin(fid)
-	// After it is pinned, we will deallocate the Page on disk (which will make
+	// After it is pinned, we will deallocate the Page on io (which will make
 	// it free to use again in a pinch.)
-	if err := m.disk.DeallocatePage(pid); err != nil {
-		// Ooops, something went down disk side, return error
+	if err := m.io.DeallocatePage(pid); err != nil {
+		// Ops, something went down io side, return error
 		return err
 	}
 	// Finally, add the current FrameID back onto the free list and return nil
@@ -241,7 +209,7 @@ func (m *PageCache) DeletePage(pid PageID) error {
 }
 
 // getFrameID attempts to return a *FrameID. It first checks the freeList set to
-// see if there are any availble frames to pick from. If not, it will proceed to use
+// see if there are any available frames to pick from. If not, it will proceed to use
 // the replacement policy to locate one.
 func (m *PageCache) getFrameID() (*frameID, bool) {
 	// Check the freeList first, and if it is not empty return one
@@ -272,7 +240,7 @@ func (m *PageCache) getUsableFrameID() (*frameID, error) {
 	// If we find ourselves here we have a FrameID, but we do not yet know if
 	// it came from our free list, or from our replacement policy. If it came due to
 	// our replacement policy, then we will need to check to make sure it has not
-	// been marked dirty, otherwise we must flush the contents to disk before reusing
+	// been marked dirty, otherwise we must flush the contents to io before reusing
 	// the FrameID; so let us check on that.
 	if !foundInFreeList {
 		cf := m.pool[*fid]
@@ -280,8 +248,8 @@ func (m *PageCache) getUsableFrameID() (*frameID, error) {
 			// We've located the correct Frame in the pool.
 			if cf.IsDirty {
 				// And it appears that it is in fact holding a dirty Page. We must
-				// flush the dirty Page to disk before recycling this Frame.
-				err := m.disk.WritePage(cf.PID, cf.Page)
+				// flush the dirty Page to io before recycling this Frame.
+				err := m.io.WritePage(cf.PID, cf.Page)
 				if err != nil {
 					return nil, err
 				}
@@ -318,7 +286,7 @@ func (m *PageCache) Close() error {
 		return err
 	}
 	// Close the FileManager
-	err = m.disk.Close()
+	err = m.io.Close()
 	if err != nil {
 		return err
 	}

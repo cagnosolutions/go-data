@@ -9,40 +9,40 @@ import (
 func TestFileManager_OpenFileManager(t *testing.T) {
 	var fm *FileManager
 	if fm != nil {
-		t.Errorf("open: file manager should be nil, got %v", fm)
+		t.Errorf("open: io manager should be nil, got %v", fm)
 	}
-	fm, err := OpenFileManager("my-test-file.txt")
+	fm, err := OpenFileManager("my-test-io.txt")
 	if err != nil {
-		t.Errorf("open: file manager open error: %s", err)
+		t.Errorf("open: io manager open error: %s", err)
 	}
 	defer func() {
-		err := os.Remove("my-test-file.txt")
+		err := os.Remove("my-test-io.txt")
 		if err != nil {
-			t.Errorf("open: error removing file: %s", err)
+			t.Errorf("open: error removing io: %s", err)
 		}
 	}()
 	if fm == nil {
-		t.Errorf("open: file manager should NOT be nil, got %v", fm)
+		t.Errorf("open: io manager should NOT be nil, got %v", fm)
 	}
 	err = fm.Close()
 	if err != nil {
-		t.Errorf("open: error closing file: %s", err)
+		t.Errorf("open: error closing io: %s", err)
 	}
 }
 
 func TestFileManager_AllocatePage(t *testing.T) {
-	fm, err := OpenFileManager("my-test-file.txt")
+	fm, err := OpenFileManager("my-test-io.txt")
 	if err != nil {
-		t.Errorf("allocate: file manager open error: %s", err)
+		t.Errorf("allocate: io manager open error: %s", err)
 	}
 	defer func() {
-		err := os.Remove("my-test-file.txt")
+		err := os.Remove("my-test-io.txt")
 		if err != nil {
-			t.Errorf("allocate: error removing file: %s", err)
+			t.Errorf("allocate: error removing io: %s", err)
 		}
 	}()
 	if fm == nil {
-		t.Errorf("allocate: file manager should NOT be nil, got %v", fm)
+		t.Errorf("allocate: io manager should NOT be nil, got %v", fm)
 	}
 
 	var pages []PageID
@@ -55,23 +55,23 @@ func TestFileManager_AllocatePage(t *testing.T) {
 
 	err = fm.Close()
 	if err != nil {
-		t.Errorf("allocate: error closing file: %s", err)
+		t.Errorf("allocate: error closing io: %s", err)
 	}
 }
 
 func TestFileManager_WritePage(t *testing.T) {
-	fm, err := OpenFileManager("my-test-file.txt")
+	fm, err := OpenFileManager("my-test-io.txt")
 	if err != nil {
-		t.Errorf("write: file manager open error: %s", err)
+		t.Errorf("write: io manager open error: %s", err)
 	}
 	defer func() {
-		err := os.Remove("my-test-file.txt")
+		err := os.Remove("my-test-io.txt")
 		if err != nil {
-			t.Errorf("write: error removing file: %s", err)
+			t.Errorf("write: error removing io: %s", err)
 		}
 	}()
 	if fm == nil {
-		t.Errorf("write: file manager should NOT be nil, got %v", fm)
+		t.Errorf("write: io manager should NOT be nil, got %v", fm)
 	}
 
 	var pages []PageID
@@ -97,23 +97,23 @@ func TestFileManager_WritePage(t *testing.T) {
 
 	err = fm.Close()
 	if err != nil {
-		t.Errorf("write: error closing file: %s", err)
+		t.Errorf("write: error closing io: %s", err)
 	}
 }
 
 func TestFileManager_ReadPage(t *testing.T) {
-	fm, err := OpenFileManager("my-test-file.txt")
+	fm, err := OpenFileManager("my-test-io.txt")
 	if err != nil {
-		t.Errorf("read: file manager open error: %s", err)
+		t.Errorf("read: io manager open error: %s", err)
 	}
 	defer func() {
-		err := os.Remove("my-test-file.txt")
+		err := os.Remove("my-test-io.txt")
 		if err != nil {
-			t.Errorf("read: error removing file: %s", err)
+			t.Errorf("read: error removing io: %s", err)
 		}
 	}()
 	if fm == nil {
-		t.Errorf("read: file manager should NOT be nil, got %v", fm)
+		t.Errorf("read: io manager should NOT be nil, got %v", fm)
 	}
 
 	var pages []PageID
@@ -151,6 +151,6 @@ func TestFileManager_ReadPage(t *testing.T) {
 
 	err = fm.Close()
 	if err != nil {
-		t.Errorf("read: error closing file: %s", err)
+		t.Errorf("read: error closing io: %s", err)
 	}
 }

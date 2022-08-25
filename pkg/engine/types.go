@@ -28,7 +28,7 @@ type replacer interface {
 }
 
 // diskManager is an interface describing the basic operations that the
-// disk manager is responsible for handling. The diskManager is usually
+// io manager is responsible for handling. The diskManager is usually
 // something that is used by a bufferPoolManager.
 type diskManager interface {
 	// AllocatePage allocates and returns the next sequential page.PageID.
@@ -44,9 +44,9 @@ type diskManager interface {
 	// attempts to locate and copy the contents into p.
 	ReadPage(pid PageID, p Page) error
 	// WritePage takes a page.PageID, as well as a page.Page, attempts to locate
-	// and copy and flush the contents of p onto the disk.
+	// and copy and flush the contents of p onto the io.
 	WritePage(pid PageID, p Page) error
-	// Close closes the disk manager.
+	// Close closes the io manager.
 	Close() error
 }
 
@@ -59,20 +59,20 @@ type bufferPoolManager interface {
 	// NewPage returns a new "fresh" page.Page for use.
 	NewPage() Page
 	// FetchPage takes a page.PageID, and attempts to locate it (either in the
-	// buffer pool, or on disk) and return the associated page.Page.
+	// buffer pool, or on io) and return the associated page.Page.
 	FetchPage(pid PageID) Page
 	// UnpinPage takes a page.PageID, and a boolean hinting at the page.Page
 	// associated with the supplied page.pageID being dirty or not. It instructs
 	// the replacer to unpin the page making it available for victimization.
 	UnpinPage(pid PageID, isDirty bool) error
 	// FlushPage takes a page.PageID, and attempts to locate and flush the
-	// associated page.Page to disk but, it does not remove it from the pageTable.
+	// associated page.Page to io but, it does not remove it from the pageTable.
 	FlushPage(pid PageID) error
 	// DeletePage takes a page.PageID and attempts to locate and remove the
 	// associated page.Page from the pageTable (if it is not pinned) and also
-	// clears it on the disk.
+	// clears it on the io.
 	DeletePage(pid PageID) error
-	// Close flushes and dirty page.Page data to the underlying disk, and then
+	// Close flushes and dirty page.Page data to the underlying io, and then
 	// shuts down the bufferPoolManager.
 	Close() error
 }

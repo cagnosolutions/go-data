@@ -15,7 +15,7 @@ var (
 
 // StorageEngine is a high level data storage and management engine type that can
 // be used to access the underlying types (those being a page cache, indexes and
-// a disk manager) through the API the StorageEngine provides.
+// a io manager) through the API the StorageEngine provides.
 type StorageEngine struct {
 	store      string
 	namespaces []string
