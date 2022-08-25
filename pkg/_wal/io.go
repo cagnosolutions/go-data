@@ -1,4 +1,4 @@
-package wal
+package _wal
 
 import (
 	"encoding"

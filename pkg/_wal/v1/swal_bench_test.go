@@ -1,21 +1,21 @@
-package v2
+package v1
 
 import (
 	"fmt"
 	"os"
 	"testing"
 
-	"github.com/scottcagno/storage/pkg/lsmt/binary"
+	"github.com/cagnosolutions/go-data/pkg/binenc"
 )
 
-func makeEntry(i int) *binary.Entry {
-	return &binary.Entry{
+func makeEntry(i int) *binenc.Entry {
+	return &binenc.Entry{
 		Key:   []byte(fmt.Sprintf("key-%06d", i)),
 		Value: []byte(fmt.Sprintf("value-%08d", i)),
 	}
 }
 
-func walWrite(b *testing.B, wal *WAL, count int) []int64 {
+func walWrite(b *testing.B, wal *SWAL, count int) []int64 {
 
 	// offsets
 	var offsets []int64
@@ -35,26 +35,28 @@ func walWrite(b *testing.B, wal *WAL, count int) []int64 {
 	return offsets
 }
 
-func walRead(b *testing.B, wal *WAL) {
+func walRead(b *testing.B, wal *SWAL) {
 
 	// used to "catch" value
 	var vv interface{}
 
 	// read data
-	err := wal.Scan(func(e *binary.Entry) bool {
-		vv = e
-		_ = vv
-		return e != nil
-	})
+	err := wal.Scan(
+		func(e *binenc.Entry) bool {
+			vv = e
+			_ = vv
+			return e != nil
+		},
+	)
 	if err != nil {
 		b.Errorf("read: %v\n", err)
 	}
 }
 
-func setup(b *testing.B) *WAL {
+func setup(b *testing.B) *SWAL {
 
 	// open
-	wal, err := OpenWAL(conf)
+	wal, err := OpenSWAL(conf)
 	if err != nil {
 		b.Errorf("open: %v\n", err)
 	}
@@ -63,7 +65,7 @@ func setup(b *testing.B) *WAL {
 	return wal
 }
 
-func teardown(b *testing.B, wal *WAL, shouldClean bool) {
+func teardown(b *testing.B, wal *SWAL, shouldClean bool) {
 
 	// close
 	err := wal.Close()
@@ -80,33 +82,37 @@ func teardown(b *testing.B, wal *WAL, shouldClean bool) {
 	}
 }
 
-func Bench_WAL_Write(b *testing.B, wal *WAL, count int) {
+func Bench_SWAL_Write(b *testing.B, wal *SWAL, count int) {
 
 	// reset measurements
 	reset(b)
 
 	// test write
 	for i := 0; i < b.N; i++ {
-		b.Run("lsmTreeWrite", func(b *testing.B) {
-			walWrite(b, wal, count)
-		})
+		b.Run(
+			"lsmTreeWrite", func(b *testing.B) {
+				walWrite(b, wal, count)
+			},
+		)
 	}
 }
 
-func Bench_WAL_Read(b *testing.B, wal *WAL) {
+func Bench_SWAL_Read(b *testing.B, wal *SWAL) {
 
 	// reset measurements
 	reset(b)
 
 	// test read
 	for i := 0; i < b.N; i++ {
-		b.Run("lsmTreeRead", func(b *testing.B) {
-			walRead(b, wal)
-		})
+		b.Run(
+			"lsmTreeRead", func(b *testing.B) {
+				walRead(b, wal)
+			},
+		)
 	}
 }
 
-func BenchmarkWAL(b *testing.B) {
+func BenchmarkSWAL(b *testing.B) {
 
 	// count
 	count := 10
@@ -115,10 +121,10 @@ func BenchmarkWAL(b *testing.B) {
 	wal := setup(b)
 
 	// writing
-	Bench_WAL_Write(b, wal, count)
+	Bench_SWAL_Write(b, wal, count)
 
 	// reading
-	Bench_WAL_Read(b, wal)
+	Bench_SWAL_Read(b, wal)
 
 	// teardown (CLOSE DB)
 	teardown(b, wal, true)

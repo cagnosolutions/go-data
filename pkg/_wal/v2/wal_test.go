@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scottcagno/storage/pkg/lsmt/binary"
+	"github.com/cagnosolutions/go-data/pkg/binenc"
 )
 
 var conf = &WALConfig{
@@ -53,17 +53,19 @@ func TestWAL(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		key := fmt.Sprintf("key-%04d", i+1)
 		val := fmt.Sprintf("my-value-%06d-%s", i+1, lgVal)
-		_, err := wal.Write(&binary.Entry{Key: []byte(key), Value: []byte(val)})
+		_, err := wal.Write(&binenc.Entry{Key: []byte(key), Value: []byte(val)})
 		if err != nil {
 			t.Fatalf("error writing: %v\n", err)
 		}
 	}
 	//
 	// do some reading
-	err = wal.Scan(func(e *binary.Entry) bool {
-		fmt.Printf("%s\n", e)
-		return true
-	})
+	err = wal.Scan(
+		func(e *binenc.Entry) bool {
+			fmt.Printf("%s\n", e)
+			return true
+		},
+	)
 	if err != nil {
 		t.Fatalf("got error: %v\n", err)
 	}
@@ -96,17 +98,19 @@ func TestLog_Reset(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		key := fmt.Sprintf("key-%04d", i+1)
 		val := fmt.Sprintf("my-value-%06d-%s", i+1, lgVal)
-		_, err := wal.Write(&binary.Entry{Key: []byte(key), Value: []byte(val)})
+		_, err := wal.Write(&binenc.Entry{Key: []byte(key), Value: []byte(val)})
 		if err != nil {
 			t.Fatalf("error writing: %v\n", err)
 		}
 	}
 	//
 	// do some reading
-	err = wal.Scan(func(e *binary.Entry) bool {
-		fmt.Printf("%s\n", e)
-		return true
-	})
+	err = wal.Scan(
+		func(e *binenc.Entry) bool {
+			fmt.Printf("%s\n", e)
+			return true
+		},
+	)
 	if err != nil {
 		t.Fatalf("got error: %v\n", err)
 	}
@@ -137,7 +141,7 @@ func TestLog_TruncateFront(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		key := fmt.Sprintf("key-%04d", i+1)
 		val := fmt.Sprintf("my-value-%06d", i+1)
-		_, err := wal.Write(&binary.Entry{Key: []byte(key), Value: []byte(val)})
+		_, err := wal.Write(&binenc.Entry{Key: []byte(key), Value: []byte(val)})
 		if err != nil {
 			t.Fatalf("error writing: %v\n", err)
 		}

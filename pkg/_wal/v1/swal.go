@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cagnosolutions/go-data/pkg/engine/wal/binary"
+	"github.com/cagnosolutions/go-data/pkg/binenc"
 )
 
 var ErrOutOfBounds = errors.New("swal: out of bounds")
@@ -25,8 +25,8 @@ const (
 type SWAL struct {
 	lock       sync.RWMutex // lock is a mutual exclusion lock
 	conf       *SWALConfig
-	r          *binary.Reader // r is a binary reader
-	w          *binary.Writer // w is a binary writer
+	r          *binenc.Reader // r is a binary reader
+	w          *binenc.Writer // w is a binary writer
 	firstIndex int64          // firstIndex is the index of the first segEntry
 	lastIndex  int64          // lastIndex is the index of the last segEntry
 	segments   []*segment     // segments is an index of the current file segments
@@ -153,13 +153,13 @@ func (l *SWAL) loadIndex() error {
 	l.active = l.getLastSegment()
 	// we should be good to go, lets attempt to open a file
 	// reader to work with the active segment
-	l.r, err = binary.OpenReader(l.active.path)
+	l.r, err = binenc.OpenReader(l.active.path)
 	if err != nil {
 		return err
 	}
 	// and then attempt to open a file writer to also work
 	// with the active segment, so we can begin appending data
-	l.w, err = binary.OpenWriterWithSync(l.active.path, l.conf.SyncOnWrite)
+	l.w, err = binenc.OpenWriterWithSync(l.active.path, l.conf.SyncOnWrite)
 	if err != nil {
 		return err
 	}
@@ -203,12 +203,12 @@ func (l *SWAL) loadSegmentFile(path string) (*segment, error) {
 	for {
 		// get the current offset of the
 		// reader for the segEntry later
-		offset, err := binary.Offset(fd)
+		offset, err := binenc.Offset(fd)
 		if err != nil {
 			return nil, err
 		}
 		// read and decode segEntry
-		_, err = binary.DecodeEntry(fd)
+		_, err = binenc.DecodeEntry(fd)
 		if err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				break
@@ -229,7 +229,7 @@ func (l *SWAL) loadSegmentFile(path string) (*segment, error) {
 	// make sure to fill out the segment index from the first segEntry index
 	s.index = s.entries[0].index
 	// get the offset of the reader to calculate bytes remaining
-	offset, err := binary.Offset(fd)
+	offset, err := binenc.Offset(fd)
 	if err != nil {
 		return nil, err
 	}
@@ -300,12 +300,12 @@ func (l *SWAL) cycleSegment() error {
 	// update the active segment pointer
 	l.active = l.getLastSegment()
 	// open file writer associated with active segment
-	l.w, err = binary.OpenWriterWithSync(l.active.path, l.conf.SyncOnWrite)
+	l.w, err = binenc.OpenWriterWithSync(l.active.path, l.conf.SyncOnWrite)
 	if err != nil {
 		return err
 	}
 	// update file reader associated with the active segment
-	l.r, err = binary.OpenReader(l.active.path)
+	l.r, err = binenc.OpenReader(l.active.path)
 	if err != nil {
 		return err
 	}
@@ -313,7 +313,7 @@ func (l *SWAL) cycleSegment() error {
 }
 
 // Read reads an segEntry from the write-ahead log at the specified index
-func (l *SWAL) Read(index int64) (*binary.Entry, error) {
+func (l *SWAL) Read(index int64) (*binenc.Entry, error) {
 	// read lock
 	l.lock.RLock()
 	defer l.lock.RUnlock()
@@ -340,7 +340,7 @@ func (l *SWAL) Read(index int64) (*binary.Entry, error) {
 }
 
 // Write writes an segEntry to the write-ahead log in an append-only fashion
-func (l *SWAL) Write(e *binary.Entry) (int64, error) {
+func (l *SWAL) Write(e *binenc.Entry) (int64, error) {
 	// lock
 	l.lock.Lock()
 	defer l.lock.Unlock()
@@ -376,7 +376,7 @@ func (l *SWAL) Write(e *binary.Entry) (int64, error) {
 }
 
 // WriteBatch writes a batch of entries performing no syncing until the end of the batch
-func (l *SWAL) WriteBatch(batch *binary.Batch) error {
+func (l *SWAL) WriteBatch(batch *binenc.Batch) error {
 	// lock
 	l.lock.Lock()
 	defer l.lock.Unlock()
@@ -434,7 +434,7 @@ func (l *SWAL) WriteBatch(batch *binary.Batch) error {
 }
 
 // Scan provides an iterator method for the write-ahead log
-func (l *SWAL) Scan(iter func(e *binary.Entry) bool) error {
+func (l *SWAL) Scan(iter func(e *binenc.Entry) bool) error {
 	// lock
 	l.lock.Lock()
 	defer l.lock.Unlock()
@@ -531,7 +531,7 @@ func (l *SWAL) TruncateFront(index int64) error {
 				return err
 			}
 			// write segEntry to temp file
-			ent.offset, err = binary.EncodeEntry(tmpfd, e)
+			ent.offset, err = binenc.EncodeEntry(tmpfd, e)
 			if err != nil {
 				return err
 			}

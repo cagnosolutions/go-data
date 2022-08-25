@@ -1,21 +1,21 @@
-package v1
+package v2
 
 import (
 	"fmt"
 	"os"
 	"testing"
 
-	"github.com/scottcagno/storage/pkg/lsmt/binary"
+	"github.com/cagnosolutions/go-data/pkg/binenc"
 )
 
-func makeEntry(i int) *binary.Entry {
-	return &binary.Entry{
+func makeEntry(i int) *binenc.Entry {
+	return &binenc.Entry{
 		Key:   []byte(fmt.Sprintf("key-%06d", i)),
 		Value: []byte(fmt.Sprintf("value-%08d", i)),
 	}
 }
 
-func walWrite(b *testing.B, wal *SWAL, count int) []int64 {
+func walWrite(b *testing.B, wal *WAL, count int) []int64 {
 
 	// offsets
 	var offsets []int64
@@ -35,13 +35,13 @@ func walWrite(b *testing.B, wal *SWAL, count int) []int64 {
 	return offsets
 }
 
-func walRead(b *testing.B, wal *SWAL) {
+func walRead(b *testing.B, wal *WAL) {
 
 	// used to "catch" value
 	var vv interface{}
 
 	// read data
-	err := wal.Scan(func(e *binary.Entry) bool {
+	err := wal.Scan(func(e *binenc.Entry) bool {
 		vv = e
 		_ = vv
 		return e != nil
@@ -51,10 +51,10 @@ func walRead(b *testing.B, wal *SWAL) {
 	}
 }
 
-func setup(b *testing.B) *SWAL {
+func setup(b *testing.B) *WAL {
 
 	// open
-	wal, err := OpenSWAL(conf)
+	wal, err := OpenWAL(conf)
 	if err != nil {
 		b.Errorf("open: %v\n", err)
 	}
@@ -63,7 +63,7 @@ func setup(b *testing.B) *SWAL {
 	return wal
 }
 
-func teardown(b *testing.B, wal *SWAL, shouldClean bool) {
+func teardown(b *testing.B, wal *WAL, shouldClean bool) {
 
 	// close
 	err := wal.Close()
@@ -80,7 +80,7 @@ func teardown(b *testing.B, wal *SWAL, shouldClean bool) {
 	}
 }
 
-func Bench_SWAL_Write(b *testing.B, wal *SWAL, count int) {
+func Bench_WAL_Write(b *testing.B, wal *WAL, count int) {
 
 	// reset measurements
 	reset(b)
@@ -93,7 +93,7 @@ func Bench_SWAL_Write(b *testing.B, wal *SWAL, count int) {
 	}
 }
 
-func Bench_SWAL_Read(b *testing.B, wal *SWAL) {
+func Bench_WAL_Read(b *testing.B, wal *WAL) {
 
 	// reset measurements
 	reset(b)
@@ -106,7 +106,7 @@ func Bench_SWAL_Read(b *testing.B, wal *SWAL) {
 	}
 }
 
-func BenchmarkSWAL(b *testing.B) {
+func BenchmarkWAL(b *testing.B) {
 
 	// count
 	count := 10
@@ -115,10 +115,10 @@ func BenchmarkSWAL(b *testing.B) {
 	wal := setup(b)
 
 	// writing
-	Bench_SWAL_Write(b, wal, count)
+	Bench_WAL_Write(b, wal, count)
 
 	// reading
-	Bench_SWAL_Read(b, wal)
+	Bench_WAL_Read(b, wal)
 
 	// teardown (CLOSE DB)
 	teardown(b, wal, true)

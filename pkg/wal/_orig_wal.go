@@ -1,7 +1,6 @@
 package v2
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/cagnosolutions/go-data/pkg/binenc"
 )
 
 const (
@@ -30,14 +31,6 @@ var (
 	ErrBadArgument    = errors.New("error: bad argument")
 	ErrNoPathProvided = errors.New("error: no path provided")
 	ErrOptionsMissing = errors.New("error: options missing")
-)
-
-var (
-	// ErrFileClosed    = errors.New("binary: file closed")
-	ErrBadEntry      = errors.New("binary: bad entry")
-	ErrEntryNotFound = errors.New("binary: entry not found")
-	ErrKeyTooLarge   = errors.New("binary: key too large")
-	ErrValueTooLarge = errors.New("binary: value too large")
 )
 
 // segEntry contains the metadata for a single segEntry within the file segment
@@ -135,15 +128,14 @@ func checkWALConfig(conf *WALConfig) *WALConfig {
 
 // WAL is a write-ahead log structure
 type WAL struct {
-	lock sync.RWMutex // lock is a mutual exclusion lock
-	conf *WALConfig
-	// r          *binenc.Reader // r is a binary reader
-	// w          *binenc.Writer // w is a binary writer
-	file       *os.File
-	firstIndex int64      // firstIndex is the index of the first segEntry
-	lastIndex  int64      // lastIndex is the index of the last segEntry
-	segments   []*segment // segments is an index of the current file segments
-	active     *segment   // active is the current active segment
+	lock       sync.RWMutex // lock is a mutual exclusion lock
+	conf       *WALConfig
+	r          *binenc.Reader // r is a binary reader
+	w          *binenc.Writer // w is a binary writer
+	firstIndex int64          // firstIndex is the index of the first segEntry
+	lastIndex  int64          // lastIndex is the index of the last segEntry
+	segments   []*segment     // segments is an index of the current file segments
+	active     *segment       // active is the current active segment
 }
 
 // OpenWAL opens and returns a new write-ahead log structure
@@ -182,12 +174,13 @@ func (l *WAL) CloseAndRemove() error {
 	// lock
 	l.lock.Lock()
 	defer l.lock.Unlock()
-	// sync and close file
-	err := l.file.Sync()
+	// sync and close writer
+	err := l.w.Close()
 	if err != nil {
 		return err
 	}
-	err = l.file.Close()
+	// close reader
+	err = l.r.Close()
 	if err != nil {
 		return err
 	}
@@ -260,14 +253,15 @@ func (l *WAL) loadIndex() error {
 	// should go about updating the active segment pointer to
 	// point to the "tail" (the last segment in the segment list)
 	l.active = l.getLastSegment()
-	// we should be good to go, lets attempt to open a file to work
-	// with the active segment.
-	l.file, err = os.OpenFile(l.active.path, os.O_WRONLY|os.O_SYNC, 0644)
+	// we should be good to go, lets attempt to open a file
+	// reader to work with the active segment
+	l.r, err = binenc.OpenReader(l.active.path)
 	if err != nil {
 		return err
 	}
-	// don't forget to seek to the end of the file.
-	_, err = l.file.Seek(0, io.SeekEnd)
+	// and then attempt to open a file writer to also work
+	// with the active segment, so we can begin appending data
+	l.w, err = binenc.OpenWriterWithSync(l.active.path, l.conf.SyncOnWrite)
 	if err != nil {
 		return err
 	}
@@ -311,12 +305,12 @@ func (l *WAL) loadSegmentFile(path string) (*segment, error) {
 	for {
 		// get the current offset of the
 		// reader for the segEntry later
-		offset, err := fd.Seek(0, io.SeekCurrent)
+		offset, err := binenc.Offset(fd)
 		if err != nil {
 			return nil, err
 		}
 		// read and decode segEntry
-		_, err = decodeEntry(fd)
+		_, err = binenc.DecodeEntry(fd)
 		if err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				break
@@ -337,7 +331,7 @@ func (l *WAL) loadSegmentFile(path string) (*segment, error) {
 	// make sure to fill out the segment index from the first segEntry index
 	s.index = s.entries[0].index
 	// get the offset of the reader to calculate bytes remaining
-	offset, err := fd.Seek(0, io.SeekCurrent)
+	offset, err := binenc.Offset(fd)
 	if err != nil {
 		return nil, err
 	}
@@ -394,11 +388,7 @@ func (l *WAL) getLastSegment() *segment {
 // cycleSegment adds a new segment to replace the current (active) segment
 func (l *WAL) cycleSegment() error {
 	// sync and close current file segment
-	err := l.file.Sync()
-	if err != nil {
-		return err
-	}
-	err = l.file.Close()
+	err := l.w.Close()
 	if err != nil {
 		return err
 	}
@@ -412,7 +402,12 @@ func (l *WAL) cycleSegment() error {
 	// update the active segment pointer
 	l.active = l.getLastSegment()
 	// open file writer associated with active segment
-	l.file, err = os.OpenFile(l.active.path, os.O_WRONLY|os.O_SYNC, 0644)
+	l.w, err = binenc.OpenWriterWithSync(l.active.path, l.conf.SyncOnWrite)
+	if err != nil {
+		return err
+	}
+	// update file reader associated with the active segment
+	l.r, err = binenc.OpenReader(l.active.path)
 	if err != nil {
 		return err
 	}
@@ -420,7 +415,7 @@ func (l *WAL) cycleSegment() error {
 }
 
 // Read reads an segEntry from the write-ahead log at the specified index
-func (l *WAL) Read(index int64) ([]byte, error) {
+func (l *WAL) Read(index int64) (*binenc.Entry, error) {
 	// read lock
 	l.lock.RLock()
 	defer l.lock.RUnlock()
@@ -431,30 +426,15 @@ func (l *WAL) Read(index int64) ([]byte, error) {
 	var err error
 	// find the segment containing the provided index
 	s := l.segments[l.findSegmentIndex(index)]
+	// make sure we are reading from the correct file
+	l.r, err = l.r.ReadFrom(s.path)
+	if err != nil {
+		return nil, err
+	}
 	// find the offset for the segEntry containing the provided index
 	offset := s.entries[s.findEntryIndex(index)].offset
-	// check to see if we need to be reading from a different file
-	if l.file.Name() == s.path {
-		// different file, let's open it
-		tmpf, err := os.Open(s.path)
-		if err != nil {
-			return nil, err
-		}
-		// read and decode entry at offset
-		e, err := decodeEntryAt(tmpf, offset)
-		if err != nil {
-			return nil, err
-		}
-		// close reader
-		err = tmpf.Close()
-		if err != nil {
-			return nil, err
-		}
-		// return
-		return e, nil
-	}
-	// otherwise, we are reading from the same file, so just decode at
-	e, err := decodeEntryAt(l.file, offset)
+	// read segEntry at offset
+	e, err := l.r.ReadEntryAt(offset)
 	if err != nil {
 		return nil, err
 	}
@@ -462,21 +442,14 @@ func (l *WAL) Read(index int64) ([]byte, error) {
 }
 
 // Write writes an segEntry to the write-ahead log in an append-only fashion
-func (l *WAL) Write(e []byte) (int64, error) {
+func (l *WAL) Write(e *binenc.Entry) (int64, error) {
 	// lock
 	l.lock.Lock()
 	defer l.lock.Unlock()
-	// first, encode entry
-	offset, err := encodeEntry(l.file, e)
+	// write segEntry
+	offset, err := l.w.WriteEntry(e)
 	if err != nil {
-		return -1, err
-	}
-	// check for sync
-	if l.conf.SyncOnWrite {
-		err = l.file.Sync()
-		if err != nil {
-			return -1, err
-		}
+		return 0, err
 	}
 	// add new segEntry to the segment index
 	l.active.entries = append(
@@ -488,7 +461,7 @@ func (l *WAL) Write(e []byte) (int64, error) {
 	// update lastIndex
 	l.lastIndex++
 	// grab the current offset written
-	offset2, err := l.file.Seek(0, io.SeekCurrent)
+	offset2, err := l.w.Offset()
 	if err != nil {
 		return 0, err
 	}
@@ -504,21 +477,24 @@ func (l *WAL) Write(e []byte) (int64, error) {
 	return l.lastIndex - 1, nil
 }
 
-type Batch struct {
-	data [][]byte
-}
-
 // WriteBatch writes a batch of entries performing no syncing until the end of the batch
-func (l *WAL) WriteBatch(batch *Batch) error {
+func (l *WAL) WriteBatch(batch *binenc.Batch) error {
 	// lock
 	l.lock.Lock()
 	defer l.lock.Unlock()
+	// check sync policy
+	changedSyncPolicy := false
+	if l.conf.SyncOnWrite == true {
+		l.conf.SyncOnWrite = false // if it's on, temporarily disable
+		l.w.SetSyncOnWrite(false)
+		changedSyncPolicy = true
+	}
 	// iterate batch
-	for i := range batch.data {
+	for i := range batch.Entries {
 		// entry
-		e := batch.data[i]
+		e := batch.Entries[i]
 		// write entry to data file
-		offset, err := l.Write(e)
+		offset, err := l.w.WriteEntry(e)
 		if err != nil {
 			return err
 		}
@@ -532,7 +508,7 @@ func (l *WAL) WriteBatch(batch *Batch) error {
 		// update lastIndex
 		l.lastIndex++
 		// grab the current offset written
-		offset2, err := l.file.Seek(0, io.SeekCurrent)
+		offset2, err := l.w.Offset()
 		if err != nil {
 			return err
 		}
@@ -546,8 +522,13 @@ func (l *WAL) WriteBatch(batch *Batch) error {
 			}
 		}
 	}
+	// after batch, set everything back how it was
+	if changedSyncPolicy {
+		l.conf.SyncOnWrite = true
+		l.w.SetSyncOnWrite(true)
+	}
 	// after batch has been written, do sync
-	err := l.file.Sync()
+	err := l.w.Sync()
 	if err != nil {
 		return err
 	}
@@ -555,25 +536,24 @@ func (l *WAL) WriteBatch(batch *Batch) error {
 }
 
 // Scan provides an iterator method for the write-ahead log
-func (l *WAL) Scan(iter func(e []byte) bool) error {
+func (l *WAL) Scan(iter func(e *binenc.Entry) bool) error {
 	// lock
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	// init for any errors
 	var err error
-	var tmpf *os.File
 	// range the segment index
 	for _, sidx := range l.segments {
 		// fmt.Printf("segment: %s\n", sidx)
 		// make sure we are reading the right data
-		tmpf, err = os.Open(sidx.path)
+		l.r, err = l.r.ReadFrom(sidx.path)
 		if err != nil {
 			return err
 		}
 		// range the segment entries index
 		for _, eidx := range sidx.entries {
-			// read and decode entry at offset
-			e, err := decodeEntryAt(tmpf, eidx.offset)
+			// read segEntry
+			e, err := l.r.ReadEntryAt(eidx.offset)
 			if err != nil {
 				if err == io.EOF || err == io.ErrUnexpectedEOF {
 					break
@@ -587,11 +567,6 @@ func (l *WAL) Scan(iter func(e []byte) bool) error {
 			}
 		}
 		// outside segEntry loop
-		// close reader
-		err = tmpf.Close()
-		if err != nil {
-			return err
-		}
 	}
 	// outside segment loop
 	return nil
@@ -641,7 +616,7 @@ func (l *WAL) TruncateFront(index int64) error {
 	// contain the partials that we must re-write
 	if l.segments[0].index < index {
 		// make sure we are reading from the correct path
-		rd, err := os.Open(l.segments[0].path)
+		l.r, err = l.r.ReadFrom(l.segments[0].path)
 		if err != nil {
 			return err
 		}
@@ -653,12 +628,12 @@ func (l *WAL) TruncateFront(index int64) error {
 				continue // skip
 			}
 			// read segEntry
-			e, err := decodeEntryAt(rd, ent.offset)
+			e, err := l.r.ReadEntryAt(ent.offset)
 			if err != nil {
 				return err
 			}
 			// write segEntry to temp file
-			ent.offset, err = encodeEntry(tmpfd, e)
+			ent.offset, err = binenc.EncodeEntry(tmpfd, e)
 			if err != nil {
 				return err
 			}
@@ -670,8 +645,8 @@ func (l *WAL) TruncateFront(index int64) error {
 			// append to a new entries list
 			entries = append(entries, ent)
 		}
-		// Close reader
-		err = rd.Close()
+		// move reader back to active segment file
+		l.r, err = l.r.ReadFrom(l.active.path)
 		if err != nil {
 			return err
 		}
@@ -708,7 +683,7 @@ func (l *WAL) Sync() error {
 	// lock
 	l.lock.Lock()
 	defer l.lock.Unlock()
-	err := l.file.Sync()
+	err := l.w.Sync()
 	if err != nil {
 		return err
 	}
@@ -751,16 +726,18 @@ func (l *WAL) Close() error {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	// sync and close writer
-	err := l.file.Sync()
+	err := l.w.Close()
 	if err != nil {
 		return err
 	}
-	err = l.file.Close()
+	// close reader
+	err = l.r.Close()
 	if err != nil {
 		return err
 	}
 	// clean everything else up
-	l.file = nil
+	l.r = nil
+	l.w = nil
 	l.firstIndex = 0
 	l.lastIndex = 0
 	l.segments = nil
@@ -792,76 +769,4 @@ func (l *WAL) String() string {
 	}
 	ss += "\n"
 	return ss
-}
-
-// encodeEntry writes the provided entry to the writer provided
-func encodeEntry(w io.WriteSeeker, e []byte) (int64, error) {
-	// error check
-	if e == nil {
-		return -1, ErrBadEntry
-	}
-	// get the file pointer offset for the entry
-	offset, err := w.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return -1, err
-	}
-	// make buffer
-	buf := make([]byte, 8)
-	// encode and write entry length
-	binary.LittleEndian.PutUint64(buf, uint64(len(e)))
-	_, err = w.Write(buf)
-	if err != nil {
-		return -1, err
-	}
-	// write entry
-	_, err = w.Write(e)
-	if err != nil {
-		return -1, err
-	}
-	// return the offset of the entry
-	return offset, nil
-}
-
-// decodeEntry encodes the next entry from the reader provided
-func decodeEntry(r io.Reader) ([]byte, error) {
-	// make buffer
-	buf := make([]byte, 8)
-	// read entry length
-	_, err := r.Read(buf)
-	if err != nil {
-		return nil, err
-	}
-	// decode entry length
-	size := binary.LittleEndian.Uint64(buf)
-	// make entry slice to read data into
-	e := make([]byte, size)
-	// read from data into entry
-	_, err = r.Read(e)
-	if err != nil {
-		return nil, err
-	}
-	// return entry
-	return e, nil
-}
-
-// decodeEntryAt encodes the next entry from the reader provided
-func decodeEntryAt(r io.ReaderAt, off int64) ([]byte, error) {
-	// make buffer
-	buf := make([]byte, 8)
-	// read entry length
-	n, err := r.ReadAt(buf, off)
-	if err != nil {
-		return nil, err
-	}
-	// decode entry length
-	size := binary.LittleEndian.Uint64(buf)
-	// make entry slice to read data into
-	e := make([]byte, size)
-	// read from data into entry
-	_, err = r.ReadAt(e, off+int64(n))
-	if err != nil {
-		return nil, err
-	}
-	// return entry
-	return e, nil
 }

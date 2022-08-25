@@ -1,4 +1,4 @@
-package binary
+package binenc
 
 import (
 	"bytes"
