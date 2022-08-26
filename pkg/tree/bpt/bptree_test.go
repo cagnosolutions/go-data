@@ -29,6 +29,42 @@ func TestBPTree_Print(t *testing.T) {
 	tree.Close()
 }
 
+func TestBPTree_PrintV2(t *testing.T) {
+
+	tree := new(BPTree)
+
+	for i := 0; i < 64; i++ {
+		existing := tree.Put(makeKey(i), makeVal(i))
+		if existing { // existing=updated
+			t.Errorf("putting: %v", existing)
+		}
+	}
+
+	printTree(tree.root)
+
+	print_tree_v2(tree.root)
+	// print_leaves(tree.root)
+
+	tree.Close()
+}
+
+func TestBPTree_PrintMarkdownTree(t *testing.T) {
+
+	tree := new(BPTree)
+
+	for i := 0; i < 32; i++ {
+		existing := tree.Put(makeKey(i), makeVal(i))
+		if existing { // existing=updated
+			t.Errorf("putting: %v", existing)
+		}
+	}
+
+	print_markdown_tree(tree.root)
+	// print_leaves(tree.root)
+
+	tree.Close()
+}
+
 func TestNewBPTree(t *testing.T) {
 	var tree *BPTree
 	tree = new(BPTree)

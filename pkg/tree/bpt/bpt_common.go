@@ -1,6 +1,7 @@
 package bpt
 
 import (
+	"fmt"
 	"unsafe"
 )
 
@@ -22,7 +23,7 @@ func (r *record) Size() int64 {
 	return int64(unsafe.Sizeof(r.Key.data) + unsafe.Sizeof(r.Value.data))
 }
 
-const M = 4 // 128
+const M = 5 // 128
 
 // order is the tree's order
 const order = M // 128
@@ -34,6 +35,17 @@ type node struct {
 	ptrs    [order]unsafe.Pointer
 	parent  *node
 	isLeaf  bool
+}
+
+// String is node's stringer method
+func (n *node) String() string {
+	ss := fmt.Sprintf("\tr%dn%d[", height(n), pathToRoot(n.parent, n))
+	for i := 0; i < n.numKeys-1; i++ {
+		ss += fmt.Sprintf("%.2d", n.keys[i].data)
+		ss += fmt.Sprintf(",")
+	}
+	ss += fmt.Sprintf("%.2d]", n.keys[n.numKeys-1].data)
+	return ss
 }
 
 // BPTree represents the root of a b+tree
