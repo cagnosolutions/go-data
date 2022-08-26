@@ -19,7 +19,7 @@ type PageCache struct {
 // otherwise it creates a new instance and returns it.
 func OpenPageCache(base string, pageCount uint16) (*PageCache, error) {
 	// open current manager
-	fm, err := OpenFileManager(base)
+	fm, err := OpenDiskManager(base)
 	if err != nil {
 		return nil, err
 	}
