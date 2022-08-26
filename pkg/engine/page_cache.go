@@ -4,13 +4,13 @@ import (
 	"sync"
 )
 
-// PageCache is the access level structure wrapping up the bufferPool, and FileManager,
+// PageCache is the access level structure wrapping up the bufferPool, and DiskManager,
 // along with a page table, and replacement policy.
 type PageCache struct {
 	latch     sync.Mutex
 	pool      []frame            // buffer pool page frames
 	replacer  *ClockReplacer     // page replacement policy structure
-	io        *FileManager       // underlying current manager
+	io        *DiskManager       // underlying current manager
 	freeList  []frameID          // list of frames that are free to use
 	pageTable map[PageID]frameID // table of the current page to frame mappings
 }
@@ -102,7 +102,7 @@ func (m *PageCache) FetchPage(pid PageID) Page {
 		}
 		return nil
 	}
-	// Now, we will swap the Page in from the io using the FileManager.
+	// Now, we will swap the Page in from the io using the DiskManager.
 	data := make([]byte, PageSize)
 	err = m.io.ReadPage(pid, data)
 	if err != nil {
@@ -161,7 +161,7 @@ func (m *PageCache) FlushPage(pid PageID) error {
 	// ensure that it can be used as a victim candidate by our replacement policy.
 	pf := m.pool[fid]
 	pf.decrPinCount()
-	// Now, we can make sure we flush it to the io using the FileManager.
+	// Now, we can make sure we flush it to the io using the DiskManager.
 	err := m.io.WritePage(pf.PID, pf.Page)
 	if err != nil {
 		// Something went terribly wrong if this happens.
@@ -276,7 +276,7 @@ func (m *PageCache) flushAll() error {
 	return nil
 }
 
-// Close attempts to close the PageCache along with the underlying FileManager
+// Close attempts to close the PageCache along with the underlying DiskManager
 // and associated dependencies. Close makes sure to flush any dirty Page data
 // before closing everything down.
 func (m *PageCache) Close() error {
@@ -285,7 +285,7 @@ func (m *PageCache) Close() error {
 	if err != nil {
 		return err
 	}
-	// Close the FileManager
+	// Close the DiskManager
 	err = m.io.Close()
 	if err != nil {
 		return err

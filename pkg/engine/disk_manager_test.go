@@ -7,7 +7,7 @@ import (
 )
 
 func TestFileManager_OpenFileManager(t *testing.T) {
-	var fm *FileManager
+	var fm *DiskManager
 	if fm != nil {
 		t.Errorf("open: io manager should be nil, got %v", fm)
 	}
