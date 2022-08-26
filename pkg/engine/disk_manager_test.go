@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-func TestFileManager_OpenFileManager(t *testing.T) {
+func TestDiskManager_OpenDiskManager(t *testing.T) {
 	var fm *DiskManager
 	if fm != nil {
 		t.Errorf("open: io manager should be nil, got %v", fm)
 	}
-	fm, err := OpenFileManager("my-test-io.txt")
+	fm, err := OpenDiskManager("my-test-io.txt")
 	if err != nil {
 		t.Errorf("open: io manager open error: %s", err)
 	}
@@ -30,8 +30,8 @@ func TestFileManager_OpenFileManager(t *testing.T) {
 	}
 }
 
-func TestFileManager_AllocatePage(t *testing.T) {
-	fm, err := OpenFileManager("my-test-io.txt")
+func TestDiskManager_AllocatePage(t *testing.T) {
+	fm, err := OpenDiskManager("my-test-io.txt")
 	if err != nil {
 		t.Errorf("allocate: io manager open error: %s", err)
 	}
@@ -59,8 +59,8 @@ func TestFileManager_AllocatePage(t *testing.T) {
 	}
 }
 
-func TestFileManager_WritePage(t *testing.T) {
-	fm, err := OpenFileManager("my-test-io.txt")
+func TestDiskManager_WritePage(t *testing.T) {
+	fm, err := OpenDiskManager("my-test-io.txt")
 	if err != nil {
 		t.Errorf("write: io manager open error: %s", err)
 	}
@@ -101,8 +101,8 @@ func TestFileManager_WritePage(t *testing.T) {
 	}
 }
 
-func TestFileManager_ReadPage(t *testing.T) {
-	fm, err := OpenFileManager("my-test-io.txt")
+func TestDiskManager_ReadPage(t *testing.T) {
+	fm, err := OpenDiskManager("my-test-io.txt")
 	if err != nil {
 		t.Errorf("read: io manager open error: %s", err)
 	}

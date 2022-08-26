@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cagnosolutions/go-data/pkg/dbms/errs"
 	"github.com/cagnosolutions/go-data/pkg/slicer"
 	"github.com/cagnosolutions/go-data/pkg/util"
 )
@@ -61,7 +60,7 @@ func TestPage_FillPercent(t *testing.T) {
 			err := newp.checkRecord(uint16(rsize))
 			if err != nil {
 				// no more room!
-				if err == errs.ErrNoRoom {
+				if err == ErrNoRoom {
 					break
 				}
 				t.Errorf("record check failed: %q\n", err)
@@ -538,7 +537,7 @@ func TestPage_Sync(t *testing.T) {
 	go func() {
 		err := getRecords(pg)
 		if err != nil {
-			if err != errs.ErrRecordNotFound {
+			if err != ErrRecordNotFound {
 				t.Error(err)
 			}
 		}
@@ -606,7 +605,7 @@ func pageTests() {
 	for _, id := range ids {
 		rec, err := p.getRecord(&id)
 		if err != nil {
-			if err == errs.ErrRecordNotFound {
+			if err == ErrRecordNotFound {
 				continue
 			}
 			panic(err)
@@ -637,7 +636,7 @@ func pageTests() {
 	for _, id := range ids {
 		rec, err := p.getRecord(&id)
 		if err != nil {
-			if err == errs.ErrRecordNotFound {
+			if err == ErrRecordNotFound {
 				continue
 			}
 			panic(err)
@@ -651,7 +650,7 @@ func pageTests() {
 		data := fmt.Sprintf("adding another record (%.2d)", i)
 		_, err := p.addRecord([]byte(data))
 		if err != nil {
-			if err == errs.ErrNoRoom {
+			if err == ErrNoRoom {
 				break
 			}
 			panic(err)
