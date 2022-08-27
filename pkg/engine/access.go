@@ -31,7 +31,7 @@ type StorageEngine struct {
 	dataPath    string
 	mu          sync.Mutex
 	stores      map[string]store
-	recents     map[string]*RecID
+	recents     map[string]*recID
 	journal     *WAL
 }
 

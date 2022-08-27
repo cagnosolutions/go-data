@@ -110,13 +110,8 @@ type header struct {
 }
 
 type (
-	Page  = page
-	RecID = struct {
-		PID PageID
-		SID SlotID
-	}
+	Page   = page
 	PageID = pageID
-	SlotID = slotID
 )
 
 // pageID is a pageID type
@@ -440,17 +435,6 @@ func (p *page) acquireSlot(size uint16) (uint16, *slot) {
 	return p.addSlot(size)
 }
 
-func (p *Page) AddRecord(data []byte) (*RecID, error) {
-	rid, err := p.addRecord(data)
-	if err != nil {
-		return nil, err
-	}
-	return &RecID{
-		PID: rid.pid,
-		SID: rid.sid,
-	}, nil
-}
-
 // addRecord writes a new record to the page. It returns a *recID which
 // is a record ID, along with any potential errors encountered.
 func (p *page) addRecord(data []byte) (*recID, error) {
@@ -487,13 +471,6 @@ func (p *page) checkRID(id *recID) error {
 		return ErrInvalidSID
 	}
 	return nil
-}
-
-func (p *Page) GetRecord(rid *RecID) ([]byte, error) {
-	return p.getRecord(&recID{
-		pid: rid.PID,
-		sid: rid.SID,
-	})
 }
 
 // getRecord reads a record from the page. It returns the record data
@@ -537,13 +514,6 @@ func (p *page) delSlot(sid uint16) *slot {
 	p.setSlot(sl, sid)
 	// and return
 	return sl
-}
-
-func (p *Page) DelRecord(rid *RecID) error {
-	return p.delRecord(&recID{
-		pid: rid.PID,
-		sid: rid.SID,
-	})
 }
 
 // delRecord removes a record from the page. It overwrites the record
