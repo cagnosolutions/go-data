@@ -1,8 +1,10 @@
-package engine
+package page
 
 import (
 	"errors"
 	"fmt"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -11,8 +13,8 @@ import (
 	"github.com/cagnosolutions/go-data/pkg/util"
 )
 
-var recs []*recID
-var pg page
+var recs []*RecID
+var pg Page
 
 func dataUsed(count, size int) int {
 	return szHd + (count * szSl) + (count * size)
@@ -37,7 +39,7 @@ func TestPage_ForStupidErrorsCuzYouNeverReallyKnowIfYouDidSomethingDumb(t *testi
 	p := newPage(56)
 	p.printHeader()
 	time.Sleep(1 * time.Second)
-	_, _ = p.addRecord([]byte("foobarbaz-000"))
+	_, _ = p.AddRecord([]byte("foobarbaz-000"))
 	time.Sleep(1 * time.Second)
 	p.printHeader()
 }
@@ -52,7 +54,7 @@ func TestPage_FillPercent(t *testing.T) {
 
 	var err error
 	for rsize := 10; rsize < maxRecSize; rsize += 10 {
-		// create a new page
+		// create a new Page
 		newp := newPageSize(3, 8<<10)
 		// start looping to see how many records we can add
 		for rcount := 0; err == nil; rcount++ {
@@ -67,7 +69,7 @@ func TestPage_FillPercent(t *testing.T) {
 			}
 			// add a record
 			rec := fmt.Sprintf("%s-%.3d", util.RandBytesN(rsize-4), rcount)
-			_, err = newp.addRecord([]byte(rec))
+			_, err = newp.AddRecord([]byte(rec))
 			if err != nil {
 				t.Errorf("adding record failed: %q\n", err)
 				break
@@ -81,13 +83,13 @@ func TestPage_FillPercent(t *testing.T) {
 			rsize, added, newp.FillPercent(), newp.freeSpace(),
 		)
 		// tw.Flush()
-		// wipe page
+		// wipe Page
 		added = 0
 		newp.clear()
 	}
 
 	/*
-			Record data using a 4KB page.
+			Record data using a 4KB Page.
 		====================================
 		rsize		rcount		%full	free
 		------------------------------------
@@ -181,7 +183,7 @@ func TestPage_FillPercent(t *testing.T) {
 		3950		0001		97.17	0116
 		4000		0001		98.39	0066
 
-			Record data using a 8KB page.
+			Record data using a 8KB Page.
 		====================================
 		rsize		rcount		%full	free
 		------------------------------------
@@ -383,7 +385,7 @@ func TestPage_NewPage(t *testing.T) {
 }
 
 func TestPage_NewEmptyPage(t *testing.T) {
-	var epg page
+	var epg Page
 	if epg != nil {
 		t.Errorf("got %v, expected %v\n", epg, nil)
 	}
@@ -409,15 +411,15 @@ func TestPage_NewEmptyPage(t *testing.T) {
 
 func _addRecords(t *testing.T) {
 	pg = newPage(3)
-	id1, err := pg.addRecord([]byte("this is record number one"))
+	id1, err := pg.AddRecord([]byte("this is record number one"))
 	if err != nil || id1 == nil {
 		t.Errorf("got %v, expected %v\n", err, nil)
 	}
-	id2, err := pg.addRecord([]byte("this is record number two"))
+	id2, err := pg.AddRecord([]byte("this is record number two"))
 	if err != nil || id2 == nil {
 		t.Errorf("got %v, expected %v\n", err, nil)
 	}
-	id3, err := pg.addRecord([]byte("this is record number three"))
+	id3, err := pg.AddRecord([]byte("this is record number three"))
 	if err != nil || id3 == nil {
 		t.Errorf("got %v, expected %v\n", err, nil)
 	}
@@ -433,6 +435,23 @@ func TestPage_AddRecord(t *testing.T) {
 		t.Error(err)
 	}
 	fmt.Println(pg)
+}
+
+func TestPage_AddRecordAndIterate(t *testing.T) {
+	pg = newPage(3)
+	err := addRecords(pg)
+	if err != nil {
+		t.Error(err)
+	}
+	iter, err := pg.newIter(true)
+	if err != nil {
+		t.Error(err)
+	}
+	var i int
+	for sl := iter.next(); iter.hasMore(); sl = iter.next() {
+		fmt.Printf("record #%.3d, data=%q\n", i, string(pg[sl.offset:sl.offset+sl.length]))
+		i++
+	}
 }
 
 func TestPage_GetRecord(t *testing.T) {
@@ -466,20 +485,20 @@ func TestPage_DelRecord(t *testing.T) {
 	// 	if err != nil {
 	// 		t.Errorf("got %v, expected %v\n", err, nil)
 	// 	}
-	// 	_, err := pg.getRecord(recs[i])
+	// 	_, err := pg.GetRecord(recs[i])
 	// 	if err == nil {
 	// 		t.Errorf("got %v, expected %v\n", "<error>", err)
 	// 	}
 	// }
 }
 
-var addRecordsSize = func(p page, count, size int) error {
+var addRecordsSize = func(p Page, count, size int) error {
 	if size < 5 {
 		return errors.New("size must be at least 8")
 	}
 	for i := 0; i < count; i++ {
 		rec := fmt.Sprintf("%s-%.3d", util.RandBytesN(size-4), i)
-		_, err := p.addRecord([]byte(rec))
+		_, err := p.AddRecord([]byte(rec))
 		if err != nil {
 			return err
 		}
@@ -487,10 +506,10 @@ var addRecordsSize = func(p page, count, size int) error {
 	return nil
 }
 
-var addRecords = func(p page) error {
+var addRecords = func(p Page) error {
 	for i := 0; i < 128; i++ {
 		rec := fmt.Sprintf("record-%6d", i)
-		_, err := p.addRecord([]byte(rec))
+		_, err := p.AddRecord([]byte(rec))
 		if err != nil {
 			return err
 		}
@@ -498,13 +517,13 @@ var addRecords = func(p page) error {
 	return nil
 }
 
-var getRecords = func(p page) error {
+var getRecords = func(p Page) error {
 	for i := 0; i < 128; i++ {
-		rid := &recID{
-			pid: 3,
-			sid: uint16(i),
+		rid := &RecID{
+			PID: 3,
+			SID: uint16(i),
 		}
-		_, err := p.getRecord(rid)
+		_, err := p.GetRecord(rid)
 		if err != nil {
 			return err
 		}
@@ -512,11 +531,11 @@ var getRecords = func(p page) error {
 	return nil
 }
 
-var delRecords = func(p page) error {
+var delRecords = func(p Page) error {
 	for i := 0; i < 128; i++ {
-		rid := &recID{
-			pid: 3,
-			sid: uint16(i),
+		rid := &RecID{
+			PID: 3,
+			SID: uint16(i),
 		}
 		err := p.delRecord(rid)
 		if err != nil {
@@ -559,16 +578,16 @@ func TestPage_Rando(t *testing.T) {
 
 const N = 32
 
-var ids []recID
+var ids []RecID
 
 func pageTests() {
 	p := newPage(1)
 	info(p)
 	fmt.Println(">>>>> [01 ADDING] <<<<<")
-	fmt.Printf("created page, adding %d records...\n", N)
+	fmt.Printf("created Page, adding %d records...\n", N)
 	for i := 0; i < N; i++ {
 		data := fmt.Sprintf("[record number %.2d]", i)
-		id, err := p.addRecord([]byte(data))
+		id, err := p.AddRecord([]byte(data))
 		if err != nil {
 			panic(err)
 		}
@@ -579,7 +598,7 @@ func pageTests() {
 	fmt.Println(">>>>> [02 GETTING] <<<<<")
 	fmt.Printf("now, we will be getting the records...\n")
 	for _, id := range ids {
-		rec, err := p.getRecord(&id)
+		rec, err := p.GetRecord(&id)
 		if err != nil {
 			panic(err)
 		}
@@ -589,7 +608,7 @@ func pageTests() {
 	fmt.Println(">>>>> [03 DELETING] <<<<<")
 	fmt.Printf("now, we will be removing some records...\n")
 	for i, id := range ids {
-		if (id.sid+1)%3 == 0 || id.sid == 31 {
+		if (id.SID+1)%3 == 0 || id.SID == 31 {
 			fmt.Printf("deleting record: %v\n", id)
 			err := p.delRecord(&id)
 			if err != nil {
@@ -603,7 +622,7 @@ func pageTests() {
 	fmt.Println(">>>>> [04 GETTING] <<<<<")
 	fmt.Printf("now, we will be getting the records...\n")
 	for _, id := range ids {
-		rec, err := p.getRecord(&id)
+		rec, err := p.GetRecord(&id)
 		if err != nil {
 			if err == ErrRecordNotFound {
 				continue
@@ -613,18 +632,18 @@ func pageTests() {
 		fmt.Printf("get(%v)=%q\n", id, rec)
 	}
 	fmt.Println()
-	fmt.Printf("taking a look at the page details...\n")
+	fmt.Printf("taking a look at the Page details...\n")
 	info(p)
 	fmt.Println(">>>>> [05 ADDING (9) MORE] <<<<<")
 	for i := 32; i < N+8; i++ {
 		data := fmt.Sprintf("[record number %.2d]", i)
-		id, err := p.addRecord([]byte(data))
+		id, err := p.AddRecord([]byte(data))
 		if err != nil {
 			panic(err)
 		}
 		ids = append(ids, *id)
 	}
-	id, err := p.addRecord([]byte("[large record that will not fit in existing space]"))
+	id, err := p.AddRecord([]byte("[large record that will not fit in existing space]"))
 	if err != nil {
 		panic(err)
 	}
@@ -634,7 +653,7 @@ func pageTests() {
 	fmt.Println(">>>>> [06 GETTING] <<<<<")
 	fmt.Printf("now, we will be getting the records...\n")
 	for _, id := range ids {
-		rec, err := p.getRecord(&id)
+		rec, err := p.GetRecord(&id)
 		if err != nil {
 			if err == ErrRecordNotFound {
 				continue
@@ -648,7 +667,7 @@ func pageTests() {
 	p = newPage(2)
 	for i := 0; ; i++ {
 		data := fmt.Sprintf("adding another record (%.2d)", i)
-		_, err := p.addRecord([]byte(data))
+		_, err := p.AddRecord([]byte(data))
 		if err != nil {
 			if err == ErrNoRoom {
 				break
@@ -667,6 +686,185 @@ func pageTests() {
 	fmt.Println()
 }
 
-func info(p page) {
+func info(p Page) {
 	fmt.Println(p.DumpPage(false))
 }
+
+type records struct {
+	index   map[int]int
+	records []*RecID
+}
+
+func initRecords() *records {
+	return &records{
+		index:   make(map[int]int),
+		records: make([]*RecID, 0),
+	}
+}
+
+func (r *records) add(id int, rid *RecID) {
+	for i := 0; i < len(r.records); i++ {
+		if r.records[i] == nil {
+			r.records[i] = rid
+			r.index[id] = i
+			return
+		}
+	}
+	r.records = append(r.records, rid)
+	r.index[id] = len(r.records) - 1
+}
+
+func (r *records) get(id int) *RecID {
+	i, found := r.index[id]
+	if !found {
+		return nil
+	}
+	return r.records[i]
+}
+
+func (r *records) del(id int) {
+	i, found := r.index[id]
+	if !found {
+		panic("could not locate or remove record")
+	}
+	// if i < len(r.records)-1 {
+	//	copy(r.records[i:], r.records[i+1:])
+	// }
+	// r.records[len(r.records)-1] = nil // or the zero value of T
+	// r.records = r.records[:len(r.records)-1]
+	r.records[i] = nil
+	delete(r.index, id)
+}
+
+func (r *records) String() string {
+	var ss string
+	for k, v := range r.index {
+		ss += fmt.Sprintf("{k:%d, v:%d}", k, v)
+	}
+	// for i := range r.records {
+	// 	ss += fmt.Sprintf("[%d]", r.records[i].SID)
+	// }
+	return ss
+}
+
+type testRecord struct {
+	id   int
+	data []byte
+}
+
+func getSlotAndRecsFromPage(pg Page) string {
+	iter, err := pg.newIter(false)
+	if err != nil {
+		panic(err)
+	}
+	var ss []string
+	// var SID int
+	for sl := iter.next(); iter.hasMore(); sl = iter.next() {
+		ss = append(ss, fmt.Sprintf("status=%v, val=%.1x", sl.status, string(pg[sl.offset:sl.offset+sl.length])))
+		//	SID++
+	}
+	return strings.Join(ss, ",")
+}
+
+func TestPage_IterateOrder(t *testing.T) {
+
+	pg := newPage(1)
+	recs := initRecords()
+
+	fmt.Println("inserting...")
+	ins1 := []testRecord{
+		{1, []byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}}, // 1
+		{2, []byte{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22}}, // 2
+		{4, []byte{0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44}}, // 4
+		{6, []byte{0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66}}, // 6
+		{8, []byte{0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88}}, // 8
+	}
+	for i := range ins1 {
+		r, err := pg.AddRecord(ins1[i].data)
+		if err != nil {
+			t.Errorf("something went wrong (ins1): %s", err)
+		}
+		recs.add(ins1[i].id, r)
+	}
+	// should contain: 1,2,4,6,8
+	fmt.Printf("should contain: 1,2,4,6,8\nrecords: %s\nindex: %s\n\n", getSlotAndRecsFromPage(pg), recs)
+
+	fmt.Println("deleting...")
+	del1 := []testRecord{
+		{2, []byte{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22}}, // 2
+		{1, []byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}}, // 1
+	}
+	for i := range del1 {
+		r := recs.get(del1[i].id)
+		err := pg.delRecord(r)
+		if err != nil {
+			t.Errorf("something went wrong (del1): %s", err)
+		}
+		recs.del(del1[i].id)
+	}
+	// should contain: X,X,4,6,8
+	fmt.Printf("should contain: X,X,4,6,8\nrecords: %s\nindex: %s\n\n", getSlotAndRecsFromPage(pg), recs)
+
+	fmt.Println("inserting...")
+	ins2 := []testRecord{
+		{1, []byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}}, // 1
+		{3, []byte{0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33}}, // 3
+		{5, []byte{0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55}}, // 5
+		{7, []byte{0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77}}, // 7
+		{9, []byte{0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99}}, // 9
+	}
+	for i := range ins2 {
+		r, err := pg.AddRecord(ins2[i].data)
+		if err != nil {
+			t.Errorf("something went wrong (ins2): %s", err)
+		}
+		recs.add(ins2[i].id, r)
+	}
+	// should contain: 1,3,4,6,8,5,7,9
+	fmt.Printf("should contain: 1,3,4,6,8,5,7,9\nrecords: %s\nindex: %s\n\n", getSlotAndRecsFromPage(pg), recs)
+
+	fmt.Println("deleting...")
+	del2 := []testRecord{
+		{5, []byte{0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55}}, // 5
+		{1, []byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}}, // 1
+		{4, []byte{0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44}}, // 4
+		{7, []byte{0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77}}, // 7
+	}
+	for i := range del2 {
+		r := recs.get(del2[i].id)
+		err := pg.delRecord(r)
+		if err != nil {
+			t.Errorf("something went wrong (del2): %s", err)
+		}
+		recs.del(del2[i].id)
+	}
+	// should contain: X,3,X,6,8,X,X,9
+	fmt.Printf("should contain: X,3,X,6,8,X,X,9\nrecords: %s\nindex: %s\n\n", getSlotAndRecsFromPage(pg), recs)
+
+	fmt.Println("inserting...")
+	ins3 := []testRecord{
+		{5, []byte{0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55}},  // 5
+		{7, []byte{0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77}},  // 7
+		{2, []byte{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22}},  // 2
+		{1, []byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}},  // 1
+		{4, []byte{0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44}},  // 4
+		{10, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}}, // 10
+		{11, []byte{0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc}}, // 11
+		{12, []byte{0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb}}, // 12
+	}
+	for i := range ins3 {
+		r, err := pg.AddRecord(ins3[i].data)
+		if err != nil {
+			t.Errorf("something went wrong (ins3): %s", err)
+		}
+		recs.add(ins3[i].id, r)
+	}
+	// should contain: 5,3,7,6,8,2,1,9,4
+	fmt.Printf("should contain: 5,3,7,6,8,2,1,9,4\nrecords: %s\nindex: %s\n\n", getSlotAndRecsFromPage(pg), recs)
+
+	pg.clear()
+	_ = pg
+	runtime.GC()
+}
+
+const ()

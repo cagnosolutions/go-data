@@ -2,6 +2,12 @@ package util
 
 import _ "embed"
 
+//go:embed data/gettysburg_addr.txt
+var GettysburgAddress string
+
+//go:embed data/sorted_random_set.txt
+var SortedRandomSet string
+
 //go:embed ww.txt
 var WaltWhitmanTextString string
 

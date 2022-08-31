@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/cagnosolutions/go-data/pkg/engine/page"
 )
 
 func TestDiskManager_OpenDiskManager(t *testing.T) {
@@ -45,7 +47,7 @@ func TestDiskManager_AllocatePage(t *testing.T) {
 		t.Errorf("allocate: io manager should NOT be nil, got %v", fm)
 	}
 
-	var pages []PageID
+	var pages []page.PageID
 	for i := 0; i < 8; i++ {
 		pages = append(pages, fm.AllocatePage())
 	}
@@ -74,7 +76,7 @@ func TestDiskManager_WritePage(t *testing.T) {
 		t.Errorf("write: io manager should NOT be nil, got %v", fm)
 	}
 
-	var pages []PageID
+	var pages []page.PageID
 	for i := 0; i < 8; i++ {
 		pages = append(pages, fm.AllocatePage())
 	}
@@ -84,8 +86,8 @@ func TestDiskManager_WritePage(t *testing.T) {
 	fmt.Printf("page id's allocated: %v\n", pages)
 
 	for _, pid := range pages {
-		pg := newPage(pid)
-		_, err = pg.addRecord([]byte(fmt.Sprintf("some data for page #%.4d", pid)))
+		pg := page.NewPage(pid)
+		_, err = pg.AddRecord([]byte(fmt.Sprintf("some data for page #%.4d", pid)))
 		if err != nil {
 			t.Errorf("write: error writing page record: %s", err)
 		}
@@ -116,7 +118,7 @@ func TestDiskManager_ReadPage(t *testing.T) {
 		t.Errorf("read: io manager should NOT be nil, got %v", fm)
 	}
 
-	var pages []PageID
+	var pages []page.PageID
 	for i := 0; i < 8; i++ {
 		pages = append(pages, fm.AllocatePage())
 	}
@@ -126,8 +128,8 @@ func TestDiskManager_ReadPage(t *testing.T) {
 	fmt.Printf("page id's allocated: %v\n", pages)
 
 	for _, pid := range pages {
-		pg := newPage(pid)
-		_, err = pg.addRecord([]byte(fmt.Sprintf("some data for page #%.4d", pid)))
+		pg := page.NewPage(pid)
+		_, err = pg.AddRecord([]byte(fmt.Sprintf("some data for page #%.4d", pid)))
 		if err != nil {
 			t.Errorf("read: error writing page record: %s", err)
 		}
@@ -138,7 +140,7 @@ func TestDiskManager_ReadPage(t *testing.T) {
 	}
 
 	for _, pid := range pages {
-		pg := newPage(pid)
+		pg := page.NewPage(pid)
 		err = fm.ReadPage(pid, pg)
 		if err != nil {
 			t.Errorf("read: error writing page: %s", err)

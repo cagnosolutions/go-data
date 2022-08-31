@@ -2,6 +2,8 @@ package engine
 
 import (
 	"testing"
+
+	"github.com/cagnosolutions/go-data/pkg/engine/page"
 )
 
 func TestNewFrame(t *testing.T) {
@@ -9,7 +11,7 @@ func TestNewFrame(t *testing.T) {
 	if f.FID > 0 || f.PID > 0 || f.Page != nil {
 		t.Errorf("new frame: frame should be nil")
 	}
-	f = newFrame(5, 3, PageSize)
+	f = newFrame(5, 3, page.PageSize)
 	if f.FID == 0 || f.PID == 0 || f.Page == nil {
 		t.Errorf("new frame: frame should not be nil")
 	}
@@ -17,7 +19,7 @@ func TestNewFrame(t *testing.T) {
 }
 
 func TestFrame_DecrPinCount(t *testing.T) {
-	f := newFrame(5, 3, PageSize)
+	f := newFrame(5, 3, page.PageSize)
 	if f.FID == 0 || f.PID == 0 || f.Page == nil {
 		t.Errorf("decr pin count: frame should not be nil")
 	}
@@ -35,7 +37,7 @@ func TestFrame_DecrPinCount(t *testing.T) {
 }
 
 func TestFrame_Reset(t *testing.T) {
-	f := newFrame(5, 3, PageSize)
+	f := newFrame(5, 3, page.PageSize)
 	if f.FID == 0 || f.PID == 0 || f.Page == nil {
 		t.Errorf("reset: frame should not be nil")
 	}

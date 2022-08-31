@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS user (\n
 \temail TEXT NOT NULL UNIQUE\n
 );\n
 CREATE INDEX IF NOT EXISTS 'idx_user_pks' ON 'user' (id);
+CREATE INDEX IF NOT EXISTS 'idx_user_email' ON 'user' (email);
+CREATE INDEX IF NOT EXISTS 'idx_user_name' ON 'user' (first_name,last_name);
 EOF
 
 # create address table and indexes
@@ -24,6 +26,7 @@ CREATE TABLE IF NOT EXISTS address (\n
 \tzip TEXT NOT NULL\n
 );\n
 CREATE INDEX IF NOT EXISTS 'idx_address_pks' ON 'address' (id);
+CREATE INDEX IF NOT EXISTS 'idx_address_street' ON 'address' (street);
 EOF
 
 # create table and indexes
@@ -56,5 +59,5 @@ sqlite3 "$db" ".mode csv" ".import user_data.csv user" ".exit"
 sqlite3 "$db" ".mode csv" ".import address_data.csv address" ".exit"
 
 # drop the database
-rm "$db"
+#rm "$db"
 

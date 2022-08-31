@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cagnosolutions/go-data/pkg/engine/page"
 	"github.com/cagnosolutions/go-data/pkg/util"
 )
 
@@ -19,17 +20,17 @@ func TestPageCache(t *testing.T) {
 		t.Errorf("opening buffer manager: %s\n", err)
 	}
 
-	page0 := Page(pc.NewPage())
+	page0 := pc.NewPage()
 
 	// Scenario 1: The buffer pool is empty. We should be able to create a new page.
-	util.Equals(t, PageID(0), page0.GetPageID())
+	util.Equals(t, page.PageID(0), page0.GetPageID())
 
 	// Scenario 2: Once we have a page, we should be able to read and write content.
-	id0, err := page0.addRecord([]byte("Hello, World!"))
+	id0, err := page0.AddRecord([]byte("Hello, World!"))
 	if err != nil {
 		t.Error(err)
 	}
-	rec, err := page0.getRecord(id0)
+	rec, err := page0.GetRecord(id0)
 	if err != nil {
 		t.Error(err)
 	}
@@ -37,20 +38,20 @@ func TestPageCache(t *testing.T) {
 
 	// Scenario 3: We should be able to create new pages until we fill up the buffer pool.
 	for i := uint16(1); i < pageCount; i++ {
-		p := Page(pc.NewPage())
-		util.Equals(t, PageID(i), p.GetPageID())
+		p := pc.NewPage()
+		util.Equals(t, page.PageID(i), p.GetPageID())
 	}
 
 	// Scenario 4: Once the buffer pool is full, we should not be able to create any new pages.
 	for i := pageCount; i < pageCount*2; i++ {
-		util.Equals(t, Page(nil), Page(pc.NewPage()))
+		util.Equals(t, page.Page(nil), pc.NewPage())
 	}
 
 	// Scenario 5: After unpinning pages {0, 1, 2, 3, 4} and pinning another 59 new pages,
 	// there would still be one cache frame left for reading page 0.
 	for i := 0; i < 5; i++ {
-		util.Ok(t, pc.UnpinPage(PageID(i), true))
-		err := pc.FlushPage(PageID(i))
+		util.Ok(t, pc.UnpinPage(page.PageID(i), true))
+		err := pc.FlushPage(page.PageID(i))
 		if err != nil {
 			t.Error(err)
 		}
@@ -60,8 +61,8 @@ func TestPageCache(t *testing.T) {
 	}
 
 	// Scenario 6: We should be able to fetch the data we wrote a while ago.
-	page0 = Page(pc.FetchPage(PageID(0)))
-	rec2, err := page0.getRecord(id0)
+	page0 = pc.FetchPage(page.PageID(0))
+	rec2, err := page0.GetRecord(id0)
 	if err != nil {
 		t.Error(err)
 	}
@@ -69,12 +70,12 @@ func TestPageCache(t *testing.T) {
 
 	// Scenario 7: If we unpin page 0 and then make a new page, all the buffer pages should
 	// now be pinned. Fetching page 0 should fail.
-	util.Ok(t, pc.UnpinPage(PageID(0), true))
+	util.Ok(t, pc.UnpinPage(page.PageID(0), true))
 
-	pg = Page(pc.NewPage())
-	util.Equals(t, PageID(pageCount+4), pg.GetPageID())
-	util.Equals(t, Page(nil), pc.NewPage())
-	util.Equals(t, Page(nil), pc.FetchPage(PageID(0)))
+	pg := pc.NewPage()
+	util.Equals(t, page.PageID(pageCount+4), pg.GetPageID())
+	util.Equals(t, page.Page(nil), pc.NewPage())
+	util.Equals(t, page.Page(nil), pc.FetchPage(page.PageID(0)))
 
 	err = pc.flushAll()
 	if err != nil {

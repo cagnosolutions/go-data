@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/cagnosolutions/go-data/pkg/engine/page"
 )
 
 // error values
@@ -19,7 +21,7 @@ var (
 
 type store struct {
 	cache  *PageCache
-	recent *recID
+	recent *page.RecID
 }
 
 // StorageEngine is a high level data storage and management engine type that can
@@ -31,7 +33,7 @@ type StorageEngine struct {
 	dataPath    string
 	mu          sync.Mutex
 	stores      map[string]store
-	recents     map[string]*recID
+	recents     map[string]*page.RecID
 	journal     *WAL
 }
 
@@ -113,7 +115,7 @@ func (se *StorageEngine) CreateNamespace(name string) error {
 	}
 	se.stores[name] = store{
 		cache:  pc,
-		recent: new(recID),
+		recent: new(page.RecID),
 	}
 	return nil
 }
@@ -144,14 +146,14 @@ func (se *StorageEngine) Insert(ns string, p []byte) (uint32, error) {
 		return 0, ErrDataStoreDoesNotExist
 	}
 	// Got it; do our thing
-	pid := st.recent.pid
+	pid := st.recent.PID
 	pg := st.cache.FetchPage(pid)
 	if pg == nil {
 		// Page not found
 		return 0, ErrPageNotFound
 	}
 	// Add the record to the page
-	rid, err := pg.addRecord(p)
+	rid, err := pg.AddRecord(p)
 	if err != nil {
 		return 0, err
 	}
@@ -163,7 +165,7 @@ func (se *StorageEngine) Insert(ns string, p []byte) (uint32, error) {
 		return 0, err
 	}
 	// Finish and return
-	return uint32(rid.sid), nil
+	return uint32(rid.SID), nil
 }
 
 // Return will attempt to return the record data matching the provided namespace ns,
