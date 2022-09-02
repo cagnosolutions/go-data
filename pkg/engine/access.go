@@ -50,11 +50,13 @@ func Open(path string) (*StorageEngine, error) {
 	jp := filepath.Join(path, "journal")
 	dp := filepath.Join(path, "data")
 	// Enable the journal
-	journal, err := OpenWAL(&WALConfig{
-		BasePath:    jp,
-		MaxFileSize: 256 << 10,
-		SyncOnWrite: true,
-	})
+	journal, err := OpenWAL(
+		&WALConfig{
+			BasePath:    jp,
+			MaxFileSize: 256 << 10,
+			SyncOnWrite: true,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +167,7 @@ func (se *StorageEngine) Insert(ns string, p []byte) (uint32, error) {
 		return 0, err
 	}
 	// Finish and return
-	return uint32(rid.SID), nil
+	return uint32(rid.CID), nil
 }
 
 // Return will attempt to return the record data matching the provided namespace ns,

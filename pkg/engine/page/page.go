@@ -14,59 +14,51 @@ import (
 )
 
 // RE: scratch_184.go
-
 // https://go.dev/play/p/gr8RC8vDuSv
 
-// // Defaults for Page size
-// const (
-// 	DefaultPageSize = szPg // 4KB
-// 	MinPageSize     = szSl
-// 	MaxPageSize     = DefaultPageSize - szHd - szSl
-// )
-
+// Various fixed size constants
 const (
-	szHd = 24       // fileSize of Page header (in bytes)
-	szSl = 6        // fileSize of slot index (in bytes)
-	szPg = 16 << 10 // fileSize of Page (default)
-
-	SizeHeader = szHd
-	SizeSlot   = szSl
-	SizePage   = szPg
+	recordHeaderSize = 6        // size of a recordHeader
+	pageHeaderSize   = 24       // size of a pageHeader
+	pageCellSize     = 6        // size of a cell pointer
+	pageSize         = 16 << 10 // size of a page
 )
 
-// Binary offsets for Page header
+// Flags for Page
+const (
+	P_FREE uint32 = 0x00000001 // indicates the Page is free to use
+	P_USED uint32 = 0x00000002 // indicates the Page is being used
+)
+
+// Flags for cellPtr
+const (
+	C_FREE uint16 = 0x0001
+	C_USED uint16 = 0x0002
+)
+
+func hasFlag16(flags, isSet uint16) bool {
+	return (flags & isSet) != 0
+}
+
+func hasFlag32(flags, isSet uint32) bool {
+	return (flags & isSet) != 0
+}
+
+// Binary offsets for Page pageHeader
 const (
 	offPID      uint32 = 0  // PID=uint32		offs=0-4 	(4 bytes)
-	offSize     uint32 = 4  // size=uint32 	offs=4-8	(4 bytes)
-	offReserved uint32 = 8  // reserved=uint32 offs=8-12	(4 bytes)
-	offMeta     uint32 = 12 // meta=uint32		offs=12-16	(4 bytes)
-	offStat     uint16 = 16 // status=uint16	offs=16-18	(2 bytes)
-	offSlots    uint16 = 18 // slots=uint16	offs=18-20	(2 bytes)
-	offLower    uint16 = 20 // lower=uint16	offs=20-22 	(2 bytes)
-	offUpper    uint16 = 22 // upper=uint16	offs=22-24	(2 bytes)
+	offPrev     uint32 = 4  // prev=uint32 		offs=4-8	(4 bytes)
+	offNext     uint32 = 8  // next=uint32 		offs=8-12	(4 bytes)
+	offFlags    uint32 = 12 // flags=uint32		offs=12-16	(4 bytes)
+	offNumFree  uint16 = 16 // numFree=uint16	offs=16-18	(2 bytes)
+	offNumCells uint16 = 18 // numCells=uint16	offs=18-20	(2 bytes)
+	offLower    uint16 = 20 // lower=uint16		offs=20-22 	(2 bytes)
+	offUpper    uint16 = 22 // upper=uint16		offs=22-24	(2 bytes)
 )
 
-// Status flags (Page or slot status)
-const (
-	StatFree uint16 = 0x0001 // Page or slot is free
-	StatUsed uint16 = 0x0002 // Page or slot to use
-)
-
-// Meta flags for Page
-const (
-	// Record type
-	mdRecFixed uint32 = 0x000004 // fixed sized records
-	mdRecDynmc uint32 = 0x000008 // dynamic sized records
-
-	// Slotted Page type
-	mdSlotted uint32 = 0x000010 // default, general purpose slotted Page
-	_         uint32 = 0x000020
-	_         uint32 = 0x000040
-	_         uint32 = 0x000080
-
-	// temp disable
-	_ = mdRecFixed
-)
+// PageID is a PageID type
+type PageID = uint32
+type SlotID = uint16
 
 // Page latch
 var pgLatch sync.Mutex
@@ -76,223 +68,211 @@ var pgLatch sync.Mutex
 // simply be changed.
 var bin = binary.LittleEndian
 
-// slot is a struct which is an index for a record.
-type slot struct {
-	status uint16
+// cellPtr is a struct which is an index for a record. **It should be noted
+// that a cellPtr pointer may also just end up becoming a single uint64.
+type cellPtr struct {
+	id     uint16
+	flags  uint16
 	offset uint16
 	length uint16
 }
 
 // bounds returns the starting and ending offsets to the
-// particular record that this slot index "points" to.
-func (s slot) bounds() (uint16, uint16) {
-	return s.offset, s.offset + s.length
+// particular record that this cellPtr index "points" to.
+func (c cellPtr) bounds() (uint16, uint16) {
+	return c.offset, c.offset + c.length
 }
 
-func (s slot) String() string {
-	ss := fmt.Sprintf("off=%.4d, len=%.4d, free=%v", s.offset, s.length, s.status == StatFree)
-	ss += fmt.Sprintf("\t[0x%.4x,0x%.4x,0x%.4x]", s.offset, s.length, s.status)
+// String is the string method for a cellPtr
+func (c cellPtr) String() string {
+	ss := fmt.Sprintf("off=%.4d, len=%.4d, numFree=%v", c.offset, c.length, hasFlag16(c.flags, C_FREE))
+	ss += fmt.Sprintf("\t[0x%.4x,0x%.4x,0x%.4x]", c.offset, c.length, c.flags)
 	return ss
 }
 
 // RecID is a struct representing a record ID.
 type RecID struct {
-	PID uint32 // Page id
-	SID uint16 // slot id (slot index)
+	PID uint32 // PID is the Page ID
+	CID uint16 // CID is the cellPtr ID (not the index)
 }
 
-// header is a struct representing a Page header.
-type header struct {
+// pageHeader is a struct representing a Page pageHeader.
+type pageHeader struct {
 	pid      uint32 // id of Page
-	size     uint32 // size of the Page
-	reserved uint32 // reserved for later use
-	meta     uint32 // meta data for Page
-	status   uint16 // status of Page
-	slots    uint16 // number of slots
-	lower    uint16 // lower free space bound
-	upper    uint16 // upper free space bound
+	prev     uint32 // prev Page pointer
+	next     uint32 // next Page pointer
+	flags    uint32 // flags and meta data for Page
+	numFree  uint16 // number of numFree cells
+	numCells uint16 // number of cells allocated
+	lower    uint16 // lower numFree space bound
+	upper    uint16 // upper numFree space bound
 }
-
-// PageID is a PageID type
-type PageID = uint32
-type SlotID = uint16
 
 // Page is a Page.
 type Page []byte
 
-func (p *Page) Size() int {
-	return p.size()
+// NewEmptyPage returns a new Page instance using the default page size. The provided
+// page ID is set, along with the flags P_FREE, denoting it as an empty page that is
+// free to use.
+func NewEmptyPage(pid uint32) Page {
+	pg := make(Page, pageSize, pageSize)
+	pg.setHeader(
+		&pageHeader{
+			pid:      pid,
+			prev:     0,
+			next:     0,
+			flags:    P_FREE,
+			numFree:  0,
+			numCells: 0,
+			lower:    pageHeaderSize,
+			upper:    pageSize,
+		},
+	)
+	return pg
 }
 
-func (p *Page) size() int {
+// NewPage returns a new Page instance using the default page size. The provided
+// page ID is set, along with the flag P_USED, denoting it as a page that is not empty
+// and probably (if not now, then momentarily) contains data.
+func NewPage(pid uint32) Page {
+	pg := make(Page, pageSize, pageSize)
+	pg.setHeader(
+		&pageHeader{
+			pid:      pid,
+			prev:     0,
+			next:     0,
+			flags:    P_USED,
+			numFree:  0,
+			numCells: 0,
+			lower:    pageHeaderSize,
+			upper:    pageSize,
+		},
+	)
+	return pg
+}
+
+// setHeader encodes the provided pageHeader structure to the underlying
+// Page.
+func (p *Page) setHeader(h *pageHeader) {
+	bin.PutUint32((*p)[offPID:offPID+4], h.pid)                // offset 00: PID 		(00-04) // 4 bytes
+	bin.PutUint32((*p)[offPrev:offPrev+4], h.prev)             // offset 04: prev		(04-08) // 4 bytes
+	bin.PutUint32((*p)[offNext:offNext+4], h.next)             // offset 08: next	(08-12) // 4 bytes
+	bin.PutUint32((*p)[offFlags:offFlags+4], h.flags)          // offset 12: flags		(12-16) // 4 bytes
+	bin.PutUint16((*p)[offNumFree:offNumFree+2], h.numFree)    // offset 16: numFree		(16-18) // 2 bytes
+	bin.PutUint16((*p)[offNumCells:offNumCells+2], h.numCells) // offset 18: numCells		(18-20) // 2 bytes
+	bin.PutUint16((*p)[offLower:offLower+2], h.lower)          // offset 20: lower		(20-22) // 2 bytes
+	bin.PutUint16((*p)[offUpper:offUpper+2], h.upper)          // offset 22: upper		(22-24) // 2 bytes
+
+	// 															// offset 24: begin cellPtr list
+}
+
+// getPageHeader decodes the pageHeader (from the underlying Page) and returns
+// a pointer to a pageHeader structure
+func (p *Page) getPageHeader() *pageHeader {
+	return &pageHeader{
+		pid:      decU32((*p)[offPID : offPID+4]),
+		prev:     decU32((*p)[offPrev : offPrev+4]),
+		next:     decU32((*p)[offNext : offNext+4]),
+		flags:    decU32((*p)[offFlags : offFlags+4]),
+		numFree:  decU16((*p)[offNumFree : offNumFree+2]),
+		numCells: decU16((*p)[offNumCells : offNumCells+2]),
+		lower:    decU16((*p)[offLower : offLower+2]),
+		upper:    decU16((*p)[offUpper : offUpper+2]),
+	}
+}
+
+// getPageID decodes and returns the Page ID directly from the encoded pageHeader.
+func (p *Page) getPageID() uint32 {
+	return decU32((*p)[offPID : offPID+4])
+}
+
+// getPrev decodes and returns the previous pointer directly from the encoded pageHeader.
+func (p *Page) getPrev() uint32 {
+	return decU32((*p)[offPrev : offPrev+4])
+}
+
+// getNext decodes and returns the next pointer directly from the encoded pageHeader.
+func (p *Page) getNext() uint32 {
+	return decU32((*p)[offNext : offNext+4])
+}
+
+// getFlags decodes and returns the flags field directly from the encoded pageHeader.
+func (p *Page) getFlags() uint32 {
+	return decU32((*p)[offFlags : offFlags+4])
+}
+
+// getNumFree decodes and returns the number of free cells directly from the encoded pageHeader.
+func (p *Page) getNumFree() uint16 {
+	return decU16((*p)[offNumFree : offNumFree+4])
+}
+
+// getNumCells decodes and returns the number of allocated cells directly from the encoded pageHeader.
+func (p *Page) getNumCells() uint16 {
+	return decU16((*p)[offNumCells : offNumCells+4])
+}
+
+// getLower decodes and returns the lower bound marker directly from the encoded pageHeader.
+func (p *Page) getLower() uint16 {
+	return decU16((*p)[offLower : offLower+4])
+}
+
+// getUpper decodes and returns the upper bound marker directly from the encoded pageHeader.
+func (p *Page) getUpper() uint16 {
+	return decU16((*p)[offUpper : offUpper+4])
+}
+
+// setPageID encodes the provided value directly into the pageHeader.
+func (p *Page) setPageID(n uint32) {
+	encU32((*p)[offPID:offPID+4], n)
+}
+
+// setPrev encodes the provided value directly into the pageHeader.
+func (p *Page) setPrev(n uint32) {
+	encU32((*p)[offPrev:offPrev+4], n)
+}
+
+// setNext encodes the provided value directly into the pageHeader.
+func (p *Page) setNext(n uint32) {
+	encU32((*p)[offNext:offNext+4], n)
+}
+
+// setFlags encodes the provided value directly into the pageHeader.
+func (p *Page) setFlags(n uint32) {
+	encU32((*p)[offFlags:offFlags+4], n)
+}
+
+// setNumFree encodes the provided value directly into the pageHeader.
+func (p *Page) setNumFree(n uint16) {
+	encU16((*p)[offNumFree:offNumFree+4], n)
+}
+
+// setNumCells encodes the provided value directly into the pageHeader.
+func (p *Page) setNumCells(n uint16) {
+	encU16((*p)[offNumCells:offNumCells+4], n)
+}
+
+// setLower encodes the provided value directly into the pageHeader.
+func (p *Page) setLower(n uint16) {
+	encU16((*p)[offLower:offLower+4], n)
+}
+
+// setUpper encodes the provided value directly into the pageHeader.
+func (p *Page) setUpper(n uint16) {
+	encU16((*p)[offUpper:offUpper+4], n)
+}
+
+// Size returns the page size in bytes
+func (p *Page) Size() int {
 	if p == nil {
 		return 0
 	}
 	return len(*p)
 }
 
-const PageSize = 16 << 10
-
-func NewEmptyPage(pid PageID) Page {
-	return newEmptyPageSize(pid, PageSize)
-}
-
-// newEmptyPage returns a new Page instance set with the provided Page ID,
-// with a meta byte status of StatFree, denoting it as empty and free to use.
-func newEmptyPage(pid uint32) Page {
-	return newEmptyPageSize(pid, PageSize)
-}
-
-func NewEmptyPageSize(pid PageID, size uint16) Page {
-	return newEmptyPageSize(pid, size)
-}
-
-// newEmptyPageSize returns a new Page instance set with the provided Page ID, with
-// a meta byte status of StatFree, denoting it as empty and free to use. It is sized
-// according to the provided size.
-func newEmptyPageSize(pid uint32, size uint16) Page {
-	pg := make(Page, size, size)
-	pg.setHeader(
-		&header{
-			pid:      pid,
-			size:     uint32(size),
-			reserved: uint32(0),
-			meta:     mdSlotted | mdRecDynmc,
-			status:   StatFree,
-			slots:    uint16(0),
-			lower:    szHd,
-			upper:    size,
-		},
-	)
-	return pg
-}
-
-func NewPage(pid PageID) Page {
-	return newPageSize(pid, PageSize)
-}
-
-// newPage returns a new Page instance set with the provided Page ID.
-func newPage(pid uint32) Page {
-	return newPageSize(pid, PageSize)
-}
-
-func NewPageSize(pid PageID, size uint16) Page {
-	return newPageSize(pid, size)
-}
-
-// newPageSize returns a new Page instance set with the provided Page ID, and sized
-// according to the provided size.
-func newPageSize(pid uint32, size uint16) Page {
-	pg := make(Page, size, size)
-	pg.setHeader(
-		&header{
-			pid:      pid,
-			size:     uint32(size),
-			reserved: uint32(0),
-			meta:     mdSlotted | mdRecDynmc,
-			status:   StatUsed,
-			slots:    uint16(0),
-			lower:    szHd,
-			upper:    size,
-		},
-	)
-	return pg
-}
-
-// setHeader encodes the provided header structure to the underlying
-// Page.
-func (p *Page) setHeader(h *header) {
-	bin.PutUint32((*p)[offPID:offPID+4], h.pid)                // offset 00: PID 		(00-04) // 4 bytes
-	bin.PutUint32((*p)[offSize:offSize+4], h.size)             // offset 04: size		(04-08) // 4 bytes
-	bin.PutUint32((*p)[offReserved:offReserved+4], h.reserved) // offset 08: reserved	(08-12) // 4 bytes
-	bin.PutUint32((*p)[offMeta:offMeta+4], h.meta)             // offset 12: meta		(12-16) // 4 bytes
-	bin.PutUint16((*p)[offStat:offStat+2], h.status)           // offset 16: status		(16-18) // 2 bytes
-	bin.PutUint16((*p)[offSlots:offSlots+2], h.slots)          // offset 18: slots		(18-20) // 2 bytes
-	bin.PutUint16((*p)[offLower:offLower+2], h.lower)          // offset 20: lower		(20-22) // 2 bytes
-	bin.PutUint16((*p)[offUpper:offUpper+2], h.upper)          // offset 22: upper		(22-24) // 2 bytes
-
-	// 															// offset 24: begin slot list
-}
-
-func (p *Page) printHeader() {
-	h := p.GetHeader()
-	fmt.Printf("header:\n")
-	fmt.Printf(
-		"\tPID=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.pid, 4, offPID, offPID+4,
-		(*p)[offPID:offPID+4],
-	)
-	fmt.Printf(
-		"\tsize=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.size, 4, offSize, offSize+4,
-		(*p)[offSize:offSize+4],
-	)
-	fmt.Printf(
-		"\treserved=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.reserved, 4, offReserved, offReserved+4,
-		(*p)[offReserved:offReserved+4],
-	)
-	fmt.Printf(
-		"\tmeta=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.meta, 4, offMeta, offMeta+4,
-		(*p)[offMeta:offMeta+4],
-	)
-	fmt.Printf(
-		"\tstatus=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.status, 2, offStat, offStat+2,
-		(*p)[offStat:offStat+2],
-	)
-	fmt.Printf(
-		"\tslots=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.slots, 2, offSlots, offSlots+2,
-		(*p)[offSlots:offSlots+2],
-	)
-	fmt.Printf(
-		"\tlower=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.lower, 2, offLower, offLower+2,
-		(*p)[offLower:offLower+2],
-	)
-	fmt.Printf(
-		"\tupper=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.upper, 2, offUpper, offUpper+2,
-		(*p)[offUpper:offUpper+2],
-	)
-}
-
-// GetHeader decodes (from the underlying Page) and returns a
-// pointer to a header structure
-func (p *Page) GetHeader() *header {
-	return &header{
-		pid:      bin.Uint32((*p)[offPID : offPID+4]),
-		size:     bin.Uint32((*p)[offSize : offSize+4]),
-		reserved: bin.Uint32((*p)[offReserved : offReserved+4]),
-		meta:     bin.Uint32((*p)[offMeta : offMeta+4]),
-		status:   bin.Uint16((*p)[offStat : offStat+2]),
-		slots:    bin.Uint16((*p)[offSlots : offSlots+2]),
-		lower:    bin.Uint16((*p)[offLower : offLower+2]),
-		upper:    bin.Uint16((*p)[offUpper : offUpper+2]),
-	}
-}
-
-func (p *Page) GetPageID() PageID {
-	return p.getPageID()
-}
-
-func (p *Page) IsUsed() bool {
-	return p.getPageStatus() == StatUsed
-}
-
-// getPageStatus returns the current Page status.
-func (p *Page) getPageStatus() uint16 {
-	return bin.Uint16((*p)[offStat : offStat+2])
-}
-
-// getPageID returns the current Page ID.
-func (p *Page) getPageID() uint32 {
-	return bin.Uint32((*p)[offPID : offPID+4])
-}
-
-// getPageSize returns the Page size.
-func (p *Page) getPageSize() uint32 {
-	return bin.Uint32((*p)[offSize : offSize+4])
-}
-
-// freeSpace returns the amount of contiguous free space left in the
+// freeSpace returns the amount of contiguous numFree space left in the
 // Page (space between the upper and lower bounds)
 func (p *Page) freeSpace() uint16 {
-	free := bin.Uint16((*p)[offUpper:offUpper+2]) - bin.Uint16((*p)[offLower:offLower+2])
+	free := decU16((*p)[offUpper:offUpper+2]) - decU16((*p)[offLower:offLower+2])
 	if p != nil && int(free) > len(*p) {
 		return 0
 	}
@@ -301,157 +281,158 @@ func (p *Page) freeSpace() uint16 {
 
 // checkRecord performs sanity and error checking on a record size
 func (p *Page) checkRecord(size uint16) error {
-	if size < szSl {
+	if size < pageCellSize {
 		return errs.ErrRecordTooSmall
 	}
-	// free := p.freeSpace() - szSl
-	// util.DEBUG("checkRecord, free=%d, size=%d", free, size)
+	// numFree := p.freeSpace() - pageCellSize
+	// util.DEBUG("checkRecord, numFree=%d, prev=%d", numFree, prev)
 	if size >= p.freeSpace() {
 		return ErrNoRoom
 	}
 	return nil
 }
 
-// getSlotSet decodes and returns a set of slot pointer for this Page.
-// It will return nil if there are no slots on this Page. Any changes
-// made to this list of slots is not persisted until calling setSlots.
-func (p *Page) getSlotSet() []*slot {
-	// Check if there are any slots to return.
-	slotCount := bin.Uint16((*p)[offSlots : offSlots+2])
+// getSlotSet decodes and returns a set of cellPtr pointer for this Page.
+// It will return nil if there are no numCells on this Page. Any changes
+// made to this list of numCells is not persisted until calling setSlots.
+func (p *Page) getSlotSet() []*cellPtr {
+	// Check if there are any numCells to return.
+	slotCount := decU16((*p)[offNumCells : offNumCells+2])
 	if slotCount < 1 {
-		// No slots to decode
+		// No numCells to decode
 		return nil
 	}
-	// We have slots we can decode. Create a set we can append to.
-	var slots []*slot
-	// Start looping, decoding, and adding slots to our slot set.
+	// We have numCells we can decode. Create a set we can append to.
+	var slots []*cellPtr
+	// Start looping, decoding, and adding numCells to our cellPtr set.
 	for sid := uint16(0); sid < slotCount; sid++ {
-		// Append the slot to the slot set.
+		// Append the cellPtr to the cellPtr set.
 		slots = append(slots, p.getSlot(sid))
 	}
-	// Finally, return our slot set.
+	// Finally, return our cellPtr set.
 	return slots
 }
 
-// __setSlotSet encodes a set of slot pointers into this Page. It will
-// return an error if there is not enough room to write the set of slots
+// __setSlotSet encodes a set of cellPtr pointers into this Page. It will
+// return an error if there is not enough room to write the set of numCells
 // to the underlying Page.
-func (p *Page) __setSlotSet(_ []*slot) error {
+func (p *Page) __setSlotSet(_ []*cellPtr) error {
 	// Not sure if I want to append or overwrite this at the moment...
 	return nil
 }
 
-// setSlot writes the provided slot to the location derived using
-// the supplied slot index ID. setSlot panics if the provided SID
+// setSlot writes the provided cellPtr to the location derived using
+// the supplied cellPtr index ID. setSlot panics if the provided CID
 // is out of bounds.
-func (p *Page) setSlot(sl *slot, sid uint16) {
-	// get the slot offset
-	off := szHd + (sid * szSl)
+func (p *Page) setSlot(sl *cellPtr, sid uint16) {
+	// get the cellPtr offset
+	off := pageHeaderSize + (sid * pageCellSize)
 	// make sure it is in bounds
-	if lo := bin.Uint16((*p)[offLower : offLower+2]); off > lo {
-		panic(fmt.Sprintf("--setSlot: slot id (%d) or offset (%d) is out of bounds (%d)", sid, off, lo))
+	if lo := decU16((*p)[offLower : offLower+2]); off > lo {
+		panic(fmt.Sprintf("--setSlot: cellPtr id (%d) or offset (%d) is out of bounds (%d)", sid, off, lo))
 	}
 	// for clarity
 	offStatus := off
 	offOffset := off + 2
 	offLength := off + 4
-	// now we write the slot to the Page
-	bin.PutUint16((*p)[offStatus:offStatus+2], sl.status)
+	// now we write the cellPtr to the Page
+	bin.PutUint16((*p)[offStatus:offStatus+2], sl.flags)
 	bin.PutUint16((*p)[offOffset:offOffset+2], sl.offset)
 	bin.PutUint16((*p)[offLength:offLength+2], sl.length)
 }
 
-// getSlot reads the slot at the provided slot location derived using
-// the supplied slot index ID. getSlot panics if the provided SID
+// getSlot reads the cellPtr at the provided cellPtr location derived using
+// the supplied cellPtr index ID. getSlot panics if the provided CID
 // is out of bounds.
-func (p *Page) getSlot(sid uint16) *slot {
-	// get the slot offset
-	off := szHd + (sid * szSl)
+func (p *Page) getSlot(sid uint16) *cellPtr {
+	// get the cellPtr offset
+	off := pageHeaderSize + (sid * pageCellSize)
 	// make sure it is in bounds
-	if lo := bin.Uint16((*p)[offLower : offLower+2]); off > lo {
-		panic(fmt.Sprintf("--getSlot: slot id (%d) or offset (%d) is out of bounds (%d)", sid, off, lo))
+	if lo := decU16((*p)[offLower : offLower+2]); off > lo {
+		panic(fmt.Sprintf("--getSlot: cellPtr id (%d) or offset (%d) is out of bounds (%d)", sid, off, lo))
 	}
 	// for clarity
 	offStatus := off
 	offOffset := off + 2
 	offLength := off + 4
-	// now we write the slot to the Page
-	return &slot{
-		status: bin.Uint16((*p)[offStatus : offStatus+2]),
-		offset: bin.Uint16((*p)[offOffset : offOffset+2]),
-		length: bin.Uint16((*p)[offLength : offLength+2]),
+	// now we write the cellPtr to the Page
+	return &cellPtr{
+		flags:  decU16((*p)[offStatus : offStatus+2]),
+		offset: decU16((*p)[offOffset : offOffset+2]),
+		length: decU16((*p)[offLength : offLength+2]),
 	}
 }
 
-// addSlot appends a new slot to the Page
-func (p *Page) addSlot(size uint16) (uint16, *slot) {
-	// get Page header
-	h := p.GetHeader()
-	// grab the slot id for later
-	sid := h.slots
-	// update Page header
-	h.slots++
-	h.lower += szSl
+// addSlot appends a new cellPtr to the Page
+func (p *Page) addSlot(size uint16) (uint16, *cellPtr) {
+	// get Page pageHeader
+	h := p.getPageHeader()
+	// grab the cellPtr id for later
+	sid := h.numCells
+	// update Page pageHeader
+	h.numCells++
+	h.lower += pageCellSize
 	h.upper -= size
-	// create new slot structure
-	sl := &slot{
-		status: StatUsed,
+	// create new cellPtr structure
+	sl := &cellPtr{
+		id:     h.numCells,
+		flags:  C_USED,
 		offset: h.upper,
 		length: size,
 	}
-	// write header back to Page
+	// write pageHeader back to Page
 	p.setHeader(h)
-	// encode slot onto Page
+	// encode cellPtr onto Page
 	p.setSlot(sl, sid)
-	// finally, return SID and slot
+	// finally, return CID and cellPtr
 	return sid, sl
 }
 
-// acquireSlot adds or locates a free slot that will fit the record size
-// provided. It returns a slot along with the slot index.
-func (p *Page) acquireSlot(size uint16) (uint16, *slot) {
-	// try to find a free slot we can use
-	slotCount := bin.Uint16((*p)[offSlots : offSlots+2])
-	// first we check to see if the slot count is zero
+// acquireSlot adds or locates a numFree cellPtr that will fit the record size
+// provided. It returns a cellPtr along with the cellPtr index.
+func (p *Page) acquireSlot(size uint16) (uint16, *cellPtr) {
+	// try to find a numFree cellPtr we can use
+	slotCount := decU16((*p)[offNumCells : offNumCells+2])
+	// first we check to see if the cellPtr count is zero
 	if slotCount == 0 {
 		// we can skip the mess if this is the case
 		return p.addSlot(size)
 	}
 	//
 	//
-	// NOTE: we might want to keep a first open slot id in
-	// the header, as well as know if we are dealing with
-	// fixed size data or not. If we are dealing with fixed
+	// NOTE: we might want to keep a first open cellPtr id in
+	// the pageHeader, as well as know if we are dealing with
+	// fixed prev data or not. If we are dealing with fixed
 	// sized data, then we can count forward from the first
-	// open slot because we know no matter what, we can
-	// fit our data into any slot. Otherwise, if we are
+	// open cellPtr because we know no matter what, we can
+	// fit our data into any cellPtr. Otherwise, if we are
 	// dealing with dynamic sized data, then we may want to
 	// count backwards because we will have a higher chance
 	// of encountering (not always, but sometimes) an empty
-	// slot that may fit our dynamic sized data sooner.
+	// cellPtr that may fit our dynamic sized data sooner.
 	//
-	// NOTE: also, we may want to implement a slot sorting
+	// NOTE: also, we may want to implement a cellPtr sorting
 	// function (for fixed sized data entries) that does not
-	// change the slot id of anything, but simply re-orders
+	// change the cellPtr id of anything, but simply re-orders
 	// the offsets to point to the data in sorted order. Or
 	// maybe it's even faster to do that operation when
-	// acquiring or adding a new slot.
+	// acquiring or adding a new cellPtr.
 	//
 	//
 	// we try from the last one available and work backwards
-	// for SID := slotCount; SID > 0; SID-- {
+	// for CID := slotCount; CID > 0; CID-- {
 	for sid := uint16(0); sid < slotCount; sid++ {
 		sl := p.getSlot(sid)
-		if sl.status == StatFree && size <= sl.length {
-			// we can use this slot, but first we update and save it
-			sl.status = StatUsed
+		if hasFlag16(sl.flags, C_FREE) && size <= sl.length {
+			// we can use this cellPtr, but first we update and save it
+			sl.flags = C_USED
 			sl.length = size
 			p.setSlot(sl, sid)
 			// and then we return it for use
 			return sid, sl
 		}
 	}
-	// otherwise, we append and return a fresh slot
+	// otherwise, we append and return a fresh cellPtr
 	return p.addSlot(size)
 }
 
@@ -460,35 +441,35 @@ func (p *Page) acquireSlot(size uint16) (uint16, *slot) {
 func (p *Page) AddRecord(data []byte) (*RecID, error) {
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
-	// get the record size
+	// get the record prev
 	rsize := uint16(len(data))
 	// sanity check the record
 	err := p.checkRecord(rsize)
-	// util.DEBUG("--AddRecord(%q) rsize=%d, free=%d, checkRecordErr=%v", data, rsize, p.freeSpace(), err)
+	// util.DEBUG("--AddRecord(%q) rsize=%d, numFree=%d, checkRecordErr=%v", data, rsize, p.freeSpace(), err)
 	if err != nil {
 		return nil, err
 	}
-	// get a new (or used) slot to index the record
+	// get a new (or used) cellPtr to index the record
 	sid, sl := p.acquireSlot(rsize)
-	// util.DEBUG("--AddRecord(%x) rsize=%d, use_slot=%d", data, rsize, SID)
-	// get the record bounds from the slot index
+	// util.DEBUG("--AddRecord(%x) rsize=%d, use_slot=%d", data, rsize, CID)
+	// get the record bounds from the cellPtr index
 	beg, end := sl.bounds()
 	// write the record to the Page (using record bounds)
 	copy((*p)[beg:end], data)
 	// assemble and return the record ID
 	return &RecID{
-		PID: bin.Uint32((*p)[offPID : offPID+4]),
-		SID: sid,
+		PID: decU32((*p)[offPID : offPID+4]),
+		CID: sid,
 	}, nil
 }
 
 // checkRID performs error and sanity checking on the provided
 // record ID.
 func (p *Page) checkRID(rid *RecID) error {
-	if rid.PID != bin.Uint32((*p)[offPID:offPID+4]) {
+	if rid.PID != decU32((*p)[offPID:offPID+4]) {
 		return ErrInvalidPID
 	}
-	if rid.SID > bin.Uint16((*p)[offSlots:offSlots+2]) {
+	if rid.CID > decU16((*p)[offNumCells:offNumCells+2]) {
 		return ErrInvalidSID
 	}
 	return nil
@@ -505,14 +486,14 @@ func (p *Page) GetRecord(rid *RecID) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	// find the associated slot index (ensure it is a used slot)
-	sl := p.getSlot(rid.SID)
-	if sl.status == StatFree {
+	// find the associated cellPtr index (ensure it is a used cellPtr)
+	sl := p.getSlot(rid.CID)
+	if hasFlag16(sl.flags, C_FREE) {
 		return nil, ErrRecordNotFound
 	}
 	// create a buffer to copy the record into (safety)
 	buff := make([]byte, sl.length)
-	// get the record bounds from the slot index
+	// get the record bounds from the cellPtr index
 	beg, end := sl.bounds()
 	// copy the record into the buffer (using record bounds)
 	copy(buff, (*p)[beg:end])
@@ -520,25 +501,25 @@ func (p *Page) GetRecord(rid *RecID) ([]byte, error) {
 	return buff, nil
 }
 
-// delSlot updates the status of the slot found at the provided
-// slot ID, and returns the slot for use in the delete operation.
-func (p *Page) delSlot(sid uint16) *slot {
-	// get the slot using the SID
+// delSlot updates the numFree of the cellPtr found at the provided
+// cellPtr ID, and returns the cellPtr for use in the delete operation.
+func (p *Page) delSlot(sid uint16) *cellPtr {
+	// get the cellPtr using the CID
 	sl := p.getSlot(sid)
-	// if the slot status is free, return nil
-	if sl.status == StatFree {
+	// if the cellPtr numFree is numFree, return nil
+	if hasFlag16(sl.flags, C_FREE) {
 		return nil
 	}
-	// update slot status
-	sl.status = StatFree
-	// save the status of the found slot
+	// update cellPtr numFree
+	sl.flags = C_FREE
+	// save the numFree of the found cellPtr
 	p.setSlot(sl, sid)
 	// and return
 	return sl
 }
 
 // delRecord removes a record from the Page. It overwrites the record
-// data with zeros and marks the slot index as a "free to use" slot
+// data with zeros and marks the cellPtr index as a "numFree to use" cellPtr
 // so that it can be re-used at a later date if there is another
 // record that can occupy the same (or less) space. It returns any
 // errors encountered.
@@ -550,16 +531,16 @@ func (p *Page) delRecord(rid *RecID) error {
 	if err != nil {
 		return err
 	}
-	// find the associated slot index (ensure it is a used slot)
-	sl := p.delSlot(rid.SID)
+	// find the associated cellPtr index (ensure it is a used cellPtr)
+	sl := p.delSlot(rid.CID)
 	if sl == nil {
 		return nil
 	}
 	// create a buffer to overwrite the record with
 	buff := make([]byte, sl.length)
-	// get the record bounds from the slot index
+	// get the record bounds from the cellPtr index
 	beg, end := sl.bounds()
-	// util.DEBUG("--delRecord(%d) [%x] del_slot=%d, slot_count=%d", id.SID, (*p)[beg:end], id.SID, len(p.getSlotSet()))
+	// util.DEBUG("--delRecord(%d) [%x] del_slot=%d, slot_count=%d", id.CID, (*p)[beg:end], id.CID, len(p.getSlotSet()))
 	// copy the buffer over the record (using record bounds)
 	copy((*p)[beg:end], buff)
 	// return nil error
@@ -568,12 +549,12 @@ func (p *Page) delRecord(rid *RecID) error {
 
 // clear wipes all the data and returns the Page to its original form
 func (p *Page) clear() {
-	*p = newEmptyPageSize(p.getPageID(), uint16(p.getPageSize()))
+	*p = NewEmptyPage(p.getPageID())
 }
 
 // iterator is a basic iterator
 type iterator struct {
-	slots    []*slot
+	slots    []*cellPtr
 	index    int
 	skipFree bool
 }
@@ -593,23 +574,23 @@ func (p *Page) newIter(skipFree bool) (*iterator, error) {
 }
 
 // next returns the next record in this Page.
-func (it *iterator) next() *slot {
-	// increment to the next slot
+func (it *iterator) next() *cellPtr {
+	// increment to the next cellPtr
 	it.index++
-	// make sure we do not overflow the slots index
+	// make sure we do not overflow the numCells index
 	if !it.hasMore() {
 		fmt.Println(">>> hit it <<<")
 		return nil
 	}
-	// get the slot at this index, then check to make sure that this
-	// slot is not a free slot; if it is a free slot, then skip it.
+	// get the cellPtr at this index, then check to make sure that this
+	// cellPtr is not a numFree cellPtr; if it is a numFree cellPtr, then skip it.
 	sl := it.slots[it.index]
-	// check if we should skip any slots marked free.
-	if it.skipFree && sl.status == StatFree {
-		// slot is free, skip it
+	// check if we should skip any numCells marked numFree.
+	if it.skipFree && hasFlag16(sl.flags, C_FREE) {
+		// cellPtr is numFree, skip it
 		return it.next()
 	}
-	// return our slot
+	// return our cellPtr
 	return sl
 }
 
@@ -622,15 +603,15 @@ func (it *iterator) hasMore() bool {
 // compact triggers a record compaction
 func (p *Page) compact() error {
 	// First, we must allocate a new Page to copy data into.
-	pg := newPage(p.getPageID())
+	pg := NewPage(p.getPageID())
 	// Next, we will get an iterator and check for any errors.
 	it, err := p.newIter(true)
 	if err != nil {
 		return err
 	}
 	var n int
-	// Now, we iterate the slots of the current Page. The iterator skips all
-	// records that are marked free.
+	// Now, we iterate the numCells of the current Page. The iterator skips all
+	// records that are marked numFree.
 	for sl := it.next(); it.hasMore() == true; sl = it.next() {
 		// Get the record bounds for the current record on the current Page.
 		beg, end := sl.bounds()
@@ -657,7 +638,7 @@ func (p *Page) String() string {
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 16, 4, 0, ' ', tabwriter.DiscardEmptyColumns)
 	var err error
-	_, err = fmt.Fprintf(w, "PID\tmeta\tstatus\tslots\tlower\tupper\n")
+	_, err = fmt.Fprintf(w, "PID\tflags\tnumFree\tnumCells\tlower\tupper\n")
 	if err != nil {
 		panic(err)
 	}
@@ -671,8 +652,10 @@ func (p *Page) String() string {
 	if err != nil {
 		panic(err)
 	}
-	h := p.GetHeader()
-	_, err = fmt.Fprintf(w, "%.4d\t%.4d\t%.4d\t%.4d\t%.4d\t%.4d", h.pid, h.meta, h.status, h.slots, h.lower, h.upper)
+	h := p.getPageHeader()
+	_, err = fmt.Fprintf(
+		w, "%.4d\t%.4d\t%.4d\t%.4d\t%.4d\t%.4d", h.pid, h.flags, h.numFree, h.numCells, h.lower, h.upper,
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -685,15 +668,15 @@ func (p *Page) String() string {
 }
 
 func (p *Page) DumpPage(showPageData bool) string {
-	h := p.GetHeader()
-	ss := fmt.Sprintf("+------------------[ Page header ]------------------+\n")
+	h := p.getPageHeader()
+	ss := fmt.Sprintf("+------------------[ Page pageHeader ]------------------+\n")
 	ss += fmt.Sprintf(
-		"PID=%.2d, size=%.2d, reserved=%.2d, meta=%.2d, status=%.2d, slots=%.2d, "+
+		"PID=%.2d, prev=%.2d, next=%.2d, flags=%.2d, numFree=%.2d, numCells=%.2d, "+
 			"lo=%.3d, hi=%.4d [0x%.8x,0x%.4x,0x%.4x,0x%.4x]\n",
-		h.pid, h.size, h.reserved, h.meta, h.status, h.slots, h.lower, h.upper, h.pid, h.slots, h.lower, h.upper,
+		h.pid, h.prev, h.next, h.flags, h.numFree, h.numCells, h.lower, h.upper, h.pid, h.numCells, h.lower, h.upper,
 	)
-	ss += fmt.Sprintf("+------------------[ slots index ]------------------+\n")
-	for sid := uint16(0); sid < h.slots; sid++ {
+	ss += fmt.Sprintf("+------------------[ numCells index ]------------------+\n")
+	for sid := uint16(0); sid < h.numCells; sid++ {
 		sl := p.getSlot(sid)
 		ss += fmt.Sprintf("%s\n", sl)
 	}
@@ -711,14 +694,14 @@ func (p *Page) FillPercent() float32 {
 		fmt.Printf("pageSize=%d, used=%d, unused=%d, percent=%.2f%%\n",
 				pgsize, datused, pgsize-datused, (float32(datused)/float32(pgsize))*100)
 	*/
-	pgsize, unused := p.getPageSize(), p.freeSpace()
+	pgsize, unused := p.Size(), p.freeSpace()
 	return ((float32(pgsize) - float32(unused)) / float32(pgsize)) * 100
 }
 
 func (p *Page) Statistics() string {
-	size := p.getPageSize()
+	size := p.Size()
 	free := uint32(p.freeSpace())
-	used := size - free
+	used := size - int(free)
 	percentFull := float32(((float32(size) - float32(free)) / float32(size)) * 100)
 	percentFree := float32((float32(free) / float32(size)) * 100)
 	ss := fmt.Sprintf("~~~~[Page %d statistics]~~~~\n", p.getPageID())
@@ -731,4 +714,42 @@ func (p *Page) Statistics() string {
 
 	ss += fmt.Sprintf("~~~~[Page %d statistics]~~~~\n", p.getPageID())
 	return ss
+}
+
+// printHeader prints the page header
+func (p *Page) printHeader() {
+	h := p.getPageHeader()
+	fmt.Printf("pageHeader:\n")
+	fmt.Printf(
+		"\tPID=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.pid, 4, offPID, offPID+4,
+		(*p)[offPID:offPID+4],
+	)
+	fmt.Printf(
+		"\tprev=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.prev, 4, offPrev, offPrev+4,
+		(*p)[offPrev:offPrev+4],
+	)
+	fmt.Printf(
+		"\tnext=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.next, 4, offNext, offNext+4,
+		(*p)[offNext:offNext+4],
+	)
+	fmt.Printf(
+		"\tflags=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.flags, 4, offFlags, offFlags+4,
+		(*p)[offFlags:offFlags+4],
+	)
+	fmt.Printf(
+		"\tnumFree=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.numFree, 2, offNumFree, offNumFree+2,
+		(*p)[offNumFree:offNumFree+2],
+	)
+	fmt.Printf(
+		"\tnumCells=%d\t\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.numCells, 2, offNumCells, offNumCells+2,
+		(*p)[offNumCells:offNumCells+2],
+	)
+	fmt.Printf(
+		"\tlower=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.lower, 2, offLower, offLower+2,
+		(*p)[offLower:offLower+2],
+	)
+	fmt.Printf(
+		"\tupper=%d\t\t(%d bytes, offs=%.2d-%.2d, data=%v)\n", h.upper, 2, offUpper, offUpper+2,
+		(*p)[offUpper:offUpper+2],
+	)
 }

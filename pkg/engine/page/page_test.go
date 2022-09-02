@@ -17,7 +17,7 @@ var recs []*RecID
 var pg Page
 
 func dataUsed(count, size int) int {
-	return szHd + (count * szSl) + (count * size)
+	return pageHeaderSize + (count * pageCellSize) + (count * size)
 }
 
 func printDetails(pgsize, datused int) {
@@ -32,6 +32,16 @@ func printInsertDetails(count, size int) {
 		">> Inserting %d records that are about %d bytes each, amounting to around %.2f kB of total data.\n",
 		count, size, float32(count*size)/(1<<10),
 	)
+}
+
+func TestPage_Flags(t *testing.T) {
+	// setup options for the record
+	ropts := RK_STR | RV_NUM | R_OVERFLOW
+	fmt.Println(ropts&RK_NUM, "(should not be set)")
+	fmt.Println(ropts&RK_STR, "(should be set)")
+	fmt.Println(ropts&RV_NUM, "(should be set)")
+	fmt.Println(ropts&RV_STR, "(should not be set)")
+	fmt.Println(ropts&R_OVERFLOW, "(should be set)")
 }
 
 func TestPage_ForStupidErrorsCuzYouNeverReallyKnowIfYouDidSomethingDumb(t *testing.T) {
@@ -50,7 +60,7 @@ func TestPage_FillPercent(t *testing.T) {
 	var added int
 
 	// tw := util.NewTableWriter("rec_size", "rec_count", "percent_full", "bytes_unused")
-	fmt.Printf("rsize\trcount\t%%full\tfree\n")
+	fmt.Printf("rsize\trcount\t%%full\tnumFree\n")
 
 	var err error
 	for rsize := 10; rsize < maxRecSize; rsize += 10 {
@@ -58,7 +68,7 @@ func TestPage_FillPercent(t *testing.T) {
 		newp := newPageSize(3, 8<<10)
 		// start looping to see how many records we can add
 		for rcount := 0; err == nil; rcount++ {
-			// if we have enough free space, add another record
+			// if we have enough numFree space, add another record
 			err := newp.checkRecord(uint16(rsize))
 			if err != nil {
 				// no more room!
@@ -91,7 +101,7 @@ func TestPage_FillPercent(t *testing.T) {
 	/*
 			Record data using a 4KB Page.
 		====================================
-		rsize		rcount		%full	free
+		rsize		rcount		%full	numFree
 		------------------------------------
 		0010		0254		99.80	0008
 		0020		0156		99.61	0016
@@ -185,7 +195,7 @@ func TestPage_FillPercent(t *testing.T) {
 
 			Record data using a 8KB Page.
 		====================================
-		rsize		rcount		%full	free
+		rsize		rcount		%full	numFree
 		------------------------------------
 		0010		0510		99.90	0008
 		0020		0314		99.95	0004
@@ -366,19 +376,19 @@ func TestPage_NewPage(t *testing.T) {
 	}
 	pg = newPage(3)
 	if pg == nil {
-		t.Errorf("got %v, expected %v\n", len(pg), szPg)
+		t.Errorf("got %v, expected %v\n", len(pg), pageSize)
 	}
-	tmp := header{
+	tmp := pageHeader{
 		pid:      3,
-		size:     szPg,
-		reserved: 0,
-		meta:     mdSlotted | mdRecDynmc,
-		status:   StatUsed,
-		slots:    0,
-		lower:    szHd,
-		upper:    szPg,
+		prev:     pageSize,
+		next:     0,
+		flags:    mdSlotted | mdRecDynmc,
+		numFree:  P_USED,
+		numCells: 0,
+		lower:    pageHeaderSize,
+		upper:    pageSize,
 	}
-	hdr := pg.GetHeader()
+	hdr := pg.getPageHeader()
 	if *hdr != tmp || hdr == nil {
 		t.Errorf("got %v, expected %v\n", hdr, tmp)
 	}
@@ -391,19 +401,19 @@ func TestPage_NewEmptyPage(t *testing.T) {
 	}
 	epg = newEmptyPage(4)
 	if epg == nil {
-		t.Errorf("got %v, expected %v\n", len(epg), szPg)
+		t.Errorf("got %v, expected %v\n", len(epg), pageSize)
 	}
-	tmp := header{
+	tmp := pageHeader{
 		pid:      4,
-		size:     szPg,
-		reserved: 0,
-		meta:     mdSlotted | mdRecDynmc,
-		status:   StatFree,
-		slots:    0,
-		lower:    szHd,
-		upper:    szPg,
+		prev:     pageSize,
+		next:     0,
+		flags:    mdSlotted | mdRecDynmc,
+		numFree:  P_FREE,
+		numCells: 0,
+		lower:    pageHeaderSize,
+		upper:    pageSize,
 	}
-	hdr := epg.GetHeader()
+	hdr := epg.getPageHeader()
 	if *hdr != tmp || hdr == nil {
 		t.Errorf("got %v, expected %v\n", hdr, tmp)
 	}
@@ -494,7 +504,7 @@ func TestPage_DelRecord(t *testing.T) {
 
 var addRecordsSize = func(p Page, count, size int) error {
 	if size < 5 {
-		return errors.New("size must be at least 8")
+		return errors.New("prev must be at least 8")
 	}
 	for i := 0; i < count; i++ {
 		rec := fmt.Sprintf("%s-%.3d", util.RandBytesN(size-4), i)
@@ -521,7 +531,7 @@ var getRecords = func(p Page) error {
 	for i := 0; i < 128; i++ {
 		rid := &RecID{
 			PID: 3,
-			SID: uint16(i),
+			CID: uint16(i),
 		}
 		_, err := p.GetRecord(rid)
 		if err != nil {
@@ -535,7 +545,7 @@ var delRecords = func(p Page) error {
 	for i := 0; i < 128; i++ {
 		rid := &RecID{
 			PID: 3,
-			SID: uint16(i),
+			CID: uint16(i),
 		}
 		err := p.delRecord(rid)
 		if err != nil {
@@ -608,7 +618,7 @@ func pageTests() {
 	fmt.Println(">>>>> [03 DELETING] <<<<<")
 	fmt.Printf("now, we will be removing some records...\n")
 	for i, id := range ids {
-		if (id.SID+1)%3 == 0 || id.SID == 31 {
+		if (id.CID+1)%3 == 0 || id.CID == 31 {
 			fmt.Printf("deleting record: %v\n", id)
 			err := p.delRecord(&id)
 			if err != nil {
@@ -742,7 +752,7 @@ func (r *records) String() string {
 		ss += fmt.Sprintf("{k:%d, v:%d}", k, v)
 	}
 	// for i := range r.records {
-	// 	ss += fmt.Sprintf("[%d]", r.records[i].SID)
+	// 	ss += fmt.Sprintf("[%d]", r.records[i].CID)
 	// }
 	return ss
 }
@@ -758,10 +768,10 @@ func getSlotAndRecsFromPage(pg Page) string {
 		panic(err)
 	}
 	var ss []string
-	// var SID int
+	// var CID int
 	for sl := iter.next(); iter.hasMore(); sl = iter.next() {
-		ss = append(ss, fmt.Sprintf("status=%v, val=%.1x", sl.status, string(pg[sl.offset:sl.offset+sl.length])))
-		//	SID++
+		ss = append(ss, fmt.Sprintf("numFree=%v, val=%.1x", sl.flags, string(pg[sl.offset:sl.offset+sl.length])))
+		//	CID++
 	}
 	return strings.Join(ss, ",")
 }

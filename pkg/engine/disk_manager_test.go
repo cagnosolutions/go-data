@@ -148,7 +148,7 @@ func TestDiskManager_ReadPage(t *testing.T) {
 		if pg == nil {
 			t.Errorf("read: page should not be nil")
 		}
-		fmt.Printf("page header: %+v\n", pg.GetHeader())
+		fmt.Printf("page header: %+v\n", pg.getPageHeader())
 	}
 
 	err = fm.Close()
