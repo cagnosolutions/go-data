@@ -14,6 +14,6 @@ var (
 	ErrNoRoom         = fmt.Errorf("[Page] the Page is full")
 	ErrEmptyPage      = fmt.Errorf("[Page] the Page is empty")
 	ErrInvalidPID     = fmt.Errorf("[Page] Page ID is not valid")
-	ErrInvalidSID     = fmt.Errorf("[Page] cellPtr ID is not valid")
+	ErrInvalidCID     = fmt.Errorf("[Page] cellPtr ID is not valid")
 	ErrRecordNotFound = fmt.Errorf("[Page] record not found")
 )

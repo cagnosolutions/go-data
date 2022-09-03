@@ -341,15 +341,15 @@ func (p *Page) __setSlotSet(_ []*slot) error {
 	return nil
 }
 
-// setSlot writes the provided slot to the location derived using
-// the supplied slot index ID. setSlot panics if the provided CID
+// encCellPtr writes the provided slot to the location derived using
+// the supplied slot index ID. encCellPtr panics if the provided CID
 // is out of bounds.
 func (p *Page) setSlot(sl *slot, sid uint16) {
 	// get the slot offset
 	off := szHd + (sid * szSl)
 	// make sure it is in bounds
 	if lo := bin.Uint16((*p)[offLower : offLower+2]); off > lo {
-		panic(fmt.Sprintf("--setSlot: cellPtr id (%d) or offset (%d) is out of bounds (%d)", sid, off, lo))
+		panic(fmt.Sprintf("--encCellPtr: cellPtr id (%d) or offset (%d) is out of bounds (%d)", sid, off, lo))
 	}
 	// for clarity
 	offStatus := off
@@ -361,15 +361,15 @@ func (p *Page) setSlot(sl *slot, sid uint16) {
 	bin.PutUint16((*p)[offLength:offLength+2], sl.length)
 }
 
-// getSlot reads the slot at the provided slot location derived using
-// the supplied slot index ID. getSlot panics if the provided CID
+// decCellPtr reads the slot at the provided slot location derived using
+// the supplied slot index ID. decCellPtr panics if the provided CID
 // is out of bounds.
 func (p *Page) getSlot(sid uint16) *slot {
 	// get the slot offset
 	off := szHd + (sid * szSl)
 	// make sure it is in bounds
 	if lo := bin.Uint16((*p)[offLower : offLower+2]); off > lo {
-		panic(fmt.Sprintf("--getSlot: cellPtr id (%d) or offset (%d) is out of bounds (%d)", sid, off, lo))
+		panic(fmt.Sprintf("--decCellPtr: cellPtr id (%d) or offset (%d) is out of bounds (%d)", sid, off, lo))
 	}
 	// for clarity
 	offStatus := off
@@ -383,7 +383,7 @@ func (p *Page) getSlot(sid uint16) *slot {
 	}
 }
 
-// addSlot appends a new slot to the Page
+// addCellPtr appends a new slot to the Page
 func (p *Page) addSlot(size uint16) (uint16, *slot) {
 	// get Page pageHeader
 	h := p.GetHeader()
@@ -407,7 +407,7 @@ func (p *Page) addSlot(size uint16) (uint16, *slot) {
 	return sid, sl
 }
 
-// acquireSlot adds or locates a numFree slot that will fit the record size
+// acquireCellPtr adds or locates a numFree slot that will fit the record size
 // provided. It returns a slot along with the slot index.
 func (p *Page) acquireSlot(size uint16) (uint16, *slot) {
 	// try to find a numFree slot we can use

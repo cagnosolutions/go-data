@@ -46,7 +46,7 @@ func TestPage_Flags(t *testing.T) {
 
 func TestPage_ForStupidErrorsCuzYouNeverReallyKnowIfYouDidSomethingDumb(t *testing.T) {
 	// do stuff
-	p := newPage(56)
+	p := NewPage(56)
 	p.printHeader()
 	time.Sleep(1 * time.Second)
 	_, _ = p.AddRecord([]byte("foobarbaz-000"))
@@ -65,7 +65,7 @@ func TestPage_FillPercent(t *testing.T) {
 	var err error
 	for rsize := 10; rsize < maxRecSize; rsize += 10 {
 		// create a new Page
-		newp := newPageSize(3, 8<<10)
+		newp := NewPage(3)
 		// start looping to see how many records we can add
 		for rcount := 0; err == nil; rcount++ {
 			// if we have enough numFree space, add another record
@@ -374,16 +374,16 @@ func TestPage_NewPage(t *testing.T) {
 	if pg != nil {
 		t.Errorf("got %v, expected %v\n", pg, nil)
 	}
-	pg = newPage(3)
+	pg = NewPage(3)
 	if pg == nil {
 		t.Errorf("got %v, expected %v\n", len(pg), pageSize)
 	}
 	tmp := pageHeader{
 		pid:      3,
-		prev:     pageSize,
+		prev:     0,
 		next:     0,
-		flags:    mdSlotted | mdRecDynmc,
-		numFree:  P_USED,
+		flags:    P_USED,
+		numFree:  0,
 		numCells: 0,
 		lower:    pageHeaderSize,
 		upper:    pageSize,
@@ -399,16 +399,16 @@ func TestPage_NewEmptyPage(t *testing.T) {
 	if epg != nil {
 		t.Errorf("got %v, expected %v\n", epg, nil)
 	}
-	epg = newEmptyPage(4)
+	epg = NewEmptyPage(4)
 	if epg == nil {
 		t.Errorf("got %v, expected %v\n", len(epg), pageSize)
 	}
 	tmp := pageHeader{
 		pid:      4,
-		prev:     pageSize,
+		prev:     0,
 		next:     0,
-		flags:    mdSlotted | mdRecDynmc,
-		numFree:  P_FREE,
+		flags:    P_FREE,
+		numFree:  0,
 		numCells: 0,
 		lower:    pageHeaderSize,
 		upper:    pageSize,
@@ -420,7 +420,7 @@ func TestPage_NewEmptyPage(t *testing.T) {
 }
 
 func _addRecords(t *testing.T) {
-	pg = newPage(3)
+	pg = NewPage(3)
 	id1, err := pg.AddRecord([]byte("this is record number one"))
 	if err != nil || id1 == nil {
 		t.Errorf("got %v, expected %v\n", err, nil)
@@ -439,7 +439,7 @@ func _addRecords(t *testing.T) {
 }
 
 func TestPage_AddRecord(t *testing.T) {
-	pg = newPage(3)
+	pg = NewPage(3)
 	err := addRecords(pg)
 	if err != nil {
 		t.Error(err)
@@ -448,7 +448,7 @@ func TestPage_AddRecord(t *testing.T) {
 }
 
 func TestPage_AddRecordAndIterate(t *testing.T) {
-	pg = newPage(3)
+	pg = NewPage(3)
 	err := addRecords(pg)
 	if err != nil {
 		t.Error(err)
@@ -465,7 +465,7 @@ func TestPage_AddRecordAndIterate(t *testing.T) {
 }
 
 func TestPage_GetRecord(t *testing.T) {
-	pg = newPage(3)
+	pg = NewPage(3)
 	err := addRecords(pg)
 	if err != nil {
 		t.Error(err)
@@ -477,12 +477,12 @@ func TestPage_GetRecord(t *testing.T) {
 }
 
 func TestPage_DelRecord(t *testing.T) {
-	pg = newPage(3)
+	pg = NewPage(3)
 	err := addRecords(pg)
 	if err != nil {
 		t.Error(err)
 	}
-	sz := pg.size()
+	sz := pg.Size()
 	if sz == 0 {
 		t.Errorf("got %v, expected %v\n", sz, 3)
 	}
@@ -556,7 +556,7 @@ var delRecords = func(p Page) error {
 }
 
 func TestPage_Sync(t *testing.T) {
-	pg = newPage(3)
+	pg = NewPage(3)
 	err := addRecords(pg)
 	if err != nil {
 		t.Error(err)
@@ -591,7 +591,7 @@ const N = 32
 var ids []RecID
 
 func pageTests() {
-	p := newPage(1)
+	p := NewPage(1)
 	info(p)
 	fmt.Println(">>>>> [01 ADDING] <<<<<")
 	fmt.Printf("created Page, adding %d records...\n", N)
@@ -674,7 +674,7 @@ func pageTests() {
 	}
 	fmt.Println()
 	fmt.Println(">>>>> [07 NEW PAGE] <<<<<")
-	p = newPage(2)
+	p = NewPage(2)
 	for i := 0; ; i++ {
 		data := fmt.Sprintf("adding another record (%.2d)", i)
 		_, err := p.AddRecord([]byte(data))
@@ -778,7 +778,7 @@ func getSlotAndRecsFromPage(pg Page) string {
 
 func TestPage_IterateOrder(t *testing.T) {
 
-	pg := newPage(1)
+	pg := NewPage(1)
 	recs := initRecords()
 
 	fmt.Println("inserting...")
@@ -875,6 +875,27 @@ func TestPage_IterateOrder(t *testing.T) {
 	pg.clear()
 	_ = pg
 	runtime.GC()
+}
+
+func TestPage_SortAndSet(t *testing.T) {
+	pg := NewPage(1)
+	var err error
+	_, err = pg.AddRecord([]byte("CCCCCCCC"))
+	if err != nil {
+		t.Errorf("adding record 1: %s", err)
+	}
+	_, err = pg.AddRecord([]byte("AAAAAAAA"))
+	if err != nil {
+		t.Errorf("adding record 2: %s", err)
+	}
+	_, err = pg.AddRecord([]byte("DDDDDDDD"))
+	if err != nil {
+		t.Errorf("adding record 3: %s", err)
+	}
+	_, err = pg.AddRecord([]byte("BBBBBBBB"))
+	if err != nil {
+		t.Errorf("adding record 4: %s", err)
+	}
 }
 
 const ()
