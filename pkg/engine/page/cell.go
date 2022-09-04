@@ -48,6 +48,11 @@ func (c *cell) setLength(n uint16) {
 }
 
 // (*bs)[i>>3] |= 1 << (i & (7))
+//
+// val = (val &^ mask) | (newval & mask)
+//
+// val &^= 0xfffffff0 // clear lower 4 bits
+// val |= lower4bits & 0xfffffff0
 
 func (c cell) String() string {
 	return fmt.Sprintf(
