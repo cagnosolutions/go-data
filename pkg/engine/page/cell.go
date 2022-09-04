@@ -32,20 +32,22 @@ func (c cell) getLength() uint16 {
 }
 
 func (c *cell) setID(n uint16) {
-	*c = cell(n) << 0
+	*c |= cell(n) << 0
 }
 
 func (c *cell) setFlags(n uint16) {
-	*c = cell(n) << 16
+	*c |= cell(n) << 16
 }
 
 func (c *cell) setOffset(n uint16) {
-	*c = cell(n) << 32
+	*c |= cell(n) << 32
 }
 
 func (c *cell) setLength(n uint16) {
-	*c = cell(n) << 48
+	*c |= cell(n) << 48
 }
+
+// (*bs)[i>>3] |= 1 << (i & (7))
 
 func (c cell) String() string {
 	return fmt.Sprintf(
