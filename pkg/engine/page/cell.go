@@ -32,18 +32,22 @@ func (c cell) getLength() uint16 {
 }
 
 func (c *cell) setID(n uint16) {
+	*c &^= 0x000000000000ffff // mask bytes 0-2 and clear
 	*c |= cell(n) << 0
 }
 
 func (c *cell) setFlags(n uint16) {
+	*c &^= 0x00000000ffff0000 // mask bytes 2-4 and clear
 	*c |= cell(n) << 16
 }
 
 func (c *cell) setOffset(n uint16) {
+	*c &^= 0x0000ffff00000000 // mask bytes 4-6 and clear
 	*c |= cell(n) << 32
 }
 
 func (c *cell) setLength(n uint16) {
+	*c &^= 0xffff000000000000 // mask bytes 6-8 and clear
 	*c |= cell(n) << 48
 }
 
