@@ -4,59 +4,62 @@ import (
 	"fmt"
 )
 
+const (
+	u64mask0to2 = 0x000000000000ffff
+	u64mask2to4 = 0x00000000ffff0000
+	u64mask4to6 = 0x0000ffff00000000
+	u64mask6to8 = 0xffff000000000000
+	shift2B     = 16
+	shift4B     = 32
+	shift6B     = 48
+)
+
 type cell uint64
 
 func newCell(id, offset, length uint16) cell {
 	var c cell
-	c |= cell(id) << 0
-	c |= cell(C_USED) << 16
-	c |= cell(offset) << 32
-	c |= cell(length) << 48
+	c |= cell(id)
+	c |= cell(C_USED) << shift2B
+	c |= cell(offset) << shift4B
+	c |= cell(length) << shift6B
 	return c
 }
 
 func (c cell) getID() uint16 {
-	return uint16(c >> 0)
+	return uint16(c)
 }
 
 func (c cell) getFlags() uint16 {
-	return uint16(c >> 16)
+	return uint16(c >> shift2B)
 }
 
 func (c cell) getOffset() uint16 {
-	return uint16(c >> 32)
+	return uint16(c >> shift4B)
 }
 
 func (c cell) getLength() uint16 {
-	return uint16(c >> 48)
+	return uint16(c >> shift6B)
 }
 
 func (c *cell) setID(n uint16) {
-	*c &^= 0x000000000000ffff // mask bytes 0-2 and clear
-	*c |= cell(n) << 0
+	*c &^= u64mask0to2
+	*c |= cell(n)
 }
 
 func (c *cell) setFlags(n uint16) {
-	*c &^= 0x00000000ffff0000 // mask bytes 2-4 and clear
-	*c |= cell(n) << 16
+	*c &^= u64mask2to4
+	*c |= cell(n) << shift2B
 }
 
 func (c *cell) setOffset(n uint16) {
-	*c &^= 0x0000ffff00000000 // mask bytes 4-6 and clear
-	*c |= cell(n) << 32
+	*c &^= u64mask4to6
+	*c |= cell(n) << shift4B
 }
 
 func (c *cell) setLength(n uint16) {
-	*c &^= 0xffff000000000000 // mask bytes 6-8 and clear
-	*c |= cell(n) << 48
+	*c &^= u64mask6to8
+	*c |= cell(n) << shift6B
 }
-
-// (*bs)[i>>3] |= 1 << (i & (7))
-//
-// val = (val &^ mask) | (newval & mask)
-//
-// val &^= 0xfffffff0 // clear lower 4 bits
-// val |= lower4bits & 0xfffffff0
 
 func (c cell) String() string {
 	return fmt.Sprintf(

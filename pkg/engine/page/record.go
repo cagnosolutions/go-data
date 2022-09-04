@@ -14,12 +14,12 @@ const (
 	RV_NUM = 0x0010
 	RV_STR = 0x0020
 
-	TypeUintKeyUintVal = RK_NUM | RV_NUM
-	TypeUintKeyCharVal = RK_NUM | RV_STR
-	TypeCharKeyUintVal = RK_STR | RV_NUM
-	TypeCharKeyCharVal = RK_STR | RV_STR
-	TypePkIndexRecord  = TypeUintKeyUintVal
-	TypePkDataRecord   = TypeUintKeyCharVal
+	R_NUM_NUM = RK_NUM | RV_NUM
+	R_NUM_STR = RK_NUM | RV_STR
+	R_STR_NUM = RK_STR | RV_NUM
+	R_STR_STR = RK_STR | RV_STR
+	R_PK_IDX  = R_NUM_NUM
+	R_PK_DAT  = R_NUM_STR
 )
 
 // recordHeader is a pageHeader struct for encoding and
