@@ -5,7 +5,9 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -70,24 +72,18 @@ var bin = binary.LittleEndian
 
 // cellPtr is a struct which is an index for a record. **It should be noted
 // that a cellPtr pointer may also just end up becoming a single uint64.
-type cellPtr struct {
-	id     uint16
-	flags  uint16
-	offset uint16
-	length uint16
-}
+// type cellPtr struct {
+// 	id     uint16
+// 	flags  uint16
+// 	offset uint16
+// 	length uint16
+// }
+type cellPtr = cell
 
 // bounds returns the starting and ending offsets to the
 // particular record that this cellPtr index "points" to.
 func (c cellPtr) bounds() (uint16, uint16) {
-	return c.offset, c.offset + c.length
-}
-
-// String is the string method for a cellPtr
-func (c cellPtr) String() string {
-	ss := fmt.Sprintf("off=%.4d, len=%.4d, numFree=%v", c.offset, c.length, hasFlag16(c.flags, C_FREE))
-	ss += fmt.Sprintf("\t[0x%.4x,0x%.4x,0x%.4x]", c.offset, c.length, c.flags)
-	return ss
+	return c.getBounds() // c.offset, c.offset + c.length
 }
 
 // RecID is a struct representing a record ID.
@@ -116,7 +112,7 @@ type Page []byte
 // free to use.
 func NewEmptyPage(pid uint32) Page {
 	pg := make(Page, pageSize, pageSize)
-	pg.setHeader(
+	pg.setPageHeader(
 		&pageHeader{
 			pid:      pid,
 			prev:     0,
@@ -136,7 +132,7 @@ func NewEmptyPage(pid uint32) Page {
 // and probably (if not now, then momentarily) contains data.
 func NewPage(pid uint32) Page {
 	pg := make(Page, pageSize, pageSize)
-	pg.setHeader(
+	pg.setPageHeader(
 		&pageHeader{
 			pid:      pid,
 			prev:     0,
@@ -151,9 +147,9 @@ func NewPage(pid uint32) Page {
 	return pg
 }
 
-// setHeader encodes the provided pageHeader structure to the underlying
+// setPageHeader encodes the provided pageHeader structure to the underlying
 // Page.
-func (p *Page) setHeader(h *pageHeader) {
+func (p *Page) setPageHeader(h *pageHeader) {
 	encU32((*p)[offPID:offPID+4], h.pid)                // offset 00: PID 		(00-04) // 4 bytes
 	encU32((*p)[offPrev:offPrev+4], h.prev)             // offset 04: prev		(04-08) // 4 bytes
 	encU32((*p)[offNext:offNext+4], h.next)             // offset 08: next		(08-12) // 4 bytes
@@ -291,25 +287,25 @@ func (p *Page) checkRecord(size uint16) error {
 	return nil
 }
 
-// getSlotSet decodes and returns a set of cellPtr pointer for this Page.
+// getCellPtrs decodes and returns a set of cellPtr pointer for this Page.
 // It will return nil if there are no numCells on this Page. Any changes
 // made to this list of numCells is not persisted until calling setSlots.
-func (p *Page) getSlotSet() []*cellPtr {
+func (p *Page) getCellPtrs() []cellPtr {
 	// Check if there are any numCells to return.
-	slotCount := decU16((*p)[offNumCells : offNumCells+2])
-	if slotCount < 1 {
+	numCells := decU16((*p)[offNumCells : offNumCells+2])
+	if numCells < 1 {
 		// No numCells to decode
 		return nil
 	}
 	// We have numCells we can decode. Create a set we can append to.
-	var slots []*cellPtr
+	cells := make([]cellPtr, numCells, numCells)
 	// Start looping, decoding, and adding numCells to our cellPtr set.
-	for sid := uint16(0); sid < slotCount; sid++ {
+	for pos := uint16(0); pos < numCells; pos++ {
 		// Append the cellPtr to the cellPtr set.
-		slots = append(slots, p.decCellPtr(sid))
+		cells[pos] = p.getCellPtrAt(pos)
 	}
 	// Finally, return our cellPtr set.
-	return slots
+	return cells
 }
 
 // __setSlotSet encodes a set of cellPtr pointers into this Page. It will
@@ -323,7 +319,7 @@ func (p *Page) __setSlotSet(_ []*cellPtr) error {
 // encCellPtr writes the provided cellPtr to the location derived using
 // the supplied cellPtr index ID. encCellPtr panics if the provided CID
 // is out of bounds.
-func (p *Page) encCellPtr(sl *cellPtr, pos uint16) {
+func (p *Page) _encCellPtr(cp cellPtr, pos uint16) {
 	// get the cellPtr offset
 	off := pageHeaderSize + (pos * pageCellSize)
 	// make sure it is in bounds
@@ -336,34 +332,70 @@ func (p *Page) encCellPtr(sl *cellPtr, pos uint16) {
 		)
 	}
 	// now we write the cellPtr to the Page
-	encU16((*p)[off:off+2], sl.id)
-	encU16((*p)[off+2:off+4], sl.flags)
-	encU16((*p)[off+4:off+6], sl.offset)
-	encU16((*p)[off+6:off+8], sl.length)
+	// encU16((*p)[off:off+2], sl.id)
+	// encU16((*p)[off+2:off+4], sl.flags)
+	// encU16((*p)[off+4:off+6], sl.offset)
+	// encU16((*p)[off+6:off+8], sl.length)
+	encU64((*p)[off:off+8], uint64(cp))
 }
 
-// decCellPtr reads the cellPtr at the provided cellPtr location derived using
-// the supplied cellPtr index ID. decCellPtr panics if the provided CID
-// is out of bounds.
-func (p *Page) decCellPtr(pos uint16) *cellPtr {
-	// get the cellPtr offset
+// encCellPtr adds the provided cellPtr to our cell pointer set, sorts the
+// set by the record key, and encodes the entire set back to the page.
+func (p *Page) encCellPtr(cp cellPtr) {
+	// First, get our set of cell pointers and append our newest cell pointer.
+	// Check if there are any numCells to return.
+	numCells := p.getNumCells()
+	if numCells < 1 {
+		// No numCells to decode
+		panic("encCellPtr: something terrible happened")
+	}
+	// We have some cells we can decode. Create a set we can append to.
+	var cellPtrs []cellPtr
+	// Add our newest member to our set.
+	cellPtrs = append(cellPtrs, cp)
+	// Then iterate, decode, and adding the other cells to our cellPtr set.
+	for pos := uint16(0); pos < numCells; pos++ {
+		cellPtrs = append(cellPtrs, p.getCellPtrAt(pos))
+	}
+	if len(cellPtrs) > 2 {
+		// Next, proceed with sorting our cell set.
+		p.sortCellPtrs(cellPtrs)
+	}
+	// And finally, we can iterate our cell set once more, and encode them
+	// back to the page in sorted order.
+	for pos, c := range cellPtrs {
+		off := pageHeaderSize + (pos * pageCellSize)
+		encU64((*p)[off:off+8], uint64(c))
+	}
+}
+
+func (p *Page) sortCellPtrs(cells []cellPtr) {
+	sort.SliceStable(
+		cells, func(i, j int) bool {
+			if cells[i].hasFlag(C_USED) && cells[j].hasFlag(C_FREE) {
+				return true
+			}
+			return bytes.Compare(p.getRecForCell(cells[i])[:4], p.getRecForCell(cells[j])[:4]) < 0
+		},
+	)
+}
+
+// getCellPtrAt reads and returns the cellPtr at the provided location in the
+// cellPtr list derived using the supplied cellPtr position pos. This method
+// will panic if the provided pos is out of the list bounds.
+func (p *Page) getCellPtrAt(pos uint16) cellPtr {
+	// Calculate where the proper offset would be for the provided position
 	off := pageHeaderSize + (pos * pageCellSize)
-	// make sure it is in bounds
+	// Make sure it is in bounds
 	if lo := decU16((*p)[offLower : offLower+2]); off > lo {
 		panic(
 			fmt.Sprintf(
-				"--decCellPtr: cellPtr position (pos=%d, off=%d) is out of bounds (max=%d)", pos,
+				"--getCellPtrAt: cellPtr position (pos=%d, off=%d) is out of bounds (max=%d)", pos,
 				off, lo,
 			),
 		)
 	}
-	// now we decode the cellPtr from the page
-	return &cellPtr{
-		id:     decU16((*p)[off : off+2]),
-		flags:  decU16((*p)[off+2 : off+4]),
-		offset: decU16((*p)[off+4 : off+6]),
-		length: decU16((*p)[off+6 : off+8]),
-	}
+	return cellPtr(decU64((*p)[off : off+8]))
 }
 
 func (p *Page) getRecForCellPtrAt(pos uint16) []byte {
@@ -373,7 +405,7 @@ func (p *Page) getRecForCellPtrAt(pos uint16) []byte {
 	if lo := decU16((*p)[offLower : offLower+2]); off > lo {
 		panic(
 			fmt.Sprintf(
-				"--decCellPtr: cellPtr position (pos=%d, off=%d) is out of bounds (max=%d)", pos,
+				"--getCellPtrAt: cellPtr position (pos=%d, off=%d) is out of bounds (max=%d)", pos,
 				off, lo,
 			),
 		)
@@ -385,190 +417,91 @@ func (p *Page) getRecForCellPtrAt(pos uint16) []byte {
 }
 
 // addCellPtr appends a new cellPtr to the Page
-func (p *Page) addCellPtr(size uint16) (uint16, *cellPtr) {
-	// get Page pageHeader
-	h := p.getPageHeader()
-	// grab the cellPtr id for later
-	sid := h.numCells
-	// update Page pageHeader
-	h.numCells++
-	h.lower += pageCellSize
-	h.upper -= size
-	// create new cellPtr structure
-	sl := &cellPtr{
-		id:     h.numCells,
-		flags:  C_USED,
-		offset: h.upper,
-		length: size,
-	}
-	// write pageHeader back to Page
-	p.setHeader(h)
-	// encode cellPtr onto Page
-	p.encCellPtr(sl, sid)
-	// finally, return CID and cellPtr
-	return sid, sl
-}
+// func (p *Page) addCellPtr(size uint16) (uint16, *cellPtr) {
+// 	// get Page pageHeader
+// 	h := p.getPageHeader()
+// 	// grab the cellPtr id for later
+// 	sid := h.numCells
+// 	// update Page pageHeader
+// 	h.numCells++
+// 	h.lower += pageCellSize
+// 	h.upper -= size
+// 	// create new cellPtr structure
+// 	sl := &cellPtr{
+// 		id:     h.numCells,
+// 		flags:  C_USED,
+// 		offset: h.upper,
+// 		length: size,
+// 	}
+// 	// write pageHeader back to Page
+// 	p.setHeader(h)
+// 	// encode cellPtr onto Page
+// 	p.encCellPtr(sl, sid)
+// 	// finally, return CID and cellPtr
+// 	return sid, sl
+// }
 
 // getCellPtrByID attempts to locate and return the desired cellPtr by
 // performing a scan through the cellPtr list and finding an ID that
 // matches the one provided. This method will return the valid cellPtr
 // or an error, but never both.
-func (p *Page) getCellPtrByID(id uint16) (*cellPtr, error) {
+func (p *Page) getCellPtrByID(id uint16) (cellPtr, error) {
+	// First, create a cellPtr instance we can return when we are finished.
+	var cp cellPtr
 	// Get the max number of usable cells in our list.
-	cellMax := p.getNumCells() - p.getNumFree()
+	numCells := p.getNumCells() // - p.getNumFree()
 	// Start ranging our cell pointer list in search for a matching ID.
-	for pos := uint16(0); pos < cellMax; pos++ {
-		cp := p.getCellPtrByPos(pos)
-		if cp.id == id {
+	for pos := uint16(0); pos < numCells; pos++ {
+		// Attempt to get the cell at this location, then check the ID.
+		cp = p.getCellPtrAt(pos)
+		log.Printf(">>>>>> trying to find cell with id=%d, have={%s}\n", id, cp)
+		if cp.getID() == id {
 			// We found it, so we return it
 			return cp, nil
 		}
 	}
 	// We did not find it, so we will return an error
-	return nil, ErrInvalidCID
+	return 0, ErrInvalidCID
 }
 
-// getCellPtrByPos reads and returns the cellPtr at the provided location in the
-// cellPtr list derived using the supplied cellPtr position pos. This method will
-// panic if the provided pos is out of the list bounds.
-func (p *Page) getCellPtrByPos(pos uint16) *cellPtr {
-	// get the cellPtr offset
-	off := pageHeaderSize + (pos * pageCellSize)
-	// make sure it is in bounds
-	if lo := decU16((*p)[offLower : offLower+2]); off > lo {
-		panic(
-			fmt.Sprintf(
-				"--decCellPtr: cellPtr position (pos=%d, off=%d) is out of bounds (max=%d)", pos,
-				off, lo,
-			),
-		)
-	}
-	// now we decode and return the cellPtr located
-	return &cellPtr{
-		id:     decU16((*p)[off : off+2]),
-		flags:  decU16((*p)[off+2 : off+4]),
-		offset: decU16((*p)[off+4 : off+6]),
-		length: decU16((*p)[off+6 : off+8]),
-	}
-}
-
-// getFreeCellPtr checks for any free cell pointers that may be available
-// that fit the size criteria that we can re-use. This is called before adding
-// a new one in an attempt to be a resourceful as possible. It returns a free
-// cell pointer if one can be found, otherwise adding and returning a new one.
-// This method returns a boolean indicating true if a free cellPtr was used,
-// otherwise indicating false if a cellPtr had to be added.
-func (p *Page) getFreeCellPtr(size uint16, h *pageHeader) (*cellPtr, bool) {
-	// Check to see, first and foremost, if we have any free cell pointers
-	// available to use in the first place.
-	if h.numFree > 0 {
-		// We have at least one. Let's check (from the end, backward) because the
-		// cells are sorted, and we always push any of the free ones to the end.
-		for pos := h.numCells; pos > h.numCells-h.numFree; pos-- {
-			cp := p.getCellPtrByPos(pos)
-			if hasFlag16(cp.flags, C_FREE) && size <= cp.length {
-				// This cell pointer is free and fits our size criteria, so it can
-				// be used, but first we must update it.
-				cp.flags = C_USED
-				cp.length = size
-				// and then we return it for use
-				return cp, true
-			}
-		}
-	}
-	// Then, finally, create and return a new cellPtr
-	// create new cellPtr structure
-	return &cellPtr{
-		id:     h.numCells,
-		flags:  C_USED,
-		offset: h.upper,
-		length: size,
-	}, false
+// getRecForCell returns the record for the given cellPtr
+func (p *Page) getRecForCell(cp cellPtr) []byte {
+	beg, end := cp.bounds()
+	return (*p)[beg:end]
 }
 
 // acquireCellPtr attempts to acquire and return a cellPtr that will fit the
 // record size provided. It will first try to use an available cell that has
 // been marked free, but if there are none, it will go on to add a new one.
 // Either way, unless the page is full, this method should always return a
-// usable cellPtr.
-func (p *Page) acquireCellPtr(size uint16) *cellPtr {
-	// First, we attempt to use a previous cellPtr (if there are any) that
-	// meet our size criteria.
-	// cp, found := p.getFreeCellPtr(size)
-	// if found {
-	//	// We have found one we can use, we will return it to the caller.
-	//	return cp
-	// }
-	// // Otherwise, we have not found a freely usable cellPtr, so we must
-	// // add a new one.
-	// return p.addCellPtr(size)
-
-	// // try to find a numFree cellPtr we can use
-	// slotCount := p.getNumCells()
-	// // first we check to see if the cellPtr count is zero
-	// if slotCount == 0 {
-	// 	// we can skip the mess if this is the case
-	// 	return p.addCellPtr(size)
-	// }
-	// //
-	// //
-	// // NOTE: we might want to keep a first open cellPtr id in
-	// // the pageHeader, as well as know if we are dealing with
-	// // fixed prev data or not. If we are dealing with fixed
-	// // sized data, then we can count forward from the first
-	// // open cellPtr because we know no matter what, we can
-	// // fit our data into any cellPtr. Otherwise, if we are
-	// // dealing with dynamic sized data, then we may want to
-	// // count backwards because we will have a higher chance
-	// // of encountering (not always, but sometimes) an empty
-	// // cellPtr that may fit our dynamic sized data sooner.
-	// //
-	// // NOTE: also, we may want to implement a cellPtr sorting
-	// // function (for fixed sized data entries) that does not
-	// // change the cellPtr id of anything, but simply re-orders
-	// // the offsets to point to the data in sorted order. Or
-	// // maybe it's even faster to do that operation when
-	// // acquiring or adding a new cellPtr.
-	// //
-	// //
-	// // we try from the last one available and work backwards
-	// // for CID := slotCount; CID > 0; CID-- {
-	// for sid := uint16(0); sid < slotCount; sid++ {
-	// 	sl := p.decCellPtr(sid)
-	// 	if hasFlag16(sl.flags, C_FREE) && size <= sl.length {
-	// 		// we can use this cellPtr, but first we update and save it
-	// 		sl.flags = C_USED
-	// 		sl.length = size
-	// 		p.encCellPtr(sl, sid)
-	// 		// and then we return it for use
-	// 		return sid, sl
-	// 	}
-	// }
-	// // otherwise, we append and return a fresh cellPtr
-	// return p.addCellPtr(size)
-
-	return nil // to make this commented out method work for now.
-}
-
-func (p *Page) Find(key []byte) (uint16, bool) {
-	cmp := func(n uint16) int {
-		return bytes.Compare(key, p.getRecForCellPtrAt(n))
-	}
-	n := p.getNumCells()
-	i, j := uint16(0), n
-	for i < j {
-		h := (i + j) >> 1 // avoid overflow when computing h
-		// i ≤ h < j
-		if cmp(h) > 0 {
-			i = h + 1 // preserves cmp(i-1) > 0
-		} else {
-			j = h // preserves cmp(j) <= 0
+// usable cellPtr, along with a boolean indicating true if a free one was
+// chosen to be recycled, and false if a new one had to be created.
+func (p *Page) acquireCellPtr(size uint16) (cellPtr, bool) {
+	// First, create a cellPtr instance we can return when we are finished.
+	var cp cellPtr
+	// Now, we will grab our cell count stats, and check to see if there are
+	// any free cells we can check to see if they are candidates for use.
+	total, free := p.getNumCells(), p.getNumFree()
+	if free > 0 {
+		// We have some free cells, let's check them out to see if there are
+		// any we can re-cycle.
+		for pos := total; pos > total-free; pos-- {
+			// Attempt to get the cell at this location
+			cp = p.getCellPtrAt(pos)
+			// Check if the flags are properly set, and if the length is suitable
+			if cp.hasFlag(C_FREE) && size <= cp.getLength() {
+				// This cell pointer is free and fits our size criteria, so it can
+				// be returned for use.
+				return cp, true
+			}
 		}
 	}
-	// i == j, cmp(i-1) > 0 and cmp(j) <= 0
-	return i, i < n && cmp(i) == 0
+	// Otherwise, we will just return our new cell
+	return cp, false
 }
 
+// AddRecord writes a new record to the Page. It returns a *RecID which is a record
+// ID, along with any potential errors encountered.
 func (p *Page) AddRecord(data []byte) (*RecID, error) {
 	// Use our page latches
 	pgLatch.Lock()
@@ -583,41 +516,42 @@ func (p *Page) AddRecord(data []byte) (*RecID, error) {
 	// Get our page header for doing some updates.
 	h := p.getPageHeader()
 	// Now, we must get a new (or free to use) cellPtr to index the record
-	cp, usedFree := p.getFreeCellPtr(rsize, h)
+	cp, usedFree := p.acquireCellPtr(rsize)
+	// Next, update some header values based on what we found.
 	if usedFree {
 		// We were able to use up one of our free cells, so now we will update
-		// the page header accordingly.
+		// the page header and cellPtr accordingly.
 		h.numFree--
+		cp.setFlags(C_USED)
+		cp.setLength(rsize)
 	} else {
 		// Otherwise, despite having at least one free cellPtr, we were not able
-		// to locate one we can re-use, so we added a new one. Update our header
-		// accordingly.
+		// to locate one we can re-use. So first, we will have to update our header
+		// and cellPtr accordingly.
 		h.numCells++
 		h.lower += pageCellSize
 		h.upper -= rsize
+		cp = newCell(h.numCells, h.upper, rsize)
 	}
-	// And save our page header.
-	p.setHeader(h)
-	insertAt, found := p.Find(data)
-	fmt.Printf("addRecord(%q): insertAt=%d, found=%v\n", data, insertAt, found)
-	// Make sure to encode the cellPtr before continuing any further, so it
-	// can be properly sorted according to our record data.
-	p.sortAndSetCellPtr(cp, data[:4])
+	// Now, we can encode our updated header to the page.
+	p.setPageHeader(h)
 	// Get our record bounds from the cellPtr index
 	beg, end := cp.bounds()
 	// Write record data to the Page
 	copy((*p)[beg:end], data)
+	// Encode and sort our cell pointer set.
+	p.encCellPtr(cp)
 	// Assemble and return the record ID
 	return &RecID{
 		PID: p.getPageID(),
-		CID: cp.id,
+		CID: cp.getID(),
 	}, nil
 }
 
-func (p *Page) iterateCells(fn func(pos uint16, cp *cellPtr, rec []byte) bool) {
+func (p *Page) iterateCells(fn func(pos uint16, cp cellPtr, rec []byte) bool) {
 	cells := p.getNumCells()
 	for pos := uint16(0); pos < cells; pos++ {
-		cp := p.getCellPtrByPos(pos)
+		cp := p.getCellPtrAt(pos)
 		beg, end := cp.bounds()
 		if !fn(pos, cp, (*p)[beg:end]) {
 			break
@@ -625,57 +559,10 @@ func (p *Page) iterateCells(fn func(pos uint16, cp *cellPtr, rec []byte) bool) {
 	}
 }
 
-func (p *Page) sortAndSetCellPtr(cp *cellPtr, recKey []byte) {
-	p.encCellPtr(cp, p.getNumCells())
-	var prev, curr []byte
-	p.iterateCells(
-		func(n uint16, x *cellPtr, r []byte) bool {
-			if n == uint16(0) {
-				prev = r
-			} else {
-				curr = r
-			}
-			fmt.Printf("prev=%s, curr=%s\n", prev, curr)
-			return true
-		},
-	)
-	// cells := p.getNumCells()
-	// for pos := uint16(0); pos < cells; pos++ {
-	// 	cp := p.getCellPtrByPos(pos)
-	// 	_ = cp
-	// }
-}
-
-// AddRecord writes a new record to the Page. It returns a *RecID which
-// is a record ID, along with any potential errors encountered.
-// func (p *Page) _AddRecord(data []byte) (*RecID, error) {
-// 	pgLatch.Lock()
-// 	defer pgLatch.Unlock()
-// 	// get the record prev
-// 	rsize := uint16(len(data))
-// 	// sanity check the record
-// 	err := p.checkRecord(rsize)
-// 	// util.DEBUG("--AddRecord(%q) rsize=%d, numFree=%d, checkRecordErr=%v", data, rsize, p.freeSpace(), err)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	// get a new (or used) cellPtr to index the record
-// 	sid, sl := p.acquireCellPtr(rsize)
-// 	// util.DEBUG("--AddRecord(%x) rsize=%d, use_slot=%d", data, rsize, CID)
-// 	// get the record bounds from the cellPtr index
-// 	beg, end := sl.bounds()
-// 	// write the record to the Page (using record bounds)
-// 	copy((*p)[beg:end], data)
-// 	// assemble and return the record ID
-// 	return &RecID{
-// 		PID: decU32((*p)[offPID : offPID+4]),
-// 		CID: sid,
-// 	}, nil
-// }
-
 // checkRID performs error and sanity checking on the provided
 // record ID.
 func (p *Page) checkRID(rid *RecID) error {
+	log.Printf("rid.PID=%d, p.getPageID=%d\n", rid.PID, p.getPageID())
 	if rid.PID != p.getPageID() {
 		return ErrInvalidPID
 	}
@@ -689,22 +576,28 @@ func (p *Page) checkRID(rid *RecID) error {
 // that is associated with the provided record ID, along with any
 // potential errors encountered.
 func (p *Page) GetRecord(rid *RecID) ([]byte, error) {
+	// Use our page latch, for safety.
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
-	// sanity check the record ID
+	// Sanity check the record ID
 	err := p.checkRID(rid)
 	if err != nil {
 		return nil, err
 	}
-	// find the associated cellPtr index (ensure it is a used cellPtr)
-	sl := p.decCellPtr(rid.CID)
-	if hasFlag16(sl.flags, C_FREE) {
+	// Locate the associated cellPtr
+	cp, err := p.getCellPtrByID(rid.CID)
+	if err != nil {
+		return nil, err
+	}
+	if cp.hasFlag(C_FREE) {
+		// This cell ptr is marked as a free slot, but we are not looking
+		// for a free slot, so return a record not found error.
 		return nil, ErrRecordNotFound
 	}
 	// create a buffer to copy the record into (safety)
-	buff := make([]byte, sl.length)
-	// get the record bounds from the cellPtr index
-	beg, end := sl.bounds()
+	buff := make([]byte, cp.getLength())
+	// get the record boundary from the cellPtr
+	beg, end := cp.bounds()
 	// copy the record into the buffer (using record bounds)
 	copy(buff, (*p)[beg:end])
 	// return the record copy
@@ -713,19 +606,21 @@ func (p *Page) GetRecord(rid *RecID) ([]byte, error) {
 
 // delSlot updates the numFree of the cellPtr found at the provided
 // cellPtr ID, and returns the cellPtr for use in the delete operation.
-func (p *Page) delSlot(sid uint16) *cellPtr {
+func (p *Page) delSlot(sid uint16) (cellPtr, error) {
 	// get the cellPtr using the CID
-	sl := p.decCellPtr(sid)
+	cp := p.getCellPtrAt(sid)
 	// if the cellPtr numFree is numFree, return nil
-	if hasFlag16(sl.flags, C_FREE) {
-		return nil
+	if cp.hasFlag(C_FREE) {
+		// This cell ptr is marked as a free slot, but we are not looking
+		// for a free slot, so return a record not found error.
+		return 0, ErrRecordNotFound
 	}
 	// update cellPtr numFree
-	sl.flags = C_FREE
+	cp.setFlags(C_FREE)
 	// save the numFree of the found cellPtr
-	p.encCellPtr(sl, sid)
+	p.encCellPtr(cp)
 	// and return
-	return sl
+	return cp, nil
 }
 
 // delRecord removes a record from the Page. It overwrites the record
@@ -742,15 +637,15 @@ func (p *Page) delRecord(rid *RecID) error {
 		return err
 	}
 	// find the associated cellPtr index (ensure it is a used cellPtr)
-	sl := p.delSlot(rid.CID)
-	if sl == nil {
-		return nil
+	cp, err := p.delSlot(rid.CID)
+	if err != nil {
+		return err
 	}
 	// create a buffer to overwrite the record with
-	buff := make([]byte, sl.length)
+	buff := make([]byte, cp.getLength())
 	// get the record bounds from the cellPtr index
-	beg, end := sl.bounds()
-	// util.DEBUG("--delRecord(%d) [%x] del_slot=%d, slot_count=%d", id.CID, (*p)[beg:end], id.CID, len(p.getSlotSet()))
+	beg, end := cp.bounds()
+	// util.DEBUG("--delRecord(%d) [%x] del_slot=%d, slot_count=%d", id.CID, (*p)[beg:end], id.CID, len(p.getCellPtrs()))
 	// copy the buffer over the record (using record bounds)
 	copy((*p)[beg:end], buff)
 	// return nil error
@@ -764,7 +659,7 @@ func (p *Page) clear() {
 
 // iterator is a basic iterator
 type iterator struct {
-	slots    []*cellPtr
+	slots    []cellPtr
 	index    int
 	skipFree bool
 }
@@ -772,12 +667,12 @@ type iterator struct {
 // newIter instantiates and returns a new iterator. If the Page contains
 // no data entries, then it returns a nil iterator along with an error.
 func (p *Page) newIter(skipFree bool) (*iterator, error) {
-	slots := p.getSlotSet()
-	if slots == nil {
+	cells := p.getCellPtrs()
+	if cells == nil {
 		return nil, ErrEmptyPage
 	}
 	return &iterator{
-		slots:    slots,
+		slots:    cells,
 		index:    -1,
 		skipFree: skipFree,
 	}, nil
@@ -794,14 +689,14 @@ func (it *iterator) next() *cellPtr {
 	}
 	// get the cellPtr at this index, then check to make sure that this
 	// cellPtr is not a numFree cellPtr; if it is a numFree cellPtr, then skip it.
-	sl := it.slots[it.index]
+	cp := it.slots[it.index]
 	// check if we should skip any numCells marked numFree.
-	if it.skipFree && hasFlag16(sl.flags, C_FREE) {
+	if it.skipFree && cp.hasFlag(C_FREE) {
 		// cellPtr is numFree, skip it
 		return it.next()
 	}
 	// return our cellPtr
-	return sl
+	return &cp
 }
 
 // hasMore returns a boolean indicating true if this Page contains one or more "next"
@@ -887,7 +782,7 @@ func (p *Page) DumpPage(showPageData bool) string {
 	)
 	ss += fmt.Sprintf("+------------------[ numCells index ]------------------+\n")
 	for sid := uint16(0); sid < h.numCells; sid++ {
-		sl := p.decCellPtr(sid)
+		sl := p.getCellPtrAt(sid)
 		ss += fmt.Sprintf("%s\n", sl)
 	}
 	if showPageData {

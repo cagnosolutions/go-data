@@ -33,12 +33,22 @@ func (c cell) getFlags() uint16 {
 	return uint16(c >> shift2B)
 }
 
+func (c cell) hasFlag(flag uint16) bool {
+	return uint16(c>>shift2B)&flag != 0
+}
+
 func (c cell) getOffset() uint16 {
 	return uint16(c >> shift4B)
 }
 
 func (c cell) getLength() uint16 {
 	return uint16(c >> shift6B)
+}
+
+func (c cell) getBounds() (uint16, uint16) {
+	offset := uint16(c >> shift4B)
+	length := uint16(c >> shift6B)
+	return offset, offset + length
 }
 
 func (c *cell) setID(n uint16) {
@@ -67,3 +77,8 @@ func (c cell) String() string {
 		c.getLength(),
 	)
 }
+
+type cells []cell
+
+func (c cells) Len() int      { return len(c) }
+func (c cells) Swap(i, j int) { c[i], c[j] = c[j], c[i] }

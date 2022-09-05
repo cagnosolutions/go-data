@@ -361,15 +361,15 @@ func (p *Page) setSlot(sl *slot, sid uint16) {
 	bin.PutUint16((*p)[offLength:offLength+2], sl.length)
 }
 
-// decCellPtr reads the slot at the provided slot location derived using
-// the supplied slot index ID. decCellPtr panics if the provided CID
+// getCellPtrAt reads the slot at the provided slot location derived using
+// the supplied slot index ID. getCellPtrAt panics if the provided CID
 // is out of bounds.
 func (p *Page) getSlot(sid uint16) *slot {
 	// get the slot offset
 	off := szHd + (sid * szSl)
 	// make sure it is in bounds
 	if lo := bin.Uint16((*p)[offLower : offLower+2]); off > lo {
-		panic(fmt.Sprintf("--decCellPtr: cellPtr id (%d) or offset (%d) is out of bounds (%d)", sid, off, lo))
+		panic(fmt.Sprintf("--getCellPtrAt: cellPtr id (%d) or offset (%d) is out of bounds (%d)", sid, off, lo))
 	}
 	// for clarity
 	offStatus := off

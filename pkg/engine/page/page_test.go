@@ -54,7 +54,7 @@ func TestPage_ForStupidErrorsCuzYouNeverReallyKnowIfYouDidSomethingDumb(t *testi
 	p.printHeader()
 }
 
-func TestPage_FillPercent(t *testing.T) {
+func _TestPage_FillPercent(t *testing.T) {
 
 	maxRecSize := 100
 	var added int
@@ -440,7 +440,7 @@ func _addRecords(t *testing.T) {
 
 func TestPage_AddRecord(t *testing.T) {
 	pg = NewPage(3)
-	err := addRecords(pg)
+	_, err := addRecords(pg)
 	if err != nil {
 		t.Error(err)
 	}
@@ -449,7 +449,7 @@ func TestPage_AddRecord(t *testing.T) {
 
 func TestPage_AddRecordAndIterate(t *testing.T) {
 	pg = NewPage(3)
-	err := addRecords(pg)
+	_, err := addRecords(pg)
 	if err != nil {
 		t.Error(err)
 	}
@@ -458,19 +458,20 @@ func TestPage_AddRecordAndIterate(t *testing.T) {
 		t.Error(err)
 	}
 	var i int
-	for sl := iter.next(); iter.hasMore(); sl = iter.next() {
-		fmt.Printf("record #%.3d, data=%q\n", i, string(pg[sl.offset:sl.offset+sl.length]))
+	for cp := iter.next(); iter.hasMore(); cp = iter.next() {
+		beg, end := cp.bounds()
+		fmt.Printf("record #%.3d, data=%q\n", i, string(pg[beg:end]))
 		i++
 	}
 }
 
 func TestPage_GetRecord(t *testing.T) {
 	pg = NewPage(3)
-	err := addRecords(pg)
+	rids, err := addRecords(pg)
 	if err != nil {
 		t.Error(err)
 	}
-	err = getRecords(pg)
+	err = getRecords(pg, rids)
 	if err != nil {
 		t.Error(err)
 	}
@@ -478,7 +479,7 @@ func TestPage_GetRecord(t *testing.T) {
 
 func TestPage_DelRecord(t *testing.T) {
 	pg = NewPage(3)
-	err := addRecords(pg)
+	rids, err := addRecords(pg)
 	if err != nil {
 		t.Error(err)
 	}
@@ -486,7 +487,7 @@ func TestPage_DelRecord(t *testing.T) {
 	if sz == 0 {
 		t.Errorf("got %v, expected %v\n", sz, 3)
 	}
-	err = delRecords(pg)
+	err = delRecords(pg, rids)
 	if err != nil {
 		t.Error(err)
 	}
@@ -516,23 +517,22 @@ var addRecordsSize = func(p Page, count, size int) error {
 	return nil
 }
 
-var addRecords = func(p Page) error {
+var addRecords = func(p Page) ([]*RecID, error) {
+	var ids []*RecID
 	for i := 0; i < 128; i++ {
 		rec := fmt.Sprintf("record-%6d", i)
-		_, err := p.AddRecord([]byte(rec))
+		id, err := p.AddRecord([]byte(rec))
 		if err != nil {
-			return err
+			return nil, err
 		}
+		ids = append(ids, id)
 	}
-	return nil
+	return ids, nil
 }
 
-var getRecords = func(p Page) error {
-	for i := 0; i < 128; i++ {
-		rid := &RecID{
-			PID: 3,
-			CID: uint16(i),
-		}
+var getRecords = func(p Page, ids []*RecID) error {
+	for i := range ids {
+		rid := ids[i]
 		_, err := p.GetRecord(rid)
 		if err != nil {
 			return err
@@ -541,12 +541,9 @@ var getRecords = func(p Page) error {
 	return nil
 }
 
-var delRecords = func(p Page) error {
-	for i := 0; i < 128; i++ {
-		rid := &RecID{
-			PID: 3,
-			CID: uint16(i),
-		}
+var delRecords = func(p Page, ids []*RecID) error {
+	for i := range ids {
+		rid := ids[i]
 		err := p.delRecord(rid)
 		if err != nil {
 			return err
@@ -557,14 +554,14 @@ var delRecords = func(p Page) error {
 
 func TestPage_Sync(t *testing.T) {
 	pg = NewPage(3)
-	err := addRecords(pg)
+	ids, err := addRecords(pg)
 	if err != nil {
 		t.Error(err)
 	}
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
-		err := getRecords(pg)
+		err := getRecords(pg, ids)
 		if err != nil {
 			if err != ErrRecordNotFound {
 				t.Error(err)
@@ -573,7 +570,7 @@ func TestPage_Sync(t *testing.T) {
 		wg.Done()
 	}()
 	go func() {
-		err := delRecords(pg)
+		err := delRecords(pg, ids)
 		if err != nil {
 			t.Error(err)
 		}
@@ -769,8 +766,10 @@ func getSlotAndRecsFromPage(pg Page) string {
 	}
 	var ss []string
 	// var CID int
-	for sl := iter.next(); iter.hasMore(); sl = iter.next() {
-		ss = append(ss, fmt.Sprintf("numFree=%v, val=%.1x", sl.flags, string(pg[sl.offset:sl.offset+sl.length])))
+	for cp := iter.next(); iter.hasMore(); cp = iter.next() {
+		flags := cp.getFlags()
+		beg, end := cp.bounds()
+		ss = append(ss, fmt.Sprintf("numFree=%v, val=%.1x", flags, string(pg[beg:end])))
 		//	CID++
 	}
 	return strings.Join(ss, ",")
@@ -895,6 +894,10 @@ func TestPage_SortAndSet(t *testing.T) {
 	_, err = pg.AddRecord([]byte("BBBBBBBB"))
 	if err != nil {
 		t.Errorf("adding record 4: %s", err)
+	}
+	cells := pg.getCellPtrs()
+	for i := range cells {
+		fmt.Printf("pos=%d, cell=%s, rec=%s\n", i, cells[i], pg.getRecForCell(cells[i]))
 	}
 }
 
