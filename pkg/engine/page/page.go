@@ -17,6 +17,7 @@ import (
 
 // RE: scratch_184.go
 // https://go.dev/play/p/gr8RC8vDuSv
+// https://go.dev/play/p/gr8RC8vDuSv
 
 // Various fixed size constants
 const (
@@ -198,22 +199,22 @@ func (p *Page) getFlags() uint32 {
 
 // getNumFree decodes and returns the number of free cells directly from the encoded pageHeader.
 func (p *Page) getNumFree() uint16 {
-	return decU16((*p)[offNumFree : offNumFree+4])
+	return decU16((*p)[offNumFree : offNumFree+2])
 }
 
 // getNumCells decodes and returns the number of allocated cells directly from the encoded pageHeader.
 func (p *Page) getNumCells() uint16 {
-	return decU16((*p)[offNumCells : offNumCells+4])
+	return decU16((*p)[offNumCells : offNumCells+2])
 }
 
 // getLower decodes and returns the lower bound marker directly from the encoded pageHeader.
 func (p *Page) getLower() uint16 {
-	return decU16((*p)[offLower : offLower+4])
+	return decU16((*p)[offLower : offLower+2])
 }
 
 // getUpper decodes and returns the upper bound marker directly from the encoded pageHeader.
 func (p *Page) getUpper() uint16 {
-	return decU16((*p)[offUpper : offUpper+4])
+	return decU16((*p)[offUpper : offUpper+2])
 }
 
 // setPageID encodes the provided value directly into the pageHeader.
@@ -238,22 +239,22 @@ func (p *Page) setFlags(n uint32) {
 
 // setNumFree encodes the provided value directly into the pageHeader.
 func (p *Page) setNumFree(n uint16) {
-	encU16((*p)[offNumFree:offNumFree+4], n)
+	encU16((*p)[offNumFree:offNumFree+2], n)
 }
 
 // setNumCells encodes the provided value directly into the pageHeader.
 func (p *Page) setNumCells(n uint16) {
-	encU16((*p)[offNumCells:offNumCells+4], n)
+	encU16((*p)[offNumCells:offNumCells+2], n)
 }
 
 // setLower encodes the provided value directly into the pageHeader.
 func (p *Page) setLower(n uint16) {
-	encU16((*p)[offLower:offLower+4], n)
+	encU16((*p)[offLower:offLower+2], n)
 }
 
 // setUpper encodes the provided value directly into the pageHeader.
 func (p *Page) setUpper(n uint16) {
-	encU16((*p)[offUpper:offUpper+4], n)
+	encU16((*p)[offUpper:offUpper+2], n)
 }
 
 // Size returns the page size in bytes
