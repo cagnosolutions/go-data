@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -11,7 +12,6 @@ import (
 	"unsafe"
 )
 
-// Binary encoding and decoding helpers
 var (
 	encU16 = binary.LittleEndian.PutUint16
 	encU32 = binary.LittleEndian.PutUint32
@@ -21,11 +21,14 @@ var (
 	decU64 = binary.LittleEndian.Uint64
 )
 
+// RecordID is a record ID type used by a Page and is associated
+// with a record.
 type RecordID struct {
 	PageID uint32
 	CellID uint16
 }
 
+// String is the stringer method for a RecordID
 func (r *RecordID) String() string {
 	return fmt.Sprintf("{%d, %d}", r.PageID, r.CellID)
 }
@@ -54,6 +57,7 @@ const (
 	offUpper    uint16 = 22 // upper=uint16		offs=22-24	(2 bytes)
 )
 
+// PageHeader represents the header of a Page.
 type PageHeader struct {
 	ID    uint32 // id of Page
 	Prev  uint32 // prev Page pointer
@@ -65,65 +69,32 @@ type PageHeader struct {
 	Upper uint16 // upper numFree space bound
 }
 
+// Size returns the size of the PageHeader in bytes.
 func (h *PageHeader) Size() int {
 	return int(unsafe.Sizeof(*h))
 }
 
+// String is the stringer method for the PageHeader.
 func (h *PageHeader) String(p *Page) string {
-	ss := fmt.Sprintf("%10v +---------+\n", "")
-	ss += fmt.Sprintf("%10v |%2v%v%-2v|\n", "", "", " Page", "")
-	ss += fmt.Sprintf("%10v +---------+\n", "")
-	hv := reflect.ValueOf(h).Elem()
-	for i := 0; i < hv.NumField(); i++ {
-		sf := hv.Type().Field(i)
-		ss += fmt.Sprintf("%10v |%2v%5d%-2v|\n", strings.ToLower(sf.Name), "", hv.Field(i), "")
-		// ss += fmt.Sprintf("%10v |%-8d|\n", strings.ToLower(sf.Name), hv.Field(i))
-		// ss += fmt.Sprintf("%16s\t%8s\t (index=%d, size=%d, align=%d, offset=%d)\n",
-		//	sf.Name, sf.Type.Name(), sf.Index[0], sf.Type.Size(), sf.Type.Align(), sf.Offset)
+	b, err := json.MarshalIndent(h, "", "")
+	if err != nil {
+		panic("pageHeader:" + err.Error())
 	}
-	ss += fmt.Sprintf("%10v +---------+\n", "")
-	for i := uint16(0); i < h.Cells; i++ {
-		c := p.decCell(i)
-		var t = "T"
-		if !c.hasFlag(C_USED) {
-			t = "F"
-		}
-		ss += fmt.Sprintf("%10v |%2v%v%-2v|\n", "", "", fmt.Sprintf("c%d,u%1s", c.getID(), t), "")
-	}
-	ss += fmt.Sprintf("%10v +---------+ %v %d\n", "", "(lo)", h.Lower)
-	ss += fmt.Sprintf("%10v |%2v%s%3v|\n", "", "", "Free", "")
-	ss += fmt.Sprintf("%10v +---------+ %v %d\n", "", "(hi)", h.Upper)
-	var cc []cellptr
-	for i := uint16(0); i < h.Cells; i++ {
-		cc = append(cc, p.decCell(i))
-	}
-	sort.Slice(
-		cc, func(i, j int) bool {
-			return cc[i].getID() < cc[j].getID()
-		},
-	)
-	for i := len(cc) - 1; i >= 0; i-- {
-		if cc[i].hasFlag(C_USED) {
-			r := p.getRecordUsingCell(cc[i])
-			ss += fmt.Sprintf("%10v |%2v%s%3v|\n", "", "", r.Key(), "")
-		} else {
-			ss += fmt.Sprintf("%10v |%2v%s%3v|\n", "", "", "____", "")
-		}
-	}
-	ss += fmt.Sprintf("%10v +---------+ %10v\n", "", "")
-	return ss
+	return string(b)
 }
 
+// Page represents a page
 type Page []byte
 
-func NewPage(id uint32) Page {
+// NewPage returns a new Page
+func NewPage(id uint32, flags uint32) Page {
 	p := make(Page, pageSize, pageSize)
 	p.setPageHeader(
 		&PageHeader{
 			ID:    id,
 			Prev:  0,
 			Next:  0,
-			Flags: P_USED,
+			Flags: flags,
 			Cells: 0,
 			Free:  0,
 			Lower: pageHeaderSize,
@@ -133,6 +104,8 @@ func NewPage(id uint32) Page {
 	return p
 }
 
+// getPageHeader decodes and returns a pointer to the PageHeader
+// directly from the Page.
 func (p *Page) getPageHeader() *PageHeader {
 	return &PageHeader{
 		ID:    decU32((*p)[offPID : offPID+4]),
@@ -146,6 +119,8 @@ func (p *Page) getPageHeader() *PageHeader {
 	}
 }
 
+// setPageHeader takes a pointer to a PageHeader and encodes it
+// directly into the Page.
 func (p *Page) setPageHeader(h *PageHeader) {
 	encU32((*p)[offPID:offPID+4], h.ID)
 	encU32((*p)[offPrev:offPrev+4], h.Prev)
@@ -157,26 +132,46 @@ func (p *Page) setPageHeader(h *PageHeader) {
 	encU16((*p)[offUpper:offUpper+2], h.Upper)
 }
 
+// getRecordUsingCellPos takes the position of a cellptr and uses it
+// to decode and return the associated Record.
 func (p *Page) getRecordUsingCellPos(pos uint16) Record {
+	// Decode the cellptr at the provided location.
 	cp := p.decCell(pos)
+	// Get the record bounds from the decoded cellptr.
 	beg, end := cp.getBounds()
+	// Return the Record that the cellptr points to.
 	return Record((*p)[beg:end])
 }
 
+// getRecordUsingCell takes a cellptr and uses it to decode and return
+// the associated Record.
 func (p *Page) getRecordUsingCell(c cellptr) Record {
+	// Get the record bounds from the provided cellptr.
 	beg, end := c.getBounds()
+	// Return the Record that the cellptr points to.
 	return Record((*p)[beg:end])
 }
 
+// addCell takes the length of a record and creates and returns a new
+// cellptr that can be used to represent the record location. The cellptr
+// that is returned is encoded, and all operations requiring the PageHeader
+// to be updated are all taken care of withint this method before the
+// cellptr is returned.
 func (p *Page) addCell(size uint16) cellptr {
+	// Increment the cell count, as well as the lower boundary accordingly,
+	// as well as decrementing the upper boundary by the record size.
 	p.incrNumCells(1)
 	p.incrLower(pageCellPtrSize)
 	p.decrUpper(size)
+	// Create a new cell, and promptly re-encode it before returning the cell.
 	c := newCell(p.getNumCells(), p.getUpper(), size)
 	p.encCell(c, p.getNumCells()-1)
 	return c
 }
 
+// delCell takes a cellptr, and a position and re-encodes the provided cellptr
+// as one that can be re-used. It uses the provided position to move it as close
+// to the lower boundary as possible to aid in calls to vacuum the Page later on.
 func (p *Page) delCell(c cellptr, pos uint16) {
 	// mark the cell free
 	c.setFlags(C_FREE)
@@ -190,36 +185,43 @@ func (p *Page) delCell(c cellptr, pos uint16) {
 	p.incrNumFree(1)
 }
 
-func (p *Page) swapCells(pos1, pos2 uint16) {
-	cp1 := p.decCell(pos1)
-	cp2 := p.decCell(pos2)
-	p.encCell(cp1, pos2)
-	p.encCell(cp2, pos1)
-}
-
+// encCell takes a cellptr and a position and attempts to encode the provided
+// cellptr at the provided position. It panics if anything doesn't work.
 func (p *Page) encCell(c cellptr, pos uint16) {
+	// Get the offset from the provided position.
 	off := pageHeaderSize + (pos * pageCellPtrSize)
+	// Check the offset to ensure it is correct, otherwise panic.
 	if off < pageHeaderSize || off > p.getLower() {
 		panic("error: cell position out of bounds")
 	}
+	// Check the cellptr to ensure it is valid, otherwise panic.
 	if !c.isValid() {
 		panic("error: cell is not a valid cell")
 	}
+	// Encode the cellptr at the offset.
 	encU64((*p)[off:off+8], uint64(c))
 }
 
+// decCell takes a position and attempts to decode and return a cellptr
+// at the provided position. It panics if anything doesn't work.
 func (p *Page) decCell(pos uint16) cellptr {
+	// Get the offset from the provided position.
 	off := pageHeaderSize + (pos * pageCellPtrSize)
+	// Check the offset to ensure it is correct, otherwise panic.
 	if off < pageHeaderSize || off > p.getLower() {
 		panic("error: cell position out of bounds")
 	}
+	// Decode the cellptr at the offset.
 	c := cellptr(decU64((*p)[off : off+8]))
+	// Check the cellptr to ensure it is valid, otherwise panic.
 	if !c.isValid() {
 		panic("error: cell is not a valid cell")
 	}
 	return c
 }
 
+// makeRecordID creates and returns a pointer to a RecordID using the
+// provided cellptr.
 func (p *Page) makeRecordID(c cellptr) *RecordID {
 	return &RecordID{
 		PageID: p.getPageID(),
@@ -249,12 +251,35 @@ func (p *Page) recycleCell(freeCells, numCells uint16, r Record) cellptr {
 		}
 	}
 	// Otherwise, we could not find one to recycle, so we return 0 because we will be
-	// checking this cell to ensure that it reads as a valid one, and 0 will not so
+	// checking this cell to ensure that it reads as a valid one, and 0 will not, so
 	// it is perfectly safe to return.
 	return 0
 }
 
-func (p *Page) AddRecord(r Record) *RecordID {
+// checkRecord performs some error checking on the record to ensure it is a good
+// record, and that we also have plenty of room for it in the Page.
+func (p *Page) checkRecord(r Record) error {
+	if r == nil {
+		return ErrRecordTooSmall
+	}
+	if int(p.getUpper()-p.getLower())-pageCellPtrSize < len(r) {
+		return ErrNoRoom
+	}
+	return nil
+}
+
+// AddRecord takes a record and attempts to write it to the page. First it will check
+// to see if there are any cellptrs that can be re-used, and do so if there are any
+// that will accommodate the record size. Otherwise, it will create a new cellptr.
+// The cellptrs are always sorted according to the record key, and the record data
+// is written to the page last.
+func (p *Page) AddRecord(r Record) (*RecordID, error) {
+	// Check the record data to ensure it is not empty, and that we have
+	// enough room to add it.
+	err := p.checkRecord(r)
+	if err != nil {
+		return nil, err
+	}
 	// Get our free cells, and our total cell count.
 	freeCells, numCells := p.getNumFree(), p.getNumCells()
 	// Allocate our cell pointer, we will need to use one no matter what.
@@ -291,10 +316,12 @@ func (p *Page) AddRecord(r Record) *RecordID {
 		sort.Sort(p)
 	}
 	// And finally, return our RecordID
-	return &RecordID{p.getPageID(), cp.getID()}
+	return &RecordID{p.getPageID(), cp.getID()}, nil
 }
 
-func (p *Page) GetRecord(id *RecordID) *Record {
+// GetRecord takes a RecordID, and attempts to locate a cellptr that matches.
+// If a match can be located, then the resulting Record is returned.
+func (p *Page) GetRecord(id *RecordID) (Record, error) {
 	// First, we will attempt to locate the record.
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
 		c := p.decCell(pos)
@@ -302,23 +329,29 @@ func (p *Page) GetRecord(id *RecordID) *Record {
 			// We have located the record. Let's check to make sure it has
 			// not been deleted.
 			if c.hasFlag(C_FREE) {
-				return nil
+				return nil, ErrRecordNotFound
 			}
 			// It has not, so we can fetch the record.
 			r := p.getRecordUsingCell(c)
 			// We should make a copy of it, so we do not mutate the original.
 			rc := make(Record, len(r), len(r))
 			copy(rc, r)
-			return &rc
+			// Return the Record
+			return rc, nil
 		}
 	}
 	// Otherwise, we did not locate the record
-	return nil
+	return nil, ErrRecordNotFound
 }
 
+// GetRecordByKey attempts to locate and return a Record using the provided
+// record key. It performs a binary search, since the record cellptrs are
+// always kept in a sorted order, attempts to return a matching Record. If
+// a there is more than one Record in the Page that has the same key then
+// it will return the first one it locates.
 func (p *Page) GetRecordByKey(key []byte) *Record {
 	// First, we will attempt to locate the record.
-	pos, _ := p.FindCellPos(key)
+	pos := p.findCellPos(key)
 	// Otherwise, we have located it. Let's check to make sure it has
 	// not been deleted.
 	c := p.decCell(uint16(pos))
@@ -333,7 +366,10 @@ func (p *Page) GetRecordByKey(key []byte) *Record {
 	return &rc
 }
 
-func (p *Page) DelRecord(id *RecordID) bool {
+// DelRecord attempts to delete a record using the provided record ID. The
+// associated cellptr will be marked as free to re-use, and the record data
+// will be overwritten. Any errors will be returned.
+func (p *Page) DelRecord(id *RecordID) error {
 	// First, we will attempt to locate the record.
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
 		// Check the cell at the provided position
@@ -344,15 +380,17 @@ func (p *Page) DelRecord(id *RecordID) bool {
 			copy((*p)[beg:end], make([]byte, c.getLength()))
 			// Then, we must free the cell pointer.
 			p.delCell(c, pos)
-			return true
+			return nil
 		}
 	}
 	// Otherwise, we did not locate the record
-	return false
+	return ErrRecordNotFound
 }
 
 var SkipRecord = errors.New("skip this record")
 
+// RangeRecords is an iterator methods that uses a closure. It returns any
+// errors encountered.
 func (p *Page) RangeRecords(fn func(r *Record) error) error {
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
 		c := p.decCell(pos)
@@ -370,16 +408,22 @@ func (p *Page) RangeRecords(fn func(r *Record) error) error {
 	return nil
 }
 
+// Len implements the sort.Sort interface for sorting the cellptrs
+// according to the Record key.
 func (p *Page) Len() int {
 	return int(p.getNumCells() - p.getNumFree())
 }
 
+// Less implements the sort.Sort interface for sorting the cellptrs
+// according to the Record key.
 func (p *Page) Less(i, j int) bool {
 	r1 := p.getRecordUsingCellPos(uint16(i))
 	r2 := p.getRecordUsingCellPos(uint16(j))
 	return bytes.Compare(r1.Key(), r2.Key()) < 0
 }
 
+// Swap implements the sort.Sort interface for sorting the cellptrs
+// according to the Record key.
 func (p *Page) Swap(i, j int) {
 	cp1 := p.decCell(uint16(i))
 	cp2 := p.decCell(uint16(j))
@@ -387,7 +431,10 @@ func (p *Page) Swap(i, j int) {
 	p.encCell(cp2, uint16(i))
 }
 
-func (p *Page) FindCellPos(k []byte) (uint16, bool) {
+// findCellPos performs a binary search through the cellptrs using
+// the provided record key, and attempts to find the first cellptr
+// that contains a record key that matches.
+func (p *Page) findCellPos(k []byte) uint16 {
 	cmp := func(key []byte, pos uint16) int {
 		r := p.getRecordUsingCellPos(pos)
 		return bytes.Compare(key, r.Key())
@@ -408,11 +455,7 @@ func (p *Page) FindCellPos(k []byte) (uint16, bool) {
 		}
 	}
 	// i == j, cmp(i-1) > 0 and cmp(j) <= 0
-	return uint16(i), i < n && at == 0
-}
-
-func (p *Page) String() string {
-	return p.getPageHeader().String(p)
+	return uint16(i) // , i < n && at == 0
 }
 
 // getPageID decodes and returns the Page ID directly from the encoded pageHeader.
@@ -480,10 +523,14 @@ func (p *Page) setNumFree(n uint16) {
 	encU16((*p)[offNumFree:offNumFree+2], n)
 }
 
+// incrNumFree increments the free cell count by the amount provided and encodes
+// directly into the pageHeader.
 func (p *Page) incrNumFree(n uint16) {
 	encU16((*p)[offNumFree:offNumFree+2], decU16((*p)[offNumFree:offNumFree+2])+n)
 }
 
+// decrNumFree decrements the free cell count by the amount provided and encodes
+// directly into the pageHeader.
 func (p *Page) decrNumFree(n uint16) {
 	encU16((*p)[offNumFree:offNumFree+2], decU16((*p)[offNumFree:offNumFree+2])-n)
 }
@@ -493,10 +540,14 @@ func (p *Page) setNumCells(n uint16) {
 	encU16((*p)[offNumCells:offNumCells+2], n)
 }
 
+// incrNumCells increments the cell count by the amount provided and encodes
+// directly into the pageHeader.
 func (p *Page) incrNumCells(n uint16) {
 	encU16((*p)[offNumCells:offNumCells+2], decU16((*p)[offNumCells:offNumCells+2])+n)
 }
 
+// decrNumCells decrements the cell count by the amount provided and encodes
+// directly into the pageHeader.
 func (p *Page) decrNumCells(n uint16) {
 	encU16((*p)[offNumCells:offNumCells+2], decU16((*p)[offNumCells:offNumCells+2])-n)
 }
@@ -506,10 +557,14 @@ func (p *Page) setLower(n uint16) {
 	encU16((*p)[offLower:offLower+2], n)
 }
 
+// incrLower increments the lower boundary by the amount provided and encodes
+// directly into the pageHeader.
 func (p *Page) incrLower(n uint16) {
 	encU16((*p)[offLower:offLower+2], decU16((*p)[offLower:offLower+2])+n)
 }
 
+// decrLower decrements the lower boundary by the amount provided and encodes
+// directly into the pageHeader.
 func (p *Page) decrLower(n uint16) {
 	encU16((*p)[offLower:offLower+2], decU16((*p)[offLower:offLower+2])-n)
 }
@@ -519,12 +574,60 @@ func (p *Page) setUpper(n uint16) {
 	encU16((*p)[offUpper:offUpper+2], n)
 }
 
+// incrUpper increments the upper boundary by the amount provided and encodes
+// directly into the pageHeader.
 func (p *Page) incrUpper(n uint16) {
 	encU16((*p)[offUpper:offUpper+2], decU16((*p)[offUpper:offUpper+2])+n)
 }
 
+// decrUpper increments the upper boundary by the amount provided and encodes
+// directly into the pageHeader.
 func (p *Page) decrUpper(n uint16) {
 	encU16((*p)[offUpper:offUpper+2], decU16((*p)[offUpper:offUpper+2])-n)
+}
+
+// String is the stringer method for the page
+func (p *Page) String() string {
+	ss := fmt.Sprintf("%10v +---------+\n", "")
+	ss += fmt.Sprintf("%10v |%2v%v%-2v|\n", "", "", " Page", "")
+	ss += fmt.Sprintf("%10v +---------+\n", "")
+	h := p.getPageHeader()
+	hv := reflect.ValueOf(h).Elem()
+	for i := 0; i < hv.NumField(); i++ {
+		sf := hv.Type().Field(i)
+		ss += fmt.Sprintf("%10v |%2v%5d%-2v|\n", strings.ToLower(sf.Name), "", hv.Field(i), "")
+	}
+	ss += fmt.Sprintf("%10v +---------+\n", "")
+	for i := uint16(0); i < h.Cells; i++ {
+		c := p.decCell(i)
+		var t = "T"
+		if !c.hasFlag(C_USED) {
+			t = "F"
+		}
+		ss += fmt.Sprintf("%10v |%2v%v%-2v|\n", "", "", fmt.Sprintf("c%d,u%1s", c.getID(), t), "")
+	}
+	ss += fmt.Sprintf("%10v +---------+ %v %d\n", "", "(lo)", h.Lower)
+	ss += fmt.Sprintf("%10v |%2v%s%3v|\n", "", "", "Free", "")
+	ss += fmt.Sprintf("%10v +---------+ %v %d\n", "", "(hi)", h.Upper)
+	var cc []cellptr
+	for i := uint16(0); i < h.Cells; i++ {
+		cc = append(cc, p.decCell(i))
+	}
+	sort.Slice(
+		cc, func(i, j int) bool {
+			return cc[i].getID() < cc[j].getID()
+		},
+	)
+	for i := len(cc) - 1; i >= 0; i-- {
+		if cc[i].hasFlag(C_USED) {
+			r := p.getRecordUsingCell(cc[i])
+			ss += fmt.Sprintf("%10v |%2v%s%3v|\n", "", "", r.Key(), "")
+		} else {
+			ss += fmt.Sprintf("%10v |%2v%s%3v|\n", "", "", "____", "")
+		}
+	}
+	ss += fmt.Sprintf("%10v +---------+ %10v\n", "", "")
+	return ss
 }
 
 const (
@@ -636,11 +739,8 @@ func (c *cellptr) String() string {
 
 // Record flags
 const (
-	R_OVERFLOW = 0x0100
-
 	RK_NUM = 0x0001
 	RK_STR = 0x0002
-
 	RV_NUM = 0x0010
 	RV_STR = 0x0020
 
@@ -650,6 +750,7 @@ const (
 	R_STR_STR = RK_STR | RV_STR
 	R_PK_IDX  = R_NUM_NUM
 	R_PK_DAT  = R_NUM_STR
+	R_OF_PTR  = 0x0100 // record overflow pointer
 
 	KeyMask = 0x000f
 	ValMask = 0x00f0
