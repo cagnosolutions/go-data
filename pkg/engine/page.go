@@ -458,6 +458,11 @@ func (p *Page) findCellPos(k []byte) uint16 {
 	return uint16(i) // , i < n && at == 0
 }
 
+// Clear resets the entire page. It wipes all the data, but retains the same ID.
+func (p *Page) Clear() {
+	*p = NewPage(p.getPageID(), P_FREE)
+}
+
 // getPageID decodes and returns the Page ID directly from the encoded pageHeader.
 func (p *Page) getPageID() uint32 {
 	return decU32((*p)[offPID : offPID+4])
