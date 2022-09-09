@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
-
-	"github.com/cagnosolutions/go-data/pkg/engine/page"
 )
 
 const dataFilePerm = 1466
@@ -17,7 +15,7 @@ const dataFilePerm = 1466
 type DiskManager struct {
 	sync.RWMutex
 	file    *os.File
-	nextPID page.PageID
+	nextPID PageID
 	size    int64
 }
 
@@ -58,9 +56,9 @@ func OpenDiskManager(path string) (*DiskManager, error) {
 		return nil, err
 	}
 	size := fi.Size()
-	nextPageID := page.PageID(0)
+	nextPageID := PageID(0)
 	if size > 0 {
-		nextPageID = page.PageID(size / page.PageSize)
+		nextPageID = PageID(size / PageSize)
 	}
 	// Initialize a new DiskManager instance
 	fm := &DiskManager{
@@ -84,31 +82,31 @@ func (f *DiskManager) load() error {
 
 // logicalOffset checks for any out of bounds errors, and returns an error if there
 // is one. Otherwise, it takes a page ID and returns a logical page offset.
-func (f *DiskManager) logicalOffset(pid page.PageID) (int64, error) {
+func (f *DiskManager) logicalOffset(pid PageID) (int64, error) {
 	// Check to see if the requested pid falls within the set that has been distributed
 	if pid > f.nextPID {
 		return -1, ErrPageIDHasNotBeenAllocated(pid)
 	}
 	// We are good, so we will calculate the logical page offset.
-	return int64(pid * page.PageSize), nil
+	return int64(pid * PageSize), nil
 }
 
 // AllocatePage simply returns the next logical page ID that is can be written to.
-func (f *DiskManager) AllocatePage() page.PageID {
+func (f *DiskManager) AllocatePage() PageID {
 	// increment and return the nextpage.PageID
-	return atomic.SwapUint32(&f.nextPID, f.nextPID+1)
+	return PageID(atomic.SwapUint32((*uint32)(&f.nextPID), uint32(f.nextPID+1)))
 }
 
 // DeallocatePage writes zeros to the page located at the logical address
 // calculated using the page ID provided.
-func (f *DiskManager) DeallocatePage(pid page.PageID) error {
+func (f *DiskManager) DeallocatePage(pid PageID) error {
 	// Calculate the logical page offset.
 	off, err := f.logicalOffset(pid)
 	if err != nil {
 		return err
 	}
 	// Next, we will create an empty page
-	ep := page.NewEmptyPage(pid)
+	ep := NewPage(uint32(pid), P_FREE)
 	// Then, we can attempt to write the contents of the empty page data directly
 	// to the calculated offset
 	_, err = f.file.WriteAt(ep, off)
@@ -127,7 +125,7 @@ func (f *DiskManager) DeallocatePage(pid page.PageID) error {
 
 // ReadPage reads the page located at the logical address calculated using the
 // page ID provided.
-func (f *DiskManager) ReadPage(pid page.PageID, p page.Page) error {
+func (f *DiskManager) ReadPage(pid PageID, p Page) error {
 	// Calculate the logical page offset.
 	off, err := f.logicalOffset(pid)
 	if err != nil {
@@ -143,7 +141,7 @@ func (f *DiskManager) ReadPage(pid page.PageID, p page.Page) error {
 
 // WritePage writes the page located at the logical address calculated using the
 // page ID provided.
-func (f *DiskManager) WritePage(pid page.PageID, p page.Page) error {
+func (f *DiskManager) WritePage(pid PageID, p Page) error {
 	// Calculate the logical page offset.
 	off, err := f.logicalOffset(pid)
 	if err != nil {

@@ -63,5 +63,5 @@ func (s *StatefulIter[T]) Value() T {
 // be processed on future calls.
 func (s *StatefulIter[T]) Next() bool {
 	s.current++
-	return s.current >= len(s.data)
+	return s.current < len(s.data)
 }

@@ -2,19 +2,17 @@ package engine
 
 import (
 	"sync"
-
-	"github.com/cagnosolutions/go-data/pkg/engine/page"
 )
 
 // PageCache is the access level structure wrapping up the bufferPool, and DiskManager,
 // along with a page table, and replacement policy.
 type PageCache struct {
 	latch     sync.Mutex
-	pool      []frame                 // buffer pool page frames
-	replacer  *ClockReplacer          // page replacement policy structure
-	io        *DiskManager            // underlying current manager
-	freeList  []frameID               // list of frames that are free to use
-	pageTable map[page.PageID]frameID // table of the current page to frame mappings
+	pool      []frame            // buffer pool page frames
+	replacer  *ClockReplacer     // page replacement policy structure
+	io        *DiskManager       // underlying current manager
+	freeList  []frameID          // list of frames that are free to use
+	pageTable map[PageID]frameID // table of the current page to frame mappings
 }
 
 // OpenPageCache opens an existing storage manager instance if one exists with the same namespace
@@ -31,7 +29,7 @@ func OpenPageCache(base string, pageCount uint16) (*PageCache, error) {
 		replacer:  NewClockReplacer(pageCount),
 		io:        fm,
 		freeList:  make([]frameID, pageCount),
-		pageTable: make(map[page.PageID]frameID),
+		pageTable: make(map[PageID]frameID),
 	}
 	// initialize the pool in the buffer manager
 	for i := uint16(0); i < pageCount; i++ {
@@ -49,7 +47,7 @@ func OpenPageCache(base string, pageCount uint16) (*PageCache, error) {
 }
 
 // NewPage returns a fresh empty page from the pool.
-func (m *PageCache) NewPage() page.Page {
+func (m *PageCache) NewPage() Page {
 	// First we must acquire a Frame in order to store our page. Calling
 	// GetUsableFrame first checks our freeList and if we cannot find one in there
 	// our replacement policy is used to locate a victimized one Frame.
@@ -67,8 +65,8 @@ func (m *PageCache) NewPage() page.Page {
 	// the next page we will use.
 	pid := m.io.AllocatePage()
 	// Create a new Frame initialized with our PageID and Page.
-	pf := newFrame(pid, *fid, page.PageSize)
-	pg := page.NewPage(pid)
+	pf := newFrame(pid, *fid, PageSize)
+	pg := NewPage(uint32(pid), P_USED)
 	copy(pf.Page, pg)
 	// Add an entry to our pageTable
 	m.pageTable[pid] = *fid
@@ -79,7 +77,7 @@ func (m *PageCache) NewPage() page.Page {
 }
 
 // FetchPage retrieves specific page from the pool, or storage medium by the page ID.
-func (m *PageCache) FetchPage(pid page.PageID) page.Page {
+func (m *PageCache) FetchPage(pid PageID) Page {
 	// Check to see if the PageID is located in the pageTable.
 	if fid, found := m.pageTable[pid]; found {
 		// We located it, so now we access the Frame and ensure that it will
@@ -105,7 +103,7 @@ func (m *PageCache) FetchPage(pid page.PageID) page.Page {
 		return nil
 	}
 	// Now, we will swap the Page in from the io using the DiskManager.
-	data := make([]byte, page.PageSize)
+	data := make([]byte, PageSize)
 	err = m.io.ReadPage(pid, data)
 	if err != nil {
 		// Something went terribly wrong if this happens.
@@ -113,7 +111,7 @@ func (m *PageCache) FetchPage(pid page.PageID) page.Page {
 	}
 	// Create a new frame, so we can copy the page data we just swapped
 	// in from off the io and add the Frame to the pageTable.
-	pf := newFrame(pid, *fid, page.PageSize)
+	pf := newFrame(pid, *fid, PageSize)
 	copy(pf.Page, data)
 	// Add the entry to our pageTable
 	m.pageTable[pid] = *fid
@@ -124,7 +122,7 @@ func (m *PageCache) FetchPage(pid page.PageID) page.Page {
 }
 
 // UnpinPage allows for manual unpinning of a specific page from the pool by the page ID.
-func (m *PageCache) UnpinPage(pid page.PageID, isDirty bool) error {
+func (m *PageCache) UnpinPage(pid PageID, isDirty bool) error {
 	// Check to see if the PageID is located in the pageTable.
 	fid, found := m.pageTable[pid]
 	if !found {
@@ -152,7 +150,7 @@ func (m *PageCache) UnpinPage(pid page.PageID, isDirty bool) error {
 
 // FlushPage forces a page to be written onto the storage medium, and decrements the
 // pin count on the frame potentially enabling the frame to be reused.
-func (m *PageCache) FlushPage(pid page.PageID) error {
+func (m *PageCache) FlushPage(pid PageID) error {
 	// Check to see if the PageID is located in the pageTable.
 	fid, found := m.pageTable[pid]
 	if !found {
@@ -177,7 +175,7 @@ func (m *PageCache) FlushPage(pid page.PageID) error {
 
 // DeletePage removes the page from the buffer pool, and decrements the pin count on the
 // frame potentially enabling the frame to be reused.
-func (m *PageCache) DeletePage(pid page.PageID) error {
+func (m *PageCache) DeletePage(pid PageID) error {
 	// Check to see if the PageID is located in the pageTable.
 	fid, found := m.pageTable[pid]
 	if !found {

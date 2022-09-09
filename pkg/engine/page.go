@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +21,8 @@ var (
 	decU32 = binary.LittleEndian.Uint32
 	decU64 = binary.LittleEndian.Uint64
 )
+
+type PageID uint32
 
 // RecordID is a record ID type used by a Page and is associated
 // with a record.
@@ -41,7 +44,7 @@ const (
 	P_UNSORTED uint32 = 0x00000020
 
 	// constants for the page, headers, cellptrs and record sizes
-	pageSize         = 16 << 10
+	PageSize         = 16 << 10
 	pageHeaderSize   = 24
 	pageCellPtrSize  = 8
 	recordHeaderSize = 6
@@ -88,7 +91,7 @@ type Page []byte
 
 // NewPage returns a new Page
 func NewPage(id uint32, flags uint32) Page {
-	p := make(Page, pageSize, pageSize)
+	p := make(Page, PageSize, PageSize)
 	p.setPageHeader(
 		&PageHeader{
 			ID:    id,
@@ -98,7 +101,7 @@ func NewPage(id uint32, flags uint32) Page {
 			Cells: 0,
 			Free:  0,
 			Lower: pageHeaderSize,
-			Upper: pageSize,
+			Upper: PageSize,
 		},
 	)
 	return p
@@ -389,10 +392,41 @@ func (p *Page) DelRecord(id *RecordID) error {
 
 var SkipRecord = errors.New("skip this record")
 
-// RangeRecords is an iterator methods that uses a closure. It returns any
-// errors encountered.
+// RangeRecords is an iterator methods that uses a simple callback. It
+// returns any errors encountered.
 func (p *Page) RangeRecords(fn func(r *Record) error) error {
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
+		c := p.decCell(pos)
+		if c.hasFlag(C_FREE) {
+			continue
+		}
+		r := p.getRecordUsingCell(c)
+		if err := fn(&r); err != nil {
+			if err == SkipRecord {
+				continue
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// RangeNRecords is a bounded iterator methods that uses a simple callback. It
+// returns any errors encountered.
+func (p *Page) RangeNRecords(beg, end int, fn func(r *Record) error) error {
+	if beg < 0 {
+		beg = 0
+	}
+	if beg > int(p.getNumCells()) {
+		beg = int(p.getNumCells() - 1)
+	}
+	if end < beg {
+		end = beg + 1
+	}
+	if end > int(p.getNumCells()) {
+		end = int(p.getNumCells())
+	}
+	for pos := uint16(beg); pos < uint16(end); pos++ {
 		c := p.decCell(pos)
 		if c.hasFlag(C_FREE) {
 			continue
@@ -461,6 +495,54 @@ func (p *Page) findCellPos(k []byte) uint16 {
 // Clear resets the entire page. It wipes all the data, but retains the same ID.
 func (p *Page) Clear() {
 	*p = NewPage(p.getPageID(), P_FREE)
+}
+
+// Vacuum is a method that sucks up any free space within the page, removing any
+// gaps, and essentially compacting the Page, so it can be better utilized if it
+// is getting full. This method must be called manually.
+func (p *Page) Vacuum() error {
+	fmt.Printf("BEFORE: %s\n", hex.Dump(*p))
+	// First, we must allocate a new page to copy data into.
+	// np := NewPage(p.getPageID(), p.getFlags())
+	// Next we iterate the current non-free cells and add the records to the new
+	// page.
+	var cells []cellptr
+	for pos := uint16(0); pos < p.getNumCells(); pos++ {
+		// Get the cell for the current position.
+		c := p.decCell(pos)
+		cells = append(cells, c)
+		// if c.hasFlag(C_FREE) {
+		// 	// If the cell is marked free, skip
+		// 	continue
+		// }
+		// Get the record for the cell
+		// r := p.getRecordUsingCell(c)
+		// Add it to the new page.
+		// _, err := np.AddRecord(r)
+	}
+	sort.Slice(
+		cells, func(i, j int) bool {
+			return cells[i].getID() < cells[j].getID()
+		},
+	)
+	var prev cellptr
+	for i, c := range cells {
+		if i > 0 {
+			prev = cells[i-1]
+		}
+		if prev != 0 {
+			pbeg, pend := prev.getBounds()
+			fmt.Printf("prev: beg=%d, end=%d, len=%d, status=%s\n", pbeg, pend, pend-pbeg, prev.fmtFlag())
+		}
+		cbeg, cend := c.getBounds()
+		fmt.Printf("curr: beg=%d, end=%d, len=%d, status=%s\n\n", cbeg, cend, cend-cbeg, c.fmtFlag())
+		if prev != 0 && prev.hasFlag(C_FREE) {
+			copy((*p)[prev.getOffset():], (*p)[cbeg:cend])
+			c.setOffset(prev.getOffset())
+		}
+	}
+	fmt.Printf(" AFTER: %s\n", hex.Dump(*p))
+	return nil
 }
 
 // getPageID decodes and returns the Page ID directly from the encoded pageHeader.
@@ -591,6 +673,10 @@ func (p *Page) decrUpper(n uint16) {
 	encU16((*p)[offUpper:offUpper+2], decU16((*p)[offUpper:offUpper+2])-n)
 }
 
+func (p *Page) Size() int {
+	return len(*p)
+}
+
 // String is the stringer method for the page
 func (p *Page) String() string {
 	ss := fmt.Sprintf("%10v +---------+\n", "")
@@ -600,7 +686,7 @@ func (p *Page) String() string {
 	hv := reflect.ValueOf(h).Elem()
 	for i := 0; i < hv.NumField(); i++ {
 		sf := hv.Type().Field(i)
-		ss += fmt.Sprintf("%10v |%2v%5d%-2v|\n", strings.ToLower(sf.Name), "", hv.Field(i), "")
+		ss += fmt.Sprintf("%10v |%2v%5v%-2v|\n", strings.ToLower(sf.Name), "", hv.Field(i), "")
 	}
 	ss += fmt.Sprintf("%10v +---------+\n", "")
 	for i := uint16(0); i < h.Cells; i++ {
@@ -698,6 +784,16 @@ func (c *cellptr) getFlags() uint16 {
 // hasFlag tests if the cell pointer has a flag set
 func (c *cellptr) hasFlag(flag uint16) bool {
 	return uint16(*c>>shift2B)&flag != 0
+}
+
+func (c *cellptr) fmtFlag() string {
+	if c.hasFlag(C_USED) {
+		return "USED"
+	}
+	if c.hasFlag(C_FREE) {
+		return "FREE"
+	}
+	return ""
 }
 
 // getOffset returns the record offset stored in the cell pointer

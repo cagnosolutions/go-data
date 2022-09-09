@@ -2,22 +2,20 @@ package engine
 
 import (
 	"fmt"
-
-	"github.com/cagnosolutions/go-data/pkg/engine/page"
 )
 
 type frameID uint32
 
 // frame is a page frame
 type frame struct {
-	PID       page.PageID // id of this page
-	FID       frameID     // id or index of this frame
-	PinCount  uint32      // how many threads are mutating the frame
-	IsDirty   bool        // page data has been modified and not flushed
-	page.Page             // actual page data
+	PID      PageID  // id of this page
+	FID      frameID // id or index of this frame
+	PinCount uint32  // how many threads are mutating the frame
+	IsDirty  bool    // page data has been modified and not flushed
+	Page             // actual page data
 }
 
-func newFrame(pid page.PageID, fid frameID, pageSize uint16) frame {
+func newFrame(pid PageID, fid frameID, pageSize uint16) frame {
 	return frame{
 		PID:      pid,
 		FID:      fid,
@@ -34,7 +32,7 @@ func (f *frame) decrPinCount() {
 }
 
 func (f *frame) reset() {
-	f.PID = page.PageID(0)
+	f.PID = PageID(0)
 	f.FID = frameID(0)
 	f.PinCount = 0
 	f.IsDirty = false

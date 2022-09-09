@@ -3,11 +3,9 @@ package engine
 import (
 	"errors"
 	"fmt"
-
-	"github.com/cagnosolutions/go-data/pkg/engine/page"
 )
 
-var ErrPageIDHasNotBeenAllocated = func(pid page.PageID) error {
+var ErrPageIDHasNotBeenAllocated = func(pid PageID) error {
 	return fmt.Errorf("page ID has not been allocated yet (pid=%d)", pid)
 }
 
