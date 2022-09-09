@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"unsafe"
 )
 
@@ -22,6 +23,10 @@ var (
 	decU64 = binary.LittleEndian.Uint64
 )
 
+// Page latch
+var pgLatch sync.Mutex
+
+// PageID represents a page ID
 type PageID uint32
 
 // RecordID is a record ID type used by a Page and is associated
@@ -277,6 +282,9 @@ func (p *Page) checkRecord(r Record) error {
 // The cellptrs are always sorted according to the record key, and the record data
 // is written to the page last.
 func (p *Page) AddRecord(r Record) (*RecordID, error) {
+	// latch
+	pgLatch.Lock()
+	defer pgLatch.Unlock()
 	// Check the record data to ensure it is not empty, and that we have
 	// enough room to add it.
 	err := p.checkRecord(r)
@@ -325,6 +333,9 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 // GetRecord takes a RecordID, and attempts to locate a cellptr that matches.
 // If a match can be located, then the resulting Record is returned.
 func (p *Page) GetRecord(id *RecordID) (Record, error) {
+	// latch
+	pgLatch.Lock()
+	defer pgLatch.Unlock()
 	// First, we will attempt to locate the record.
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
 		c := p.decCell(pos)
@@ -353,6 +364,9 @@ func (p *Page) GetRecord(id *RecordID) (Record, error) {
 // a there is more than one Record in the Page that has the same key then
 // it will return the first one it locates.
 func (p *Page) GetRecordByKey(key []byte) *Record {
+	// latch
+	pgLatch.Lock()
+	defer pgLatch.Unlock()
 	// First, we will attempt to locate the record.
 	pos := p.findCellPos(key)
 	// Otherwise, we have located it. Let's check to make sure it has
@@ -373,6 +387,9 @@ func (p *Page) GetRecordByKey(key []byte) *Record {
 // associated cellptr will be marked as free to re-use, and the record data
 // will be overwritten. Any errors will be returned.
 func (p *Page) DelRecord(id *RecordID) error {
+	// latch
+	pgLatch.Lock()
+	defer pgLatch.Unlock()
 	// First, we will attempt to locate the record.
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
 		// Check the cell at the provided position
@@ -395,6 +412,10 @@ var SkipRecord = errors.New("skip this record")
 // RangeRecords is an iterator methods that uses a simple callback. It
 // returns any errors encountered.
 func (p *Page) RangeRecords(fn func(r *Record) error) error {
+	// latch
+	pgLatch.Lock()
+	defer pgLatch.Unlock()
+	// iterate
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
 		c := p.decCell(pos)
 		if c.hasFlag(C_FREE) {
@@ -414,6 +435,10 @@ func (p *Page) RangeRecords(fn func(r *Record) error) error {
 // RangeNRecords is a bounded iterator methods that uses a simple callback. It
 // returns any errors encountered.
 func (p *Page) RangeNRecords(beg, end int, fn func(r *Record) error) error {
+	// latch
+	pgLatch.Lock()
+	defer pgLatch.Unlock()
+	// error check
 	if beg < 0 {
 		beg = 0
 	}
@@ -426,6 +451,7 @@ func (p *Page) RangeNRecords(beg, end int, fn func(r *Record) error) error {
 	if end > int(p.getNumCells()) {
 		end = int(p.getNumCells())
 	}
+	// iterate
 	for pos := uint16(beg); pos < uint16(end); pos++ {
 		c := p.decCell(pos)
 		if c.hasFlag(C_FREE) {
@@ -494,6 +520,10 @@ func (p *Page) findCellPos(k []byte) uint16 {
 
 // Clear resets the entire page. It wipes all the data, but retains the same ID.
 func (p *Page) Clear() {
+	// latch
+	pgLatch.Lock()
+	defer pgLatch.Unlock()
+	// clear the page out
 	*p = NewPage(p.getPageID(), P_FREE)
 }
 
@@ -501,6 +531,9 @@ func (p *Page) Clear() {
 // gaps, and essentially compacting the Page, so it can be better utilized if it
 // is getting full. This method must be called manually.
 func (p *Page) Vacuum() {
+	// latch
+	pgLatch.Lock()
+	defer pgLatch.Unlock()
 	// First, we must allocate a new page to copy data into.
 	np := NewPage(p.getPageID(), p.getFlags())
 	// We will initialize local states here, so we only have to set them once.
