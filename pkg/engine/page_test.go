@@ -95,25 +95,17 @@ func TestPage_Vacuum(t *testing.T) {
 	}
 	rids = append(rids, id)
 
-	var nrids []*RecordID
 	for i := range rids {
 		if i%3 == 0 {
 			err := p.DelRecord(rids[i])
 			if err != nil {
 				t.Error(err)
 			}
-		} else {
-			nrids = append(nrids, rids[i])
 		}
 	}
-	rids = nil
-	fmt.Println("record ids:", nrids)
 
 	fmt.Printf("%s\n", p.String())
-	err = p.Vacuum()
-	if err != nil {
-		t.Error(err)
-	}
+	p.Vacuum()
 	fmt.Printf("%s\n", p.String())
 
 	p.Clear()

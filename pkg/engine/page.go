@@ -3,11 +3,11 @@ package engine
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"unsafe"
@@ -500,49 +500,48 @@ func (p *Page) Clear() {
 // Vacuum is a method that sucks up any free space within the page, removing any
 // gaps, and essentially compacting the Page, so it can be better utilized if it
 // is getting full. This method must be called manually.
-func (p *Page) Vacuum() error {
-	fmt.Printf("BEFORE: %s\n", hex.Dump(*p))
+func (p *Page) Vacuum() {
 	// First, we must allocate a new page to copy data into.
-	// np := NewPage(p.getPageID(), p.getFlags())
-	// Next we iterate the current non-free cells and add the records to the new
-	// page.
-	var cells []cellptr
+	np := NewPage(p.getPageID(), p.getFlags())
+	// We will initialize local states here, so we only have to set them once.
+	numCells, lowerBound, upperBound := uint16(0), uint16(pageHeaderSize), uint16(PageSize)
+	// Next we iterate the current non-free cells and add the records to the new page.
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
 		// Get the cell for the current position.
 		c := p.decCell(pos)
-		cells = append(cells, c)
-		// if c.hasFlag(C_FREE) {
-		// 	// If the cell is marked free, skip
-		// 	continue
-		// }
-		// Get the record for the cell
-		// r := p.getRecordUsingCell(c)
-		// Add it to the new page.
-		// _, err := np.AddRecord(r)
+		if c.hasFlag(C_USED) {
+			// We will only add valid, used, records. So we need to grab the record.
+			r := p.getRecordUsingCell(c)
+			// Create a new cell in the new page for adding the record. Don't forget
+			// to update the local page states for the new page, and then we can set
+			// them once, outside the loop.
+			numCells++
+			lowerBound += pageCellPtrSize
+			upperBound -= uint16(len(r))
+			// Create a new cell, and promptly re-encode it in the new page (and take
+			// note that we are using the old cellID)
+			nc := newCell(c.getID(), upperBound, uint16(len(r)))
+			// Calculate offset (we cannot use encCell here, because we are optimizing
+			// for batch inserting) so we can manually encode.
+			off := pageHeaderSize + ((numCells - 1) * pageCellPtrSize)
+			encU64(np[off:off+8], uint64(nc))
+			// Write the old record data to the new page, using the new cell.
+			copy(np[nc.getOffset():nc.getOffset()+nc.getLength()], r)
+		}
+		// Otherwise, we are not writing a record, if the cell is not being used.
 	}
-	sort.Slice(
-		cells, func(i, j int) bool {
-			return cells[i].getID() < cells[j].getID()
-		},
-	)
-	var prev cellptr
-	for i, c := range cells {
-		if i > 0 {
-			prev = cells[i-1]
-		}
-		if prev != 0 {
-			pbeg, pend := prev.getBounds()
-			fmt.Printf("prev: beg=%d, end=%d, len=%d, status=%s\n", pbeg, pend, pend-pbeg, prev.fmtFlag())
-		}
-		cbeg, cend := c.getBounds()
-		fmt.Printf("curr: beg=%d, end=%d, len=%d, status=%s\n\n", cbeg, cend, cend-cbeg, c.fmtFlag())
-		if prev != 0 && prev.hasFlag(C_FREE) {
-			copy((*p)[prev.getOffset():], (*p)[cbeg:cend])
-			c.setOffset(prev.getOffset())
-		}
-	}
-	fmt.Printf(" AFTER: %s\n", hex.Dump(*p))
-	return nil
+	// Don't forget to update the local page state in the new page.
+	np.setNumCells(numCells)
+	np.setLower(lowerBound)
+	np.setUpper(upperBound)
+	// Then, we will sort the cells according to their key, just one time
+	// at the very end.
+	sort.Sort(&np)
+	// And now we are finished compacting everything, so we will swap the page
+	// pointers.
+	*p = np
+	// We will call the GC directly here, and return
+	runtime.GC()
 }
 
 // getPageID decodes and returns the Page ID directly from the encoded pageHeader.
