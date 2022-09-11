@@ -181,6 +181,10 @@ func (p *Page) addCell(size uint16) cellptr {
 // as one that can be re-used. It uses the provided position to move it as close
 // to the lower boundary as possible to aid in calls to vacuum the Page later on.
 func (p *Page) delCell(c cellptr, pos uint16) {
+	// Check the position to ensure it is correct, otherwise panic.
+	if pos > p.getNumCells() {
+		panic("error: cell position out of bounds")
+	}
 	// mark the cell free
 	c.setFlags(C_FREE)
 	// get the "window" of all the cells
@@ -283,8 +287,8 @@ func (p *Page) checkRecord(r Record) error {
 // is written to the page last.
 func (p *Page) AddRecord(r Record) (*RecordID, error) {
 	// latch
-	pgLatch.Lock()
-	defer pgLatch.Unlock()
+	// pgLatch.Lock()
+	// defer pgLatch.Unlock()
 	// Check the record data to ensure it is not empty, and that we have
 	// enough room to add it.
 	err := p.checkRecord(r)
@@ -298,7 +302,9 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 	// Before continuing, we must check to see if we can re-use any cells.
 	if freeCells > 0 {
 		// We do, so let's see if we have any candidates for recycling.
+		pgLatch.Lock()
 		cp = p.recycleCell(freeCells, numCells, r)
+		pgLatch.Unlock()
 		// We will be checking below to see if the cell pointer is valid,
 		// and it will only be valid if we had a successful time recycling
 		// in here, so no need to do anything else, just proceed.
@@ -307,11 +313,15 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 	if !cp.isValid() {
 		// No valid cell pointer found, which means we did not recycle any,
 		// and we are free to allocate a fresh one. So that is what we do.
+		pgLatch.Lock()
 		cp = p.addCell(uint16(len(r)))
+		pgLatch.Unlock()
 	}
 	// We want to ensure we write the record data to the page before we
 	// check or try to sort.
+	pgLatch.Lock()
 	copy((*p)[cp.getOffset():cp.getOffset()+cp.getLength()], r)
+	pgLatch.Unlock()
 	// We will check to see if we need to sort, and if so, we will. Checking
 	// to see if we need to sort is always faster (if a sort does not need
 	// to be done) than performing the actual sort.
@@ -324,7 +334,9 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 		// only O(n*log(n)) calls to data.Less and data.Swap. If your data set
 		// is short, sort.Stable would be very close to as fast, but again,
 		// you should not use it unless it is necessary.
+		pgLatch.Lock()
 		sort.Sort(p)
+		pgLatch.Unlock()
 	}
 	// And finally, return our RecordID
 	return &RecordID{p.getPageID(), cp.getID()}, nil
