@@ -5,8 +5,6 @@ import (
 	"runtime"
 	"sync"
 	"testing"
-
-	"github.com/cagnosolutions/go-data/pkg/slicer"
 )
 
 func TestPage_NewPage(t *testing.T) {
@@ -167,6 +165,7 @@ func TestPage_RandomStuff(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
+		// ids[i] = id
 		ids = append(ids, id)
 	}
 	fmt.Println()
@@ -183,16 +182,28 @@ func TestPage_RandomStuff(t *testing.T) {
 	fmt.Println()
 	fmt.Println(">>>>> [03 DELETING] <<<<<")
 	fmt.Printf("now, we will be removing some records...\n")
-	for i, id := range ids {
+	for _, id := range ids {
 		if (id.CellID+1)%3 == 0 || id.CellID == 31 {
 			fmt.Printf("deleting record: %v\n", id)
 			err := p.DelRecord(id)
 			if err != nil {
 				panic(err)
 			}
-			slicer.DelPtr(&ids, i)
+			// slicer.DelPtr(&ids, i)
 		}
 	}
+
+	var newids []*RecordID
+	for _, id := range ids {
+		if (id.CellID+1)%3 != 0 && id.CellID != 31 {
+			fmt.Printf("deleting from slice: %s\n", id)
+			// remove = append(remove, id)
+			// slicer.DelPtr(&ids, i)
+			// ids = slicer.Del[*RecordID](ids, i)
+			newids = append(newids, id)
+		}
+	}
+	ids = newids
 	fmt.Println()
 	fmt.Println(p.String())
 	fmt.Println(">>>>> [04 GETTING] <<<<<")
@@ -210,12 +221,13 @@ func TestPage_RandomStuff(t *testing.T) {
 	fmt.Println()
 	fmt.Printf("taking a look at the Page details...\n")
 	fmt.Println(p.String())
-	fmt.Println(">>>>> [05 ADDING (9) MORE] <<<<<")
-	for i := 32; i < N+8; i++ {
+	fmt.Println(">>>>> [05 ADDING (12) MORE] <<<<<")
+	for i := 32; i < N+13; i++ {
 		id, err := p.AddRecord(makeRec(i))
 		if err != nil {
 			panic(err)
 		}
+		fmt.Printf("--> adding record: %s\n", id)
 		ids = append(ids, id)
 	}
 

@@ -247,6 +247,7 @@ func (p *Page) makeRecordID(c cellptr) *RecordID {
 func (p *Page) recycleCell(freeCells, numCells uint16, r Record) cellptr {
 	// We do, so let's see if we have any candidates for recycling.
 	for pos := numCells - 1; pos > numCells-freeCells-1; pos-- {
+		fmt.Printf(">>> looking for free cell (current pos=%d, min=%d)\n", pos, numCells-freeCells-1)
 		// Get the free cell at the first location
 		c := p.decCell(pos)
 		// Check the cell to see if it's a candidate
@@ -276,6 +277,16 @@ func (p *Page) checkRecord(r Record) error {
 	}
 	if int(p.getUpper()-p.getLower())-pageCellPtrSize < len(r) {
 		return ErrNoRoom
+	}
+	return nil
+}
+
+func (p *Page) checkRecordID(id *RecordID) error {
+	if id.PageID != p.getPageID() {
+		return ErrInvalidPID
+	}
+	if id.CellID > p.getNumCells() {
+		return ErrInvalidSID
 	}
 	return nil
 }
@@ -326,6 +337,7 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 	// to see if we need to sort is always faster (if a sort does not need
 	// to be done) than performing the actual sort.
 	if !sort.IsSorted(p) {
+		fmt.Printf("---> sorting cells...\n")
 		// Use sort.Sort, as opposed to sort.Stable when possible, unless you
 		// are absolutely requiring a stable sort. The sort.Stable version
 		// makes one call to data.Len to determine n, O(n*log(n)) calls to
@@ -346,22 +358,30 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 // If a match can be located, then the resulting Record is returned.
 func (p *Page) GetRecord(id *RecordID) (Record, error) {
 	// latch
-	pgLatch.Lock()
-	defer pgLatch.Unlock()
+	// pgLatch.Lock()
+	// defer pgLatch.Unlock()
+
+	// Error check the record ID
+	err := p.checkRecordID(id)
+	if err != nil {
+		return nil, err
+	}
 	// First, we will attempt to locate the record.
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
-		c := p.decCell(pos)
-		if c.getID() == id.CellID {
+		cp := p.decCell(pos)
+		if cp.getID() == id.CellID {
 			// We have located the record. Let's check to make sure it has
 			// not been deleted.
-			if c.hasFlag(C_FREE) {
+			if cp.hasFlag(C_FREE) {
 				return nil, ErrRecordNotFound
 			}
+			pgLatch.Lock()
 			// It has not, so we can fetch the record.
-			r := p.getRecordUsingCell(c)
+			r := p.getRecordUsingCell(cp)
 			// We should make a copy of it, so we do not mutate the original.
 			rc := make(Record, len(r), len(r))
 			copy(rc, r)
+			pgLatch.Unlock()
 			// Return the Record
 			return rc, nil
 		}
@@ -399,24 +419,53 @@ func (p *Page) GetRecordByKey(key []byte) *Record {
 // associated cellptr will be marked as free to re-use, and the record data
 // will be overwritten. Any errors will be returned.
 func (p *Page) DelRecord(id *RecordID) error {
-	// latch
-	pgLatch.Lock()
-	defer pgLatch.Unlock()
-	// First, we will attempt to locate the record.
-	for pos := uint16(0); pos < p.getNumCells(); pos++ {
+	// Error check the record ID
+	err := p.checkRecordID(id)
+	if err != nil {
+		return err
+	}
+	// First, we will create our cell pointer and position variables for later.
+	var cp cellptr
+	var pos uint16
+	var found bool
+	// Then, we will attempt to locate the record.
+	for pos = uint16(0); pos < p.getNumCells(); pos++ {
 		// Check the cell at the provided position
-		c := p.decCell(pos)
-		if c.getID() == id.CellID {
-			// We have located the record. First overwrite the record data.
-			beg, end := c.getBounds()
-			copy((*p)[beg:end], make([]byte, c.getLength()))
-			// Then, we must free the cell pointer.
-			p.delCell(c, pos)
-			return nil
+		cp = p.decCell(pos)
+		if cp.getID() == id.CellID {
+			// We have located the record--set found, and break
+			found = true
+			break
 		}
 	}
-	// Otherwise, we did not locate the record
-	return ErrRecordNotFound
+	// Check found, and return possible error
+	if !found {
+		return ErrRecordNotFound
+	}
+	// Otherwise, we have located the record. First lock...
+	pgLatch.Lock()
+	// Then locate boundaries, and overwrite the record data...
+	beg, end := cp.getBounds()
+	copy((*p)[beg:end], make([]byte, cp.getLength()))
+	// Then, set the cell pointer "free"...
+	p.delCell(cp, pos)
+	// Finally unlock and check to see if we need to sort anything.
+	pgLatch.Unlock()
+	if !sort.IsSorted(p) {
+		fmt.Printf("[DEL]---> sorting cells...\n")
+		// Use sort.Sort, as opposed to sort.Stable when possible, unless you
+		// are absolutely requiring a stable sort. The sort.Stable version
+		// makes one call to data.Len to determine n, O(n*log(n)) calls to
+		// data.Less and O(n*log(n)*log(n)) calls to data.Swap. In contrast,
+		// sort.Sort also makes one call to data.Len to determine n, but then
+		// only O(n*log(n)) calls to data.Less and data.Swap. If your data set
+		// is short, sort.Stable would be very close to as fast, but again,
+		// you should not use it unless it is necessary.
+		pgLatch.Lock()
+		sort.Sort(p)
+		pgLatch.Unlock()
+	}
+	return nil
 }
 
 var SkipRecord = errors.New("skip this record")
@@ -489,8 +538,13 @@ func (p *Page) Len() int {
 // Less implements the sort.Sort interface for sorting the cellptrs
 // according to the Record key.
 func (p *Page) Less(i, j int) bool {
-	r1 := p.getRecordUsingCellPos(uint16(i))
-	r2 := p.getRecordUsingCellPos(uint16(j))
+	c1 := p.decCell(uint16(i))
+	c2 := p.decCell(uint16(j))
+	if c1.hasFlag(C_FREE) && c2.hasFlag(C_USED) {
+		return true
+	}
+	r1 := p.getRecordUsingCell(c1)
+	r2 := p.getRecordUsingCell(c2)
 	return bytes.Compare(r1.Key(), r2.Key()) < 0
 }
 
