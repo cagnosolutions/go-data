@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"fmt"
 	"runtime"
 	"sync"
@@ -227,11 +228,9 @@ func TestPage_RandomStuff(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("--> adding record: %s\n", id)
 		ids = append(ids, id)
 	}
-
-	id, err := p.AddRecord(makeRecSize(255, []byte("[large record that will not fit in existing space]")))
+	id, err := p.AddRecord(makeRecSize(255, bytes.Repeat([]byte("A"), 13000)))
 	if err != nil {
 		panic(err)
 	}
@@ -257,6 +256,7 @@ func TestPage_RandomStuff(t *testing.T) {
 		_, err := p.AddRecord(makeRec(i))
 		if err != nil {
 			if err == ErrNoRoom {
+				fmt.Println(">>>>>+<<ErrNoRoom>>+<<<<<")
 				break
 			}
 			panic(err)
