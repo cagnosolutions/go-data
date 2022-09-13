@@ -300,8 +300,8 @@ func (p *Page) checkRecordID(id *RecordID) error {
 // is written to the page last.
 func (p *Page) AddRecord(r Record) (*RecordID, error) {
 	// latch
-	pgLatch.Lock()
-	defer pgLatch.Unlock()
+	// pgLatch.Lock()
+	// defer pgLatch.Unlock()
 	// Check the record data to ensure it is not empty, and that we have
 	// enough room to add it.
 	err := p.checkRecord(r)
@@ -315,9 +315,9 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 	// Before continuing, we must check to see if we can re-use any cells.
 	if freeCells > 0 {
 		// We do, so let's see if we have any candidates for recycling.
-		// pgLatch.Lock()
+		pgLatch.Lock()
 		cp = p.recycleCell(freeCells, numCells, r)
-		// pgLatch.Unlock()
+		pgLatch.Unlock()
 		// We will be checking below to see if the cell pointer is valid,
 		// and it will only be valid if we had a successful time recycling
 		// in here, so no need to do anything else, just proceed.
@@ -326,15 +326,15 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 	if !cp.isValid() {
 		// No valid cell pointer found, which means we did not recycle any,
 		// and we are free to allocate a fresh one. So that is what we do.
-		// pgLatch.Lock()
+		pgLatch.Lock()
 		cp = p.addCell(uint16(len(r)))
-		// pgLatch.Unlock()
+		pgLatch.Unlock()
 	}
 	// We want to ensure we write the record data to the page before we
 	// check or try to sort.
-	// pgLatch.Lock()
+	pgLatch.Lock()
 	copy((*p)[cp.getOffset():cp.getOffset()+cp.getLength()], r)
-	// pgLatch.Unlock()
+	pgLatch.Unlock()
 	// We will check to see if we need to sort, and if so, we will. Checking
 	// to see if we need to sort is always faster (if a sort does not need
 	// to be done) than performing the actual sort.
@@ -347,9 +347,9 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 		// only O(n*log(n)) calls to data.Less and data.Swap. If your data set
 		// is short, sort.Stable would be very close to as fast, but again,
 		// you should not use it unless it is necessary.
-		//	pgLatch.Lock()
+		pgLatch.Lock()
 		sort.Sort(p)
-		//	pgLatch.Unlock()
+		pgLatch.Unlock()
 	}
 	// And finally, return our RecordID
 	return &RecordID{p.getPageID(), cp.getID()}, nil
@@ -371,7 +371,9 @@ func (p *Page) GetRecord(id *RecordID) (Record, error) {
 	// First, we will attempt to locate the record.
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
 		// Check the cell at the provided position.
+		pgLatch.Lock()
 		cp = p.decCell(pos)
+		pgLatch.Unlock()
 		if cp.getID() == id.CellID {
 			// We have located the record. Let's check to make sure it has
 			// not been deleted.
@@ -398,8 +400,8 @@ func (p *Page) GetRecord(id *RecordID) (Record, error) {
 // will be overwritten. Any errors will be returned.
 func (p *Page) DelRecord(id *RecordID) error {
 	// latch
-	pgLatch.Lock()
-	defer pgLatch.Unlock()
+	// pgLatch.Lock()
+	// defer pgLatch.Unlock()
 	// Error check the record ID
 	err := p.checkRecordID(id)
 	if err != nil {
@@ -407,22 +409,36 @@ func (p *Page) DelRecord(id *RecordID) error {
 	}
 	// First, we will create our cell pointer variable for later.
 	var cp cellptr
+	// numCells := p.getNumCells()
 	// Then, we will attempt to locate the record.
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
 		// Check the cell at the provided position
+		pgLatch.Lock()
 		cp = p.decCell(pos)
+		pgLatch.Unlock()
 		if cp.getID() == id.CellID {
 			// We have located the record. Let's check to make sure it has
 			// not been deleted.
 			if cp.hasFlag(C_USED) {
-				// We have located our used record. Time to set it free.
+				// We have located our used record.
+				// First, lock, then we can set it free.
+				pgLatch.Lock()
+				// Get our record boundaries
 				beg, end := cp.getBounds()
+				// Overwrite the old record
 				copy((*p)[beg:end], make([]byte, cp.getLength()))
+				// mark the cell free
 				cp.setFlags(C_FREE)
-				p.encCell(cp, pos)
+				// get the "window" of all the cells
+				cells := (*p)[pageHeaderSize:p.getLower()]
+				// slide all the cells in the window down
+				copy(cells[pos*8:], cells[(pos+1)*8:])
+				// re-encode the "deleted" cell, at the front of the list
+				p.encCell(cp, p.getNumCells()-1)
+				// And increment the free cell count in the page header.
 				p.incrNumFree(1)
-				// p.delCell(cp, pos)
-				// Finally return
+				// Finally, unlock and return
+				pgLatch.Unlock()
 				return nil
 			}
 		}
