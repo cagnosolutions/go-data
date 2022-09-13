@@ -106,7 +106,7 @@ func (f *DiskManager) DeallocatePage(pid PageID) error {
 		return err
 	}
 	// Next, we will create an empty page
-	ep := NewPage(uint32(pid), P_FREE)
+	ep := newPage(uint32(pid), P_FREE)
 	// Then, we can attempt to write the contents of the empty page data directly
 	// to the calculated offset
 	_, err = f.file.WriteAt(ep, off)

@@ -46,7 +46,7 @@ func OpenPageCache(base string, pageCount uint16) (*PageCache, error) {
 	return bm, nil
 }
 
-// NewPage returns a fresh empty page from the pool.
+// newPage returns a fresh empty page from the pool.
 func (m *PageCache) NewPage() Page {
 	// First we must acquire a Frame in order to store our page. Calling
 	// GetUsableFrame first checks our freeList and if we cannot find one in there
@@ -66,7 +66,7 @@ func (m *PageCache) NewPage() Page {
 	pid := m.io.AllocatePage()
 	// Create a new Frame initialized with our PageID and Page.
 	pf := newFrame(pid, *fid, PageSize)
-	pg := NewPage(uint32(pid), P_USED)
+	pg := newPage(uint32(pid), P_USED)
 	copy(pf.Page, pg)
 	// Add an entry to our pageTable
 	m.pageTable[pid] = *fid

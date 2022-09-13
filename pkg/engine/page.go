@@ -83,7 +83,7 @@ func (h *PageHeader) Size() int {
 }
 
 // String is the stringer method for the PageHeader.
-func (h *PageHeader) String(p *Page) string {
+func (h *PageHeader) String() string {
 	b, err := json.MarshalIndent(h, "", "")
 	if err != nil {
 		panic("pageHeader:" + err.Error())
@@ -94,8 +94,8 @@ func (h *PageHeader) String(p *Page) string {
 // Page represents a page
 type Page []byte
 
-// NewPage returns a new Page
-func NewPage(id uint32, flags uint32) Page {
+// newPage returns a new Page
+func newPage(id uint32, flags uint32) Page {
 	p := make(Page, PageSize, PageSize)
 	p.setPageHeader(
 		&PageHeader{
@@ -245,10 +245,10 @@ func (p *Page) makeRecordID(c cellptr) *RecordID {
 // recycleCell attempts to reuse a free cellptr for a record, if there is a candidate that
 // works well. It returns the used cellptr, and a boolean indicating true if it succeeded in
 // recycling the cellptr, and false if it could not recycle one.
-func (p *Page) recycleCell(freeCells, numCells uint16, r Record) cellptr {
+func (p *Page) recycleCell(r Record) cellptr {
 	// We do, so let's see if we have any candidates for recycling.
 	var cp cellptr
-	for pos := uint16(0); pos < numCells; pos++ {
+	for pos := uint16(0); pos < p.getNumCells(); pos++ {
 		// for pos := numCells - 1; pos > numCells-freeCells-1; pos-- {
 		// Get the free cell at the first location
 		cp = p.decCell(pos)
@@ -309,14 +309,14 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 		return nil, err
 	}
 	// Get our free cells, and our total cell count.
-	freeCells, numCells := p.getNumFree(), p.getNumCells()
+	freeCells := p.getNumFree()
 	// Allocate our cell pointer, we will need to use one no matter what.
 	var cp cellptr
 	// Before continuing, we must check to see if we can re-use any cells.
 	if freeCells > 0 {
 		// We do, so let's see if we have any candidates for recycling.
 		pgLatch.Lock()
-		cp = p.recycleCell(freeCells, numCells, r)
+		cp = p.recycleCell(r)
 		pgLatch.Unlock()
 		// We will be checking below to see if the cell pointer is valid,
 		// and it will only be valid if we had a successful time recycling
@@ -447,12 +447,12 @@ func (p *Page) DelRecord(id *RecordID) error {
 	return ErrRecordNotFound
 }
 
-// GetRecordByKey attempts to locate and return a Record using the provided
+// getRecordByKey attempts to locate and return a Record using the provided
 // record key. It performs a binary search, since the record cellptrs are
 // always kept in a sorted order, attempts to return a matching Record. If
 // a there is more than one Record in the Page that has the same key then
 // it will return the first one it locates.
-func (p *Page) GetRecordByKey(key []byte) *Record {
+func (p *Page) getRecordByKey(key []byte) *Record {
 	// latch
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
@@ -472,11 +472,11 @@ func (p *Page) GetRecordByKey(key []byte) *Record {
 	return &rc
 }
 
-var SkipRecord = errors.New("skip this record")
+var skipRecord = errors.New("skip this record")
 
-// RangeRecords is an iterator methods that uses a simple callback. It
+// rangeRecords is an iterator methods that uses a simple callback. It
 // returns any errors encountered.
-func (p *Page) RangeRecords(fn func(r *Record) error) error {
+func (p *Page) rangeRecords(fn func(r *Record) error) error {
 	// latch
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
@@ -488,7 +488,7 @@ func (p *Page) RangeRecords(fn func(r *Record) error) error {
 		}
 		r := p.getRecordUsingCell(c)
 		if err := fn(&r); err != nil {
-			if err == SkipRecord {
+			if err == skipRecord {
 				continue
 			}
 			return err
@@ -497,9 +497,9 @@ func (p *Page) RangeRecords(fn func(r *Record) error) error {
 	return nil
 }
 
-// RangeNRecords is a bounded iterator methods that uses a simple callback. It
+// rangeNRecords is a bounded iterator methods that uses a simple callback. It
 // returns any errors encountered.
-func (p *Page) RangeNRecords(beg, end int, fn func(r *Record) error) error {
+func (p *Page) rangeNRecords(beg, end int, fn func(r *Record) error) error {
 	// latch
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
@@ -524,7 +524,7 @@ func (p *Page) RangeNRecords(beg, end int, fn func(r *Record) error) error {
 		}
 		r := p.getRecordUsingCell(c)
 		if err := fn(&r); err != nil {
-			if err == SkipRecord {
+			if err == skipRecord {
 				continue
 			}
 			return err
@@ -589,7 +589,7 @@ func (p *Page) Clear() {
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
 	// clear the page out
-	*p = NewPage(p.getPageID(), P_FREE)
+	*p = newPage(p.getPageID(), P_FREE)
 }
 
 // Vacuum is a method that sucks up any free space within the page, removing any
@@ -600,7 +600,7 @@ func (p *Page) Vacuum() {
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
 	// First, we must allocate a new page to copy data into.
-	np := NewPage(p.getPageID(), p.getFlags())
+	np := newPage(p.getPageID(), p.getFlags())
 	// We will initialize local states here, so we only have to set them once.
 	numCells, lowerBound, upperBound := uint16(0), uint16(pageHeaderSize), uint16(PageSize)
 	// Next we iterate the current non-free cells and add the records to the new page.
@@ -990,9 +990,9 @@ func NewRecord(flags uint16, key, val []byte) Record {
 	return rec
 }
 
-// NewUintUintRecord creates and returns a new Record that uses uint32's
+// newUintUintRecord creates and returns a new Record that uses uint32's
 // as keys and uint32's as values.
-func NewUintUintRecord(key uint32, val uint32) Record {
+func _(key uint32, val uint32) Record {
 	rsz := recordHeaderSize + 4 + 4
 	rec := make(Record, rsz, rsz)
 	rec.encRecordHeader(
@@ -1007,9 +1007,9 @@ func NewUintUintRecord(key uint32, val uint32) Record {
 	return rec
 }
 
-// NewUintCharRecord creates and returns a new Record that uses uint32's
+// newUintCharRecord creates and returns a new Record that uses uint32's
 // as keys and []byte slices as values.
-func NewUintCharRecord(key uint32, val []byte) Record {
+func _(key uint32, val []byte) Record {
 	rsz := recordHeaderSize + 4 + len(val)
 	rec := make(Record, rsz, rsz)
 	rec.encRecordHeader(
@@ -1024,9 +1024,9 @@ func NewUintCharRecord(key uint32, val []byte) Record {
 	return rec
 }
 
-// NewCharUintRecord creates and returns a new Record that uses []byte
+// newCharUintRecord creates and returns a new Record that uses []byte
 // slices as keys and uint32's as values.
-func NewCharUintRecord(key []byte, val uint32) Record {
+func _(key []byte, val uint32) Record {
 	rsz := recordHeaderSize + len(key) + 4
 	rec := make(Record, rsz, rsz)
 	rec.encRecordHeader(
@@ -1041,9 +1041,9 @@ func NewCharUintRecord(key []byte, val uint32) Record {
 	return rec
 }
 
-// NewCharCharRecord creates and returns a new Record that uses []byte
+// newCharCharRecord creates and returns a new Record that uses []byte
 // slices as keys and []byte slices as values.
-func NewCharCharRecord(key []byte, val []byte) Record {
+func _(key []byte, val []byte) Record {
 	rsz := recordHeaderSize + len(key) + len(val)
 	rec := make(Record, rsz, rsz)
 	rec.encRecordHeader(

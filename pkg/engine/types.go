@@ -58,7 +58,7 @@ type bufferPoolManager interface {
 	bufferPool
 	replacer
 	diskManager
-	// NewPage returns a new "fresh" page.Page for use.
+	// newPage returns a new "fresh" page.Page for use.
 	NewPage() page.Page
 	// FetchPage takes a page.PageID, and attempts to locate it (either in the
 	// buffer pool, or on io) and return the associated page.Page.

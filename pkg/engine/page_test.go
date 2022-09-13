@@ -13,7 +13,7 @@ func TestPage_NewPage(t *testing.T) {
 	if p != nil {
 		t.Errorf("got %v, expected %v\n", p, nil)
 	}
-	p = NewPage(3, P_USED)
+	p = newPage(3, P_USED)
 	if p == nil {
 		t.Errorf("got %v, expected %v\n", len(p), PageSize)
 	}
@@ -38,7 +38,7 @@ func TestPage_NewEmptyPage(t *testing.T) {
 	if ep != nil {
 		t.Errorf("got %v, expected %v\n", ep, nil)
 	}
-	ep = NewPage(4, P_FREE)
+	ep = newPage(4, P_FREE)
 	if ep == nil {
 		t.Errorf("got %v, expected %v\n", len(ep), PageSize)
 	}
@@ -59,7 +59,7 @@ func TestPage_NewEmptyPage(t *testing.T) {
 }
 
 func TestPage_AddRecord(t *testing.T) {
-	p := NewPage(3, P_USED)
+	p := newPage(3, P_USED)
 	_, err := addRecords(p)
 	if err != nil {
 		t.Error(err)
@@ -68,13 +68,13 @@ func TestPage_AddRecord(t *testing.T) {
 }
 
 func TestPage_AddRecordAndRange(t *testing.T) {
-	p := NewPage(3, P_USED)
+	p := newPage(3, P_USED)
 	_, err := addRecords(p)
 	if err != nil {
 		t.Error(err)
 	}
 	var i int
-	err = p.RangeRecords(
+	err = p.rangeRecords(
 		func(r *Record) error {
 			fmt.Printf("record #%.3d, key=%q, val=%q\n", i, r.Key(), r.Val())
 			i++
@@ -87,7 +87,7 @@ func TestPage_AddRecordAndRange(t *testing.T) {
 }
 
 func TestPage_GetRecord(t *testing.T) {
-	p := NewPage(3, P_USED)
+	p := newPage(3, P_USED)
 	rids, err := addRecords(p)
 	if err != nil {
 		t.Error(err)
@@ -99,7 +99,7 @@ func TestPage_GetRecord(t *testing.T) {
 }
 
 func TestPage_DelRecord(t *testing.T) {
-	p := NewPage(3, P_USED)
+	p := newPage(3, P_USED)
 	rids, err := addRecords(p)
 	if err != nil {
 		t.Error(err)
@@ -115,7 +115,7 @@ func TestPage_DelRecord(t *testing.T) {
 }
 
 func TestPage_Sync(t *testing.T) {
-	p := NewPage(3, P_USED)
+	p := newPage(3, P_USED)
 	ids, err := addRecords(p)
 	if err != nil {
 		t.Error(err)
@@ -157,7 +157,7 @@ func TestPage_RandomStuff(t *testing.T) {
 		return NewRecord(R_STR_STR, []byte(rk), []byte(rv))
 	}
 
-	p := NewPage(1, P_USED)
+	p := newPage(1, P_USED)
 	fmt.Println(p.String())
 	fmt.Println(">>>>> [01 ADDING] <<<<<")
 	fmt.Printf("created Page, adding %d records...\n", N)
@@ -251,7 +251,7 @@ func TestPage_RandomStuff(t *testing.T) {
 	}
 	fmt.Println()
 	fmt.Println(">>>>> [07 NEW PAGE] <<<<<")
-	p = NewPage(2, P_USED)
+	p = newPage(2, P_USED)
 	for i := 0; ; i++ {
 		_, err := p.AddRecord(makeRec(i))
 		if err != nil {
@@ -274,7 +274,7 @@ func TestPage_RandomStuff(t *testing.T) {
 
 func TestPage_Vacuum(t *testing.T) {
 	var rids []*RecordID
-	p := NewPage(1, P_USED)
+	p := newPage(1, P_USED)
 	id, err := p.AddRecord(NewRecord(R_STR_STR, []byte("rec-01"), []byte("this is record 01")))
 	if err != nil {
 		t.Error(err)
