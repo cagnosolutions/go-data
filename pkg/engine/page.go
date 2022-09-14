@@ -293,12 +293,12 @@ func (p *Page) checkRecordID(id *RecordID) error {
 	return nil
 }
 
-// AddRecord takes a record and attempts to write it to the page. First it will check
+// addRecord takes a record and attempts to write it to the page. First it will check
 // to see if there are any cellptrs that can be re-used, and do so if there are any
 // that will accommodate the record size. Otherwise, it will create a new cellptr.
 // The cellptrs are always sorted according to the record key, and the record data
 // is written to the page last.
-func (p *Page) AddRecord(r Record) (*RecordID, error) {
+func (p *Page) addRecord(r Record) (*RecordID, error) {
 	// latch
 	// pgLatch.Lock()
 	// defer pgLatch.Unlock()
@@ -355,13 +355,9 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 	return &RecordID{p.getPageID(), cp.getID()}, nil
 }
 
-// GetRecord takes a RecordID, and attempts to locate a cellptr that matches.
+// getRecord takes a RecordID, and attempts to locate a cellptr that matches.
 // If a match can be located, then the resulting Record is returned.
-func (p *Page) GetRecord(id *RecordID) (Record, error) {
-	// latch
-	// pgLatch.Lock()
-	// defer pgLatch.Unlock()
-
+func (p *Page) getRecord(id *RecordID) (Record, error) {
 	// Error check the record ID
 	err := p.checkRecordID(id)
 	if err != nil {
@@ -395,13 +391,10 @@ func (p *Page) GetRecord(id *RecordID) (Record, error) {
 	return nil, ErrRecordNotFound
 }
 
-// DelRecord attempts to delete a record using the provided record ID. The
+// delRecord attempts to delete a record using the provided record ID. The
 // associated cellptr will be marked as free to re-use, and the record data
 // will be overwritten. Any errors will be returned.
-func (p *Page) DelRecord(id *RecordID) error {
-	// latch
-	// pgLatch.Lock()
-	// defer pgLatch.Unlock()
+func (p *Page) delRecord(id *RecordID) error {
 	// Error check the record ID
 	err := p.checkRecordID(id)
 	if err != nil {
@@ -409,7 +402,6 @@ func (p *Page) DelRecord(id *RecordID) error {
 	}
 	// First, we will create our cell pointer variable for later.
 	var cp cellptr
-	// numCells := p.getNumCells()
 	// Then, we will attempt to locate the record.
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
 		// Check the cell at the provided position
@@ -583,8 +575,8 @@ func (p *Page) findCellPos(k []byte) uint16 {
 	return uint16(i) // , i < n && at == 0
 }
 
-// Clear resets the entire page. It wipes all the data, but retains the same ID.
-func (p *Page) Clear() {
+// clear resets the entire page. It wipes all the data, but retains the same ID.
+func (p *Page) clear() {
 	// latch
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
@@ -770,6 +762,7 @@ func (p *Page) decrUpper(n uint16) {
 	encU16((*p)[offUpper:offUpper+2], decU16((*p)[offUpper:offUpper+2])-n)
 }
 
+// getFreeSpace returns the free space left in the page
 func (p *Page) getFreeSpace() uint16 {
 	free := p.getUpper() - p.getLower()
 	if p != nil && int(free) > len(*p) {
@@ -778,7 +771,8 @@ func (p *Page) getFreeSpace() uint16 {
 	return free
 }
 
-func (p *Page) Size() int {
+// size returns the page size
+func (p *Page) size() int {
 	return len(*p)
 }
 
