@@ -153,7 +153,7 @@ func (se *StorageEngine) Insert(ns string, p []byte) (uint32, error) {
 		return 0, ErrPageNotFound
 	}
 	// Add the record to the page
-	rid, err := pg.AddRecord(p)
+	rid, err := pg.addRecord(p)
 	if err != nil {
 		return 0, err
 	}

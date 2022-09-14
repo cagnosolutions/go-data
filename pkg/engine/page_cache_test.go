@@ -25,11 +25,11 @@ func TestPageCache(t *testing.T) {
 	util.Equals(t, PageID(0), page0.getPageID())
 
 	// Scenario 2: Once we have a page, we should be able to read and write content.
-	id0, err := page0.AddRecord([]byte("Hello, World!"))
+	id0, err := page0.addRecord([]byte("Hello, World!"))
 	if err != nil {
 		t.Error(err)
 	}
-	rec, err := page0.GetRecord(id0)
+	rec, err := page0.getRecord(id0)
 	if err != nil {
 		t.Error(err)
 	}
@@ -61,7 +61,7 @@ func TestPageCache(t *testing.T) {
 
 	// Scenario 6: We should be able to fetch the data we wrote a while ago.
 	page0 = pc.FetchPage(PageID(0))
-	rec2, err := page0.GetRecord(id0)
+	rec2, err := page0.getRecord(id0)
 	if err != nil {
 		t.Error(err)
 	}

@@ -42,6 +42,6 @@ func (f *frame) reset() {
 func (f frame) String() string {
 	return fmt.Sprintf(
 		"{ PID: %d, FID: %d, PinCount: %d, dirty: %v, page: %v }",
-		f.PID, f.FID, f.PinCount, f.IsDirty, f.Page.Size(),
+		f.PID, f.FID, f.PinCount, f.IsDirty, f.Page.size(),
 	)
 }
