@@ -23,6 +23,23 @@ func (r *record) Size() int64 {
 	return int64(unsafe.Sizeof(r.Key.data) + unsafe.Sizeof(r.Value.data))
 }
 
+type NODE interface {
+	// attributes:
+	// numKeys
+	// parent
+	// isLeaf
+	// keys[M-1]
+	// ptrs[M]
+
+	parent() *NODE
+	next() *NODE
+}
+
+type LEAF interface {
+	parent() *NODE
+	next() *NODE
+}
+
 const M = 5 // 128
 
 // order is the tree's order

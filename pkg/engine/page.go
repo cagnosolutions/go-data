@@ -43,10 +43,11 @@ func (r *RecordID) String() string {
 
 const (
 	// P_FREE and P_USED are flags to be used with the page
-	P_FREE     uint32 = 0x00000001 // indicates the Page is free to use
-	P_USED     uint32 = 0x00000002 // indicates the Page is being used
-	P_SORTED   uint32 = 0x00000010 // indicates the Page cells are sorted
-	P_UNSORTED uint32 = 0x00000020
+	P_FREE uint32 = 0x00000001 // indicates the Page is free to use
+	P_USED uint32 = 0x00000002 // indicates the Page is being used
+	P_NODE uint32 = 0x00000010 // indicates the Page is an internal node
+	P_LEAF uint32 = 0x00000020 // indicates the Page is a leaf
+	P_ROOT uint32 = 0x00000050 // indicates the Page is a root node
 
 	// constants for the page, headers, cellptrs and record sizes
 	PageSize         = 16 << 10
@@ -652,6 +653,11 @@ func (p *Page) getNext() uint32 {
 // getFlags decodes and returns the flags field directly from the encoded pageHeader.
 func (p *Page) getFlags() uint32 {
 	return decU32((*p)[offFlags : offFlags+4])
+}
+
+// hasFlag tests if the cell pointer has a flag set
+func (p *Page) hasFlag(flag uint32) bool {
+	return decU32((*p)[offFlags:offFlags+4])&flag != 0
 }
 
 // getNumFree decodes and returns the number of free cells directly from the encoded pageHeader.

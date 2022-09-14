@@ -65,14 +65,14 @@ func TestBPTree_PrintMarkdownTree(t *testing.T) {
 	tree.Close()
 }
 
-func TestNewBPTree(t *testing.T) {
+func TestBPTree_New(t *testing.T) {
 	var tree *BPTree
 	tree = new(BPTree)
 	AssertNotNil(t, tree)
 	tree.Close()
 }
 
-func TestDelFromNewBPTree(t *testing.T) {
+func TestBPTree_DelFromNew(t *testing.T) {
 	var tree *BPTree
 	tree = new(BPTree)
 	AssertNotNil(t, tree)
