@@ -18,7 +18,7 @@ var (
 )
 
 type store struct {
-	cache  *PageCache
+	cache  *pageCache
 	recent *RecordID
 }
 
@@ -88,7 +88,7 @@ func (se *StorageEngine) Close() error {
 	defer se.mu.Unlock()
 	var err error
 	for _, st := range se.stores {
-		err = st.cache.Close()
+		err = st.cache.close()
 		if err != nil {
 			return err
 		}
@@ -109,7 +109,7 @@ func (se *StorageEngine) CreateNamespace(name string) error {
 	if found {
 		return ErrDataStoreExists
 	}
-	pc, err := OpenPageCache(filepath.Join(se.dataPath), 64)
+	pc, err := openPageCache(filepath.Join(se.dataPath), 64)
 	if err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func (se *StorageEngine) Insert(ns string, p []byte) (uint32, error) {
 	}
 	// Got it; do our thing
 	pid := st.recent.PageID
-	pg := st.cache.FetchPage(PageID(pid))
+	pg := st.cache.fetchPage(PageID(pid))
 	if pg == nil {
 		// Page not found
 		return 0, ErrPageNotFound
@@ -160,7 +160,7 @@ func (se *StorageEngine) Insert(ns string, p []byte) (uint32, error) {
 	// Update the most recent record ID
 	st.recent = rid
 	// Unpin the page
-	err = st.cache.UnpinPage(PageID(pid), true)
+	err = st.cache.unpinPage(PageID(pid), true)
 	if err != nil {
 		return 0, err
 	}

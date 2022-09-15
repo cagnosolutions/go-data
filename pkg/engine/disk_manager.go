@@ -125,7 +125,7 @@ func (f *DiskManager) DeallocatePage(pid PageID) error {
 
 // ReadPage reads the page located at the logical address calculated using the
 // page ID provided.
-func (f *DiskManager) ReadPage(pid PageID, p Page) error {
+func (f *DiskManager) ReadPage(pid PageID, p page) error {
 	// Calculate the logical page offset.
 	off, err := f.logicalOffset(pid)
 	if err != nil {
@@ -141,7 +141,7 @@ func (f *DiskManager) ReadPage(pid PageID, p Page) error {
 
 // WritePage writes the page located at the logical address calculated using the
 // page ID provided.
-func (f *DiskManager) WritePage(pid PageID, p Page) error {
+func (f *DiskManager) WritePage(pid PageID, p page) error {
 	// Calculate the logical page offset.
 	off, err := f.logicalOffset(pid)
 	if err != nil {
@@ -164,6 +164,6 @@ func (f *DiskManager) WritePage(pid PageID, p Page) error {
 
 // Close closes the current manager instance
 func (f *DiskManager) Close() error {
-	// Close the underlying io
+	// close the underlying io
 	return f.file.Close()
 }

@@ -9,7 +9,7 @@ import (
 )
 
 func TestPage_NewPage(t *testing.T) {
-	var p Page
+	var p page
 	if p != nil {
 		t.Errorf("got %v, expected %v\n", p, nil)
 	}
@@ -17,7 +17,7 @@ func TestPage_NewPage(t *testing.T) {
 	if p == nil {
 		t.Errorf("got %v, expected %v\n", len(p), PageSize)
 	}
-	tmp := PageHeader{
+	tmp := pageHeader{
 		ID:    3,
 		Prev:  0,
 		Next:  0,
@@ -34,7 +34,7 @@ func TestPage_NewPage(t *testing.T) {
 }
 
 func TestPage_NewEmptyPage(t *testing.T) {
-	var ep Page
+	var ep page
 	if ep != nil {
 		t.Errorf("got %v, expected %v\n", ep, nil)
 	}
@@ -42,7 +42,7 @@ func TestPage_NewEmptyPage(t *testing.T) {
 	if ep == nil {
 		t.Errorf("got %v, expected %v\n", len(ep), PageSize)
 	}
-	tmp := PageHeader{
+	tmp := pageHeader{
 		ID:    4,
 		Prev:  0,
 		Next:  0,
@@ -391,7 +391,7 @@ func TestPage_Vacuum(t *testing.T) {
 	runtime.GC()
 }
 
-var addRecords = func(p Page) ([]*RecordID, error) {
+var addRecords = func(p page) ([]*RecordID, error) {
 	var ids []*RecordID
 	for i := 0; i < 128; i++ {
 		rk := fmt.Sprintf("record-%.6d", i)
@@ -405,7 +405,7 @@ var addRecords = func(p Page) ([]*RecordID, error) {
 	return ids, nil
 }
 
-var getRecords = func(p Page, ids []*RecordID) error {
+var getRecords = func(p page, ids []*RecordID) error {
 	for i := range ids {
 		rid := ids[i]
 		_, err := p.getRecord(rid)
@@ -416,7 +416,7 @@ var getRecords = func(p Page, ids []*RecordID) error {
 	return nil
 }
 
-var delRecords = func(p Page, ids []*RecordID) error {
+var delRecords = func(p page, ids []*RecordID) error {
 	for i := range ids {
 		rid := ids[i]
 		err := p.delRecord(rid)

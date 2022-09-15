@@ -670,7 +670,7 @@ func (l *WAL) TruncateFront(index int64) error {
 			// append to a new entries list
 			entries = append(entries, ent)
 		}
-		// Close reader
+		// close reader
 		err = rd.Close()
 		if err != nil {
 			return err

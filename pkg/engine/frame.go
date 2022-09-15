@@ -8,40 +8,40 @@ type frameID uint32
 
 // frame is a page frame
 type frame struct {
-	PID      PageID  // id of this page
-	FID      frameID // id or index of this frame
-	PinCount uint32  // how many threads are mutating the frame
-	IsDirty  bool    // page data has been modified and not flushed
-	Page             // actual page data
+	pid      PageID  // id of this page
+	fid      frameID // id or index of this frame
+	pinCount uint32  // how many threads are mutating the frame
+	isDirty  bool    // page data has been modified and not flushed
+	page             // actual page data
 }
 
 func newFrame(pid PageID, fid frameID, pageSize uint16) frame {
 	return frame{
-		PID:      pid,
-		FID:      fid,
-		PinCount: 1,
-		IsDirty:  false,
-		Page:     make([]byte, pageSize),
+		pid:      pid,
+		fid:      fid,
+		pinCount: 1,
+		isDirty:  false,
+		page:     make([]byte, pageSize),
 	}
 }
 
 func (f *frame) decrPinCount() {
-	if f.PinCount > 0 {
-		f.PinCount--
+	if f.pinCount > 0 {
+		f.pinCount--
 	}
 }
 
 func (f *frame) reset() {
-	f.PID = PageID(0)
-	f.FID = frameID(0)
-	f.PinCount = 0
-	f.IsDirty = false
-	f.Page = nil
+	f.pid = PageID(0)
+	f.fid = frameID(0)
+	f.pinCount = 0
+	f.isDirty = false
+	f.page = nil
 }
 
 func (f frame) String() string {
 	return fmt.Sprintf(
-		"{ PID: %d, FID: %d, PinCount: %d, dirty: %v, page: %v }",
-		f.PID, f.FID, f.PinCount, f.IsDirty, f.Page.size(),
+		"{ pid: %d, fid: %d, pinCount: %d, dirty: %v, page: %v }",
+		f.pid, f.fid, f.pinCount, f.isDirty, f.page.size(),
 	)
 }
