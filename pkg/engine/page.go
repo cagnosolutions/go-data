@@ -145,45 +145,45 @@ func (p *page) setPageHeader(h *pageHeader) {
 }
 
 // getRecordKeyUsingCellPos takes the position of a cellptr and uses it
-// to decode and return the associated Record key.
+// to decode and return the associated record key.
 func (p *page) getRecordKeyUsingCellPos(pos uint16) []byte {
 	// Decode the cellptr at the provided location.
 	cp := p.decCell(pos)
 	// Get the record bounds from the decoded cellptr.
 	beg, end := cp.getBounds()
-	// Return the Record that the cellptr points to.
-	r := Record((*p)[beg:end])
+	// Return the record that the cellptr points to.
+	r := record((*p)[beg:end])
 	return r.Key()
 }
 
 // getRecordUsingCellPos takes the position of a cellptr and uses it
-// to decode and return the associated Record.
-func (p *page) getRecordUsingCellPos(pos uint16) Record {
+// to decode and return the associated record.
+func (p *page) getRecordUsingCellPos(pos uint16) record {
 	// Decode the cellptr at the provided location.
 	cp := p.decCell(pos)
 	// Get the record bounds from the decoded cellptr.
 	beg, end := cp.getBounds()
-	// Return the Record that the cellptr points to.
-	return Record((*p)[beg:end])
+	// Return the record that the cellptr points to.
+	return record((*p)[beg:end])
 }
 
 // getRecordKeyUsingCell takes a cellptr and uses it to decode and return
-// the associated Record key.
+// the associated record key.
 func (p *page) getRecordKeyUsingCell(c cellptr) []byte {
 	// Get the record bounds from the provided cellptr.
 	beg, end := c.getBounds()
-	// Return the Record that the cellptr points to.
-	r := Record((*p)[beg:end])
+	// Return the record that the cellptr points to.
+	r := record((*p)[beg:end])
 	return r.Key()
 }
 
 // getRecordUsingCell takes a cellptr and uses it to decode and return
-// the associated Record.
-func (p *page) getRecordUsingCell(c cellptr) Record {
+// the associated record.
+func (p *page) getRecordUsingCell(c cellptr) record {
 	// Get the record bounds from the provided cellptr.
 	beg, end := c.getBounds()
-	// Return the Record that the cellptr points to.
-	return Record((*p)[beg:end])
+	// Return the record that the cellptr points to.
+	return record((*p)[beg:end])
 }
 
 // addCell takes the length of a record and creates and returns a new
@@ -271,7 +271,7 @@ func (p *page) makeRecordID(c cellptr) *RecordID {
 // recycleCell attempts to reuse a free cellptr for a record, if there is a candidate that
 // works well. It returns the used cellptr, and a boolean indicating true if it succeeded in
 // recycling the cellptr, and false if it could not recycle one.
-func (p *page) recycleCell(r Record) cellptr {
+func (p *page) recycleCell(r record) cellptr {
 	// We do, so let's see if we have any candidates for recycling.
 	var cp cellptr
 	for pos := uint16(0); pos < p.getNumCells(); pos++ {
@@ -299,7 +299,7 @@ func (p *page) recycleCell(r Record) cellptr {
 
 // checkRecord performs some error checking on the record to ensure it is a good
 // record, and that we also have plenty of room for it in the page.
-func (p *page) checkRecord(r Record) error {
+func (p *page) checkRecord(r record) error {
 	if r == nil {
 		return ErrRecordTooSmall
 	}
@@ -324,7 +324,7 @@ func (p *page) checkRecordID(id *RecordID) error {
 // that will accommodate the record size. Otherwise, it will create a new cellptr.
 // The cellptrs are always sorted according to the record key, and the record data
 // is written to the page last.
-func (p *page) addRecord(r Record) (*RecordID, error) {
+func (p *page) addRecord(r record) (*RecordID, error) {
 	// latch
 	// pgLatch.Lock()
 	// defer pgLatch.Unlock()
@@ -382,8 +382,8 @@ func (p *page) addRecord(r Record) (*RecordID, error) {
 }
 
 // getRecord takes a RecordID, and attempts to locate a cellptr that matches.
-// If a match can be located, then the resulting Record is returned.
-func (p *page) getRecord(id *RecordID) (Record, error) {
+// If a match can be located, then the resulting record is returned.
+func (p *page) getRecord(id *RecordID) (record, error) {
 	// Error check the record ID
 	err := p.checkRecordID(id)
 	if err != nil {
@@ -406,10 +406,10 @@ func (p *page) getRecord(id *RecordID) (Record, error) {
 			// It has not, so we can fetch the record.
 			r := p.getRecordUsingCell(cp)
 			// We should make a copy of it, so we do not mutate the original.
-			rc := make(Record, len(r), len(r))
+			rc := make(record, len(r), len(r))
 			copy(rc, r)
 			pgLatch.Unlock()
-			// Return the Record
+			// Return the record
 			return rc, nil
 		}
 	}
@@ -465,12 +465,12 @@ func (p *page) delRecord(id *RecordID) error {
 	return ErrRecordNotFound
 }
 
-// getRecordByKey attempts to locate and return a Record using the provided
+// getRecordByKey attempts to locate and return a record using the provided
 // record key. It performs a binary search, since the record cellptrs are
-// always kept in a sorted order, attempts to return a matching Record. If
-// a there is more than one Record in the page that has the same key then
+// always kept in a sorted order, attempts to return a matching record. If
+// a there is more than one record in the page that has the same key then
 // it will return the first one it locates.
-func (p *page) getRecordByKey(key []byte) *Record {
+func (p *page) getRecordByKey(key []byte) *record {
 	// latch
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
@@ -485,7 +485,7 @@ func (p *page) getRecordByKey(key []byte) *Record {
 	// It has not, so we will get it.
 	r := p.getRecordUsingCell(c)
 	// We should make a copy of it, so we do not mutate the original.
-	rc := make(Record, len(r), len(r))
+	rc := make(record, len(r), len(r))
 	copy(rc, r)
 	return &rc
 }
@@ -516,7 +516,7 @@ var skipRecord = errors.New("skip this record")
 
 // rangeRecords is an iterator methods that uses a simple callback. It
 // returns any errors encountered.
-func (p *page) rangeRecords(fn func(r *Record) error) error {
+func (p *page) rangeRecords(fn func(r *record) error) error {
 	// latch
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
@@ -539,7 +539,7 @@ func (p *page) rangeRecords(fn func(r *Record) error) error {
 
 // rangeNRecords is a bounded iterator methods that uses a simple callback. It
 // returns any errors encountered.
-func (p *page) rangeNRecords(beg, end int, fn func(r *Record) error) error {
+func (p *page) rangeNRecords(beg, end int, fn func(r *record) error) error {
 	// latch
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
@@ -574,13 +574,13 @@ func (p *page) rangeNRecords(beg, end int, fn func(r *Record) error) error {
 }
 
 // Len implements the sort.Sort interface for sorting the cellptrs
-// according to the Record key.
+// according to the record key.
 func (p *page) Len() int {
 	return int(p.getNumCells() - p.getNumFree())
 }
 
 // Less implements the sort.Sort interface for sorting the cellptrs
-// according to the Record key.
+// according to the record key.
 func (p *page) Less(i, j int) bool {
 	r1 := p.getRecordUsingCellPos(uint16(i))
 	r2 := p.getRecordUsingCellPos(uint16(j))
@@ -588,7 +588,7 @@ func (p *page) Less(i, j int) bool {
 }
 
 // Swap implements the sort.Sort interface for sorting the cellptrs
-// according to the Record key.
+// according to the record key.
 func (p *page) Swap(i, j int) {
 	cp1 := p.decCell(uint16(i))
 	cp2 := p.decCell(uint16(j))
@@ -875,9 +875,12 @@ func (p *page) String() string {
 
 const (
 	// C_FREE C_USED and C_MAGK are flags for the cellptrs
+	C_MAGK uint16 = 0x5a00
+
 	C_FREE uint16 = 0x0001
 	C_USED uint16 = 0x0002
-	C_MAGK uint16 = 0x55a0
+
+	C_PTR uint16 = 0x0010
 
 	// constants for the cellptrs
 	u64mask0to2 = 0x000000000000ffff
@@ -990,43 +993,73 @@ func (c *cellptr) String() string {
 	)
 }
 
-// Record flags
+// record flags
 const (
-	RK_NUM = 0x0001
-	RK_STR = 0x0002
-	RV_NUM = 0x0010
-	RV_STR = 0x0020
+	RK_NUM = 0x0001 //	0000000000000001
+	RK_STR = 0x0002 //	0000000000000010
+	RK_PTR = 0x0004 // 	0000000000000100
+	RK_CUS = 0x0008 // 	0000000000001000
 
-	R_NUM_NUM = RK_NUM | RV_NUM
-	R_NUM_STR = RK_NUM | RV_STR
-	R_STR_NUM = RK_STR | RV_NUM
-	R_STR_STR = RK_STR | RV_STR
-	R_PK_IDX  = R_NUM_NUM
-	R_PK_DAT  = R_NUM_STR
-	R_OF_PTR  = 0x0100 // record overflow pointer
+	RV_NUM = 0x0010 // 	0000000000010000
+	RV_STR = 0x0020 // 	0000000000100000
+	RV_PTR = 0x0040 // 	0000000001000000
+	RV_CUS = 0x0080 //  0000000010000000
 
-	KeyMask = 0x000f
-	ValMask = 0x00f0
+	PTR_RENT = 0x0100 // 0000000100000000
+	PTR_CHLD = 0x0200 // 0000001000000000
+	PTR_PREV = 0x0400 // 0000010000000000
+	PTR_NEXT = 0x0800 // 0000100000000000
+
+	keyMask = 0x000f //  0000000000001111
+	valMask = 0x00f0 //  0000000011110000
+	ptrMask = 0x0f00 //  0000111100000000
+	cusMask = 0xf000 //  1111000000000000
 )
 
-// RecordHeader is a pageHeader struct for encoding and
+// checkRecordFlags checks the flags that are set in the
+// recordHeader to see if there are any that are set that
+// should not be set or that have incorrect values.
+func checkRecordFlags(flags uint16) error {
+	if (flags&keyMask)&RK_NUM == 0 &&
+		(flags&keyMask)&RK_STR == 0 &&
+		(((flags&keyMask)&RK_PTR != 0) && (flags&ptrMask == 0)) {
+		return ErrBadKeyFlagInRecord
+	}
+	if (flags&valMask)&RV_NUM == 0 &&
+		(flags&valMask)&RV_STR == 0 &&
+		(((flags&valMask)&RV_PTR != 0) && (flags&ptrMask == 0)) {
+		return ErrBadValFlagInRecord
+	}
+	if (flags&cusMask != 0) &&
+		((flags&keyMask)&RK_CUS == 0) ||
+		((flags&valMask)&RV_CUS == 0) {
+		return ErrBadCustomFlagInRecord
+	}
+	return nil
+}
+
+// recordHeader is a pageHeader struct for encoding and
 // decoding information for a record
-type RecordHeader struct {
+type recordHeader struct {
 	Flags  uint16
 	KeyLen uint16
 	ValLen uint16
 }
 
-// Record is a binary type
-type Record []byte
+// record is a binary type
+type record []byte
 
-// NewRecord initiates and returns a new record using the flags provided
+// newRecord initiates and returns a new record using the flags provided
 // as the indicators of what types the keys and values should hold.
-func NewRecord(flags uint16, key, val []byte) Record {
+func newRecord(flags uint16, key, val []byte) record {
+	err := checkRecordFlags(flags)
+	if err != nil {
+		panic(err)
+	}
 	rsz := recordHeaderSize + len(key) + len(val)
-	rec := make(Record, rsz, rsz)
+	rec := make(record, rsz, rsz)
 	rec.encRecordHeader(
-		&RecordHeader{
+		&recordHeader{
 			Flags:  flags,
 			KeyLen: uint16(len(key)),
 			ValLen: uint16(len(val)),
@@ -1037,13 +1070,39 @@ func NewRecord(flags uint16, key, val []byte) Record {
 	return rec
 }
 
-// newUintUintRecord creates and returns a new Record that uses uint32's
-// as keys and uint32's as values.
-func _(key uint32, val uint32) Record {
+func newPtrRecord(kind uint16, ptr uint32) record {
+	var flags uint16
+	if kind == PTR_RENT ||
+		kind == PTR_CHLD ||
+		kind == PTR_PREV ||
+		kind == PTR_NEXT {
+		flags = kind | RK_PTR | RV_PTR
+	}
 	rsz := recordHeaderSize + 4 + 4
-	rec := make(Record, rsz, rsz)
+	rec := make(record, rsz, rsz)
 	rec.encRecordHeader(
-		&RecordHeader{
+		&recordHeader{
+			Flags:  flags,
+			KeyLen: 4,
+			ValLen: 4,
+		},
+	)
+	err := checkRecordFlags(flags)
+	if err != nil {
+		panic(err)
+	}
+	encU32(rec[recordHeaderSize:recordHeaderSize+4], ptr)
+	encU32(rec[recordHeaderSize+4:recordHeaderSize+8], ptr)
+	return rec
+}
+
+// newUintUintRecord creates and returns a new record that uses uint32's
+// as keys and uint32's as values.
+func _(key uint32, val uint32) record {
+	rsz := recordHeaderSize + 4 + 4
+	rec := make(record, rsz, rsz)
+	rec.encRecordHeader(
+		&recordHeader{
 			Flags:  RK_NUM | RV_NUM,
 			KeyLen: 4,
 			ValLen: 4,
@@ -1054,13 +1113,13 @@ func _(key uint32, val uint32) Record {
 	return rec
 }
 
-// newUintCharRecord creates and returns a new Record that uses uint32's
+// newUintCharRecord creates and returns a new record that uses uint32's
 // as keys and []byte slices as values.
-func _(key uint32, val []byte) Record {
+func _(key uint32, val []byte) record {
 	rsz := recordHeaderSize + 4 + len(val)
-	rec := make(Record, rsz, rsz)
+	rec := make(record, rsz, rsz)
 	rec.encRecordHeader(
-		&RecordHeader{
+		&recordHeader{
 			Flags:  RK_NUM | RV_STR,
 			KeyLen: 4,
 			ValLen: uint16(len(val)),
@@ -1071,13 +1130,13 @@ func _(key uint32, val []byte) Record {
 	return rec
 }
 
-// newCharUintRecord creates and returns a new Record that uses []byte
+// newCharUintRecord creates and returns a new record that uses []byte
 // slices as keys and uint32's as values.
-func _(key []byte, val uint32) Record {
+func _(key []byte, val uint32) record {
 	rsz := recordHeaderSize + len(key) + 4
-	rec := make(Record, rsz, rsz)
+	rec := make(record, rsz, rsz)
 	rec.encRecordHeader(
-		&RecordHeader{
+		&recordHeader{
 			Flags:  RK_STR | RV_NUM,
 			KeyLen: uint16(len(key)),
 			ValLen: 4,
@@ -1088,13 +1147,13 @@ func _(key []byte, val uint32) Record {
 	return rec
 }
 
-// newCharCharRecord creates and returns a new Record that uses []byte
+// newCharCharRecord creates and returns a new record that uses []byte
 // slices as keys and []byte slices as values.
-func _(key []byte, val []byte) Record {
+func _(key []byte, val []byte) record {
 	rsz := recordHeaderSize + len(key) + len(val)
-	rec := make(Record, rsz, rsz)
+	rec := make(record, rsz, rsz)
 	rec.encRecordHeader(
-		&RecordHeader{
+		&recordHeader{
 			Flags:  RK_STR | RV_STR,
 			KeyLen: uint16(len(key)),
 			ValLen: uint16(len(val)),
@@ -1105,65 +1164,69 @@ func _(key []byte, val []byte) Record {
 	return rec
 }
 
-// encRecordHeader takes a pointer to a RecordHeader and encodes it
+// encRecordHeader takes a pointer to a recordHeader and encodes it
 // directly into the record as a []byte slice
-func (r *Record) encRecordHeader(h *RecordHeader) {
+func (r *record) encRecordHeader(h *recordHeader) {
 	_ = (*r)[recordHeaderSize] // early bounds check
 	encU16((*r)[0:2], h.Flags)
 	encU16((*r)[2:4], h.KeyLen)
 	encU16((*r)[4:6], h.ValLen)
 }
 
-// decRecordHeader decodes the header from the Record and fills and
-// returns a pointer to the RecordHeader
-func (r *Record) decRecordHeader() *RecordHeader {
+// decRecordHeader decodes the header from the record and fills and
+// returns a pointer to the recordHeader
+func (r *record) decRecordHeader() *recordHeader {
 	_ = (*r)[recordHeaderSize] // early bounds check
-	return &RecordHeader{
+	return &recordHeader{
 		Flags:  decU16((*r)[0:2]),
 		KeyLen: decU16((*r)[2:4]),
 		ValLen: decU16((*r)[4:6]),
 	}
 }
 
-// Flags returns the underlying uint16 representing the flags set for this Record.
-func (r *Record) Flags() uint16 {
+// Flags returns the underlying uint16 representing the flags set for this record.
+func (r *record) Flags() uint16 {
 	return decU16((*r)[0:2])
 }
 
-// Key returns the underlying slice of bytes representing the Record key
-func (r *Record) Key() []byte {
+func (r *record) hasFlag(flag uint16) bool {
+	return decU16((*r)[0:2])&flag != 0
+}
+
+// Key returns the underlying slice of bytes representing the record key
+func (r *record) Key() []byte {
 	return (*r)[recordHeaderSize : recordHeaderSize+decU16((*r)[2:4])]
 }
 
-// Val returns the underlying slice of bytes representing the Record value
-func (r *Record) Val() []byte {
+// Val returns the underlying slice of bytes representing the record value
+func (r *record) Val() []byte {
 	return (*r)[recordHeaderSize+decU16((*r)[2:4]) : recordHeaderSize+decU16((*r)[2:4])+decU16((*r)[4:6])]
 }
 
-// KeyType returns the underlying type of the Record key
-func (r *Record) KeyType() uint16 {
-	return r.Flags() & KeyMask
+// KeyType returns the underlying type of the record key
+func (r *record) KeyType() uint16 {
+	return r.Flags() & keyMask
 }
 
-// ValType returns the underlying type of the Record value
-func (r *Record) ValType() uint16 {
-	return r.Flags() & ValMask
+// ValType returns the underlying type of the record value
+func (r *record) ValType() uint16 {
+	return r.Flags() & valMask
 }
 
-// String is the stringer method for a Record
-func (r *Record) String() string {
+// String is the stringer method for a record
+func (r *record) String() string {
 	fl := r.Flags()
 	var k, v string
-	if (fl & KeyMask) == RK_NUM {
+	if (fl & keyMask) == RK_NUM {
 		k = fmt.Sprintf("key: %d", decU32(r.Key()))
 	}
-	if (fl & KeyMask) == RK_STR {
+	if (fl & keyMask) == RK_STR {
 		k = fmt.Sprintf("key: %q", string(r.Key()))
 	}
-	if (fl & ValMask) == RV_NUM {
+	if (fl & valMask) == RV_NUM {
 		v = fmt.Sprintf("val: %d", decU32(r.Val()))
 	}
-	if (fl & ValMask) == RV_STR {
+	if (fl & valMask) == RV_STR {
 		v = fmt.Sprintf("val: %q", string(r.Val()))
 	}
 	return fmt.Sprintf("{ flags: %.4x, key: %s, val: %s }", fl, k, v)

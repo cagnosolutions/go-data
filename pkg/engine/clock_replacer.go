@@ -15,7 +15,7 @@ type ClockReplacer = clockReplacer
 // clockReplacer represents a clock based replacement cache
 type clockReplacer struct {
 	list *circularList
-	ptr  **node
+	ptr  **dllNode
 }
 
 func NewClockReplacer(size uint16) *ClockReplacer {
@@ -128,20 +128,20 @@ func (c *clockReplacer) String() string {
 var ErrListIsFull = errors.New("list is full; circular list capacity met")
 
 // node is a node in a circular list.
-type node struct {
+type dllNode struct {
 	key        frameID
 	val        bool
-	prev, next *node
+	prev, next *dllNode
 }
 
 // String is the stringer method for a node
-func (n *node) String() string {
+func (n *dllNode) String() string {
 	return fmt.Sprintf("%v<-[%v]->%v", n.prev.key, n.key, n.next.key)
 }
 
 // circularList is a circular list implementation.
 type circularList struct {
-	head, tail *node
+	head, tail *dllNode
 	size       uint16
 	capacity   uint16
 }
@@ -160,7 +160,7 @@ func newCircularList(max uint16) *circularList {
 
 // find takes a key and attempts to locate and return a node with
 // the matching key. If said node cannot be found, find returns nil.
-func (c *circularList) find(k frameID) *node {
+func (c *circularList) find(k frameID) *dllNode {
 	ptr := c.head
 	for i := uint16(0); i < c.size; i++ {
 		if ptr.key == k {
@@ -185,7 +185,7 @@ func (c *circularList) insert(k frameID, v bool) error {
 		return ErrListIsFull
 	}
 	// create new node to insert
-	nn := &node{
+	nn := &dllNode{
 		key:  k,
 		val:  v,
 		prev: nil,
@@ -257,7 +257,7 @@ func (c *circularList) isFull() bool {
 }
 
 // scan is a simple closure based iterator
-func (c *circularList) scan(iter func(n *node) bool) {
+func (c *circularList) scan(iter func(n *dllNode) bool) {
 	ptr := c.head
 	for i := uint16(0); i < c.size; i++ {
 		if !iter(ptr) {
@@ -273,7 +273,7 @@ func (c *circularList) String() string {
 		return "nil"
 	}
 	var sb strings.Builder
-	sb.Grow(int(c.size * uint16(unsafe.Sizeof(node{}))))
+	sb.Grow(int(c.size * uint16(unsafe.Sizeof(dllNode{}))))
 	ptr := c.head
 	sb.WriteString(fmt.Sprintf("%v <- ", ptr.prev.key))
 	for i := uint16(0); i < c.size; i++ {

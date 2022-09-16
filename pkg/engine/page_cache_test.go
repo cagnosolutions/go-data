@@ -24,7 +24,7 @@ func TestPageCache(t *testing.T) {
 	// Scenario 1: The buffer pool is empty. We should be able to create a new page.
 	util.Equals(t, PageID(0), page0.getPageID())
 
-	r1 := NewRecord(R_NUM_STR, []byte{1}, []byte("Hello, World!"))
+	r1 := newRecord(R_NUM_STR, []byte{1}, []byte("Hello, World!"))
 
 	// Scenario 2: Once we have a page, we should be able to read and write content.
 	id0, err := page0.addRecord(r1)
@@ -35,7 +35,7 @@ func TestPageCache(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	util.Equals(t, NewRecord(R_NUM_STR, []byte{1}, []byte("Hello, World!")), rec)
+	util.Equals(t, newRecord(R_NUM_STR, []byte{1}, []byte("Hello, World!")), rec)
 
 	// Scenario 3: We should be able to create new pages until we fill up the buffer pool.
 	for i := uint16(1); i < pageCount; i++ {
@@ -67,7 +67,7 @@ func TestPageCache(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	util.Equals(t, NewRecord(R_NUM_STR, []byte{1}, []byte("Hello, World!")), rec2)
+	util.Equals(t, newRecord(R_NUM_STR, []byte{1}, []byte("Hello, World!")), rec2)
 
 	// Scenario 7: If we unpin page 0 and then make a new page, all the buffer pages should
 	// now be pinned. Fetching page 0 should fail.

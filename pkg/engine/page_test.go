@@ -75,7 +75,7 @@ func TestPage_addRecordAndRange(t *testing.T) {
 	}
 	var i int
 	err = p.rangeRecords(
-		func(r *Record) error {
+		func(r *record) error {
 			fmt.Printf("record #%.3d, key=%q, val=%q\n", i, r.Key(), r.Val())
 			i++
 			return nil
@@ -145,16 +145,16 @@ func TestPage_RandomStuff(t *testing.T) {
 	const N = 32
 	var ids []*RecordID
 
-	makeRec := func(n int) Record {
+	makeRec := func(n int) record {
 		rk := fmt.Sprintf("%.2d", n)
 		rv := fmt.Sprintf("[record number %.2d]", n)
-		return NewRecord(R_STR_STR, []byte(rk), []byte(rv))
+		return newRecord(R_STR_STR, []byte(rk), []byte(rv))
 	}
 
-	makeRecSize := func(n int, data []byte) Record {
+	makeRecSize := func(n int, data []byte) record {
 		rk := fmt.Sprintf("%.2d", n)
 		rv := fmt.Sprintf("[record number %.2d %s]", n, string(data))
-		return NewRecord(R_STR_STR, []byte(rk), []byte(rv))
+		return newRecord(R_STR_STR, []byte(rk), []byte(rv))
 	}
 
 	p := newPage(1, P_USED)
@@ -275,87 +275,87 @@ func TestPage_RandomStuff(t *testing.T) {
 func TestPage_Vacuum(t *testing.T) {
 	var rids []*RecordID
 	p := newPage(1, P_USED)
-	id, err := p.addRecord(NewRecord(R_STR_STR, []byte("rec-01"), []byte("this is record 01")))
+	id, err := p.addRecord(newRecord(R_STR_STR, []byte("rec-01"), []byte("this is record 01")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-02"), []byte("this is record 02")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-02"), []byte("this is record 02")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-03"), []byte("this is record 03")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-03"), []byte("this is record 03")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-04"), []byte("this is record 04")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-04"), []byte("this is record 04")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-05"), []byte("this is record 05")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-05"), []byte("this is record 05")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-06"), []byte("this is record 06")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-06"), []byte("this is record 06")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-07"), []byte("this is record 07")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-07"), []byte("this is record 07")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-08"), []byte("this is record 08")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-08"), []byte("this is record 08")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-09"), []byte("this is record 09")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-09"), []byte("this is record 09")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-10"), []byte("this is record 10")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-10"), []byte("this is record 10")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-11"), []byte("this is record 11")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-11"), []byte("this is record 11")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-12"), []byte("this is record 12")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-12"), []byte("this is record 12")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-13"), []byte("this is record 13")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-13"), []byte("this is record 13")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-14"), []byte("this is record 14")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-14"), []byte("this is record 14")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-15"), []byte("this is record 15")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-15"), []byte("this is record 15")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-16"), []byte("this is record 16")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-16"), []byte("this is record 16")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(NewRecord(R_STR_STR, []byte("rec-17"), []byte("this is record 17")))
+	id, err = p.addRecord(newRecord(R_STR_STR, []byte("rec-17"), []byte("this is record 17")))
 	if err != nil {
 		t.Error(err)
 	}
@@ -396,7 +396,7 @@ var addRecords = func(p page) ([]*RecordID, error) {
 	for i := 0; i < 128; i++ {
 		rk := fmt.Sprintf("record-%.6d", i)
 		rv := fmt.Sprintf("this is the value for record #%.6d", i)
-		id, err := p.addRecord(NewRecord(R_STR_STR, []byte(rk), []byte(rv)))
+		id, err := p.addRecord(newRecord(R_STR_STR, []byte(rk), []byte(rv)))
 		if err != nil {
 			return nil, err
 		}
