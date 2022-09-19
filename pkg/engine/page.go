@@ -993,15 +993,17 @@ func (c *cellptr) String() string {
 	)
 }
 
+// https://go.dev/play/p/1CRP9LeYuiC
+
 const (
-	R_BTND = 0x0100 // b+tree node (root or inner)
-	R_BTLN = 0x0200 // b+tree leaf node
-	R_NUM  = 0x01   // number type
-	R_STR  = 0x02   // string type
-	R_PTR  = 0x04   // pointer type
+	R_NOD = 0x0100 // b+tree node (root or inner)
+	R_DAT = 0x0200 // data record
+	R_NUM = 0x01   // number type
+	R_STR = 0x02   // string type
+	R_PTR = 0x04   // pointer type
 )
 
-func checkRecordFlags(rtyp, ktyp, vtyp uint16) uint16 {
+func checkRecordFlags2(rtyp, ktyp, vtyp uint16) uint16 {
 	if rtyp&0x0f00 == 0 {
 		panic("bad record type flag")
 	}
@@ -1011,7 +1013,7 @@ func checkRecordFlags(rtyp, ktyp, vtyp uint16) uint16 {
 	if (vtyp<<4)&0x00f0 == 0 {
 		panic("bad val type flag")
 	}
-	if rtyp&0x0f00 == R_BTND && vtyp != R_PTR {
+	if rtyp&0x0f00 == R_NOD && vtyp != R_PTR {
 		panic("bad val type flag, must have use a pointer flag with this record type")
 	}
 	var f uint16
@@ -1019,11 +1021,6 @@ func checkRecordFlags(rtyp, ktyp, vtyp uint16) uint16 {
 	f |= (ktyp << 0)
 	f |= (vtyp << 4)
 	return f
-}
-
-func main() {
-	r := checkRecordFlags(R_BTND, R_NUM, R_PTR)
-	ftox(r)
 }
 
 func ftox(f uint16) {
