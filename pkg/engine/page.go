@@ -993,36 +993,90 @@ func (c *cellptr) String() string {
 	)
 }
 
+const (
+	R_BTND = 0x0100 // b+tree node (root or inner)
+	R_BTLN = 0x0200 // b+tree leaf node
+	R_NUM  = 0x01   // number type
+	R_STR  = 0x02   // string type
+	R_PTR  = 0x04   // pointer type
+)
+
+func checkRecordFlags(rtyp, ktyp, vtyp uint16) uint16 {
+	if rtyp&0x0f00 == 0 {
+		panic("bad record type flag")
+	}
+	if ktyp&0x000f == 0 || ktyp&0x000f == R_PTR {
+		panic("bad key type flag")
+	}
+	if (vtyp<<4)&0x00f0 == 0 {
+		panic("bad val type flag")
+	}
+	if rtyp&0x0f00 == R_BTND && vtyp != R_PTR {
+		panic("bad val type flag, must have use a pointer flag with this record type")
+	}
+	var f uint16
+	f |= rtyp
+	f |= (ktyp << 0)
+	f |= (vtyp << 4)
+	return f
+}
+
+func main() {
+	r := checkRecordFlags(R_BTND, R_NUM, R_PTR)
+	ftox(r)
+}
+
+func ftox(f uint16) {
+	var ss string
+	var mask uint16
+	ss += fmt.Sprintf("got flag: '0x%.4x'\n", f)
+	for i := 4; i > 0; i -= 2 {
+		switch i {
+		case 4:
+			mask = 0xff00
+		case 2:
+			mask = 0x00ff
+		}
+		ss += fmt.Sprintf("bits %d-%d: ", i-2, i)
+		ss += fmt.Sprintf("0x%.2x", (f & mask))[:4]
+		ss += "\n"
+	}
+	fmt.Println(ss)
+}
+
 // record flags
 const (
-	RK_NUM = 0x0001 //	0000000000000001
-	RK_STR = 0x0002 //	0000000000000010
-	RK_PTR = 0x0004 // 	0000000000000100
-	RK_CUS = 0x0008 // 	0000000000001000
+	R_KEYREC = 0x00010000
+	R_KEYVAL = 0x00020000
 
-	RV_NUM = 0x0010 // 	0000000000010000
-	RV_STR = 0x0020 // 	0000000000100000
-	RV_PTR = 0x0040 // 	0000000001000000
-	RV_CUS = 0x0080 //  0000000010000000
+	RK_NUM = 0x00000001 //	00000000000000000000000000000001
+	RK_STR = 0x00000002 //	00000000000000000000000000000010
+	// RK_PTR = 0x00000004 // 	00000000000000000000000000000100
+	// RK_CUS = 0x00000008 // 	00000000000000000000000000001000
 
-	PTR_RENT = 0x0100 // 0000000100000000
-	PTR_CHLD = 0x0200 // 0000001000000000
-	PTR_PREV = 0x0400 // 0000010000000000
-	PTR_NEXT = 0x0800 // 0000100000000000
+	RV_NUM = 0x00000010 // 	00000000000000000000000000010000
+	RV_STR = 0x00000020 // 	00000000000000000000000000100000
+	RV_PTR = 0x00000040 // 	00000000000000000000000001000000
+	// RV_CUS = 0x00000080 //  00000000000000000000000010000000
 
-	keyMask = 0x000f //  0000000000001111
-	valMask = 0x00f0 //  0000000011110000
-	ptrMask = 0x0f00 //  0000111100000000
-	cusMask = 0xf000 //  1111000000000000
+	PTR_RENT = 0x00000100 // 00000000000000000000000100000000
+	PTR_CHLD = 0x00000200 // 00000000000000000000001000000000
+	PTR_PREV = 0x00000400 // 00000000000000000000010000000000
+	PTR_NEXT = 0x00000800 // 00000000000000000000100000000000
+
+	keyMask = 0x0000000f //  00000000000000000000000000001111
+	valMask = 0x000000f0 //  00000000000000000000000011110000
+	ptrMask = 0x00000f00 //  00000000000000000000111100000000
+	cusMask = 0x0000f000 //  00000000000000001111000000000000
 )
 
 // checkRecordFlags checks the flags that are set in the
 // recordHeader to see if there are any that are set that
 // should not be set or that have incorrect values.
-func checkRecordFlags(flags uint16) error {
+func checkRecordFlags(flags uint32) error {
 	if (flags&keyMask)&RK_NUM == 0 &&
-		(flags&keyMask)&RK_STR == 0 &&
-		(((flags&keyMask)&RK_PTR != 0) && (flags&ptrMask == 0)) {
+		(flags&keyMask)&RK_STR == 0 {
+		// (((flags&keyMask)&RK_PTR != 0) && (flags&ptrMask == 0)) {
 		return ErrBadKeyFlagInRecord
 	}
 	if (flags&valMask)&RV_NUM == 0 &&
@@ -1030,18 +1084,18 @@ func checkRecordFlags(flags uint16) error {
 		(((flags&valMask)&RV_PTR != 0) && (flags&ptrMask == 0)) {
 		return ErrBadValFlagInRecord
 	}
-	if (flags&cusMask != 0) &&
-		((flags&keyMask)&RK_CUS == 0) ||
-		((flags&valMask)&RV_CUS == 0) {
-		return ErrBadCustomFlagInRecord
-	}
+	// if (flags&cusMask != 0) &&
+	// 	(((flags&keyMask)&RK_CUS == 0) ||
+	// 		((flags&valMask)&RV_CUS == 0)) {
+	// 	return ErrBadCustomFlagInRecord
+	// }
 	return nil
 }
 
 // recordHeader is a pageHeader struct for encoding and
 // decoding information for a record
 type recordHeader struct {
-	Flags  uint16
+	Flags  uint32
 	KeyLen uint16
 	ValLen uint16
 }
@@ -1051,7 +1105,7 @@ type record []byte
 
 // newRecord initiates and returns a new record using the flags provided
 // as the indicators of what types the keys and values should hold.
-func newRecord(flags uint16, key, val []byte) record {
+func newRecord(flags uint32, key, val []byte) record {
 	err := checkRecordFlags(flags)
 	if err != nil {
 		panic(err)
@@ -1070,31 +1124,31 @@ func newRecord(flags uint16, key, val []byte) record {
 	return rec
 }
 
-func newPtrRecord(kind uint16, ptr uint32) record {
-	var flags uint16
-	if kind == PTR_RENT ||
-		kind == PTR_CHLD ||
-		kind == PTR_PREV ||
-		kind == PTR_NEXT {
-		flags = kind | RK_PTR | RV_PTR
-	}
-	rsz := recordHeaderSize + 4 + 4
-	rec := make(record, rsz, rsz)
-	rec.encRecordHeader(
-		&recordHeader{
-			Flags:  flags,
-			KeyLen: 4,
-			ValLen: 4,
-		},
-	)
-	err := checkRecordFlags(flags)
-	if err != nil {
-		panic(err)
-	}
-	encU32(rec[recordHeaderSize:recordHeaderSize+4], ptr)
-	encU32(rec[recordHeaderSize+4:recordHeaderSize+8], ptr)
-	return rec
-}
+// func newPtrRecord(kind uint32, ptr uint32) record {
+// 	var flags uint16
+// 	if kind == PTR_RENT ||
+// 		kind == PTR_CHLD ||
+// 		kind == PTR_PREV ||
+// 		kind == PTR_NEXT {
+// 		flags = kind | RK_PTR | RV_PTR
+// 	}
+// 	rsz := recordHeaderSize + 4 + 4
+// 	rec := make(record, rsz, rsz)
+// 	rec.encRecordHeader(
+// 		&recordHeader{
+// 			Flags:  flags,
+// 			KeyLen: 4,
+// 			ValLen: 4,
+// 		},
+// 	)
+// 	err := checkRecordFlags(flags)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	encU32(rec[recordHeaderSize:recordHeaderSize+4], ptr)
+// 	encU32(rec[recordHeaderSize+4:recordHeaderSize+8], ptr)
+// 	return rec
+// }
 
 // newUintUintRecord creates and returns a new record that uses uint32's
 // as keys and uint32's as values.
@@ -1168,9 +1222,9 @@ func _(key []byte, val []byte) record {
 // directly into the record as a []byte slice
 func (r *record) encRecordHeader(h *recordHeader) {
 	_ = (*r)[recordHeaderSize] // early bounds check
-	encU16((*r)[0:2], h.Flags)
-	encU16((*r)[2:4], h.KeyLen)
-	encU16((*r)[4:6], h.ValLen)
+	encU32((*r)[0:4], h.Flags)
+	encU16((*r)[4:6], h.KeyLen)
+	encU16((*r)[6:8], h.ValLen)
 }
 
 // decRecordHeader decodes the header from the record and fills and
@@ -1178,19 +1232,19 @@ func (r *record) encRecordHeader(h *recordHeader) {
 func (r *record) decRecordHeader() *recordHeader {
 	_ = (*r)[recordHeaderSize] // early bounds check
 	return &recordHeader{
-		Flags:  decU16((*r)[0:2]),
-		KeyLen: decU16((*r)[2:4]),
-		ValLen: decU16((*r)[4:6]),
+		Flags:  decU32((*r)[0:4]),
+		KeyLen: decU16((*r)[4:6]),
+		ValLen: decU16((*r)[6:8]),
 	}
 }
 
 // Flags returns the underlying uint16 representing the flags set for this record.
-func (r *record) Flags() uint16 {
-	return decU16((*r)[0:2])
+func (r *record) Flags() uint32 {
+	return decU32((*r)[0:4])
 }
 
-func (r *record) hasFlag(flag uint16) bool {
-	return decU16((*r)[0:2])&flag != 0
+func (r *record) hasFlag(flag uint32) bool {
+	return decU32((*r)[0:4])&flag != 0
 }
 
 // Key returns the underlying slice of bytes representing the record key
@@ -1204,12 +1258,12 @@ func (r *record) Val() []byte {
 }
 
 // KeyType returns the underlying type of the record key
-func (r *record) KeyType() uint16 {
+func (r *record) KeyType() uint32 {
 	return r.Flags() & keyMask
 }
 
 // ValType returns the underlying type of the record value
-func (r *record) ValType() uint16 {
+func (r *record) ValType() uint32 {
 	return r.Flags() & valMask
 }
 

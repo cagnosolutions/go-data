@@ -141,6 +141,8 @@ func TestPage_Sync(t *testing.T) {
 	wg.Wait()
 }
 
+var R_STR_STR uint32 = RK_STR | RV_STR
+
 func TestPage_RandomStuff(t *testing.T) {
 	const N = 32
 	var ids []*RecordID

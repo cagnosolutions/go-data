@@ -116,7 +116,7 @@ func TestClockReplacer_CircularList(t *testing.T) {
 	// fmt.Println("list:", list)
 
 	// test scan
-	iter := func(n *node) bool {
+	iter := func(n *dllNode) bool {
 		// fmt.Println(n)
 		return n != nil
 	}

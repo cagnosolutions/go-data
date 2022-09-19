@@ -8,6 +8,8 @@ import (
 	"github.com/cagnosolutions/go-data/pkg/util"
 )
 
+var R_NUM_STR uint32 = RK_NUM | RV_STR
+
 func TestPageCache(t *testing.T) {
 
 	pageCount := uint16(64)

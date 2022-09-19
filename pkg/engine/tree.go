@@ -15,11 +15,12 @@ func (n *node) numKeys() uint16 {
 // boolean indicating true if the node has a parent and false
 // if it does not.
 func (n *node) parent() (ptr, bool) {
-
+	return 0, false
 }
 
 func (n *node) min() uint32 {
-	if n.n.getPrev()
+	// if n.n.getPrev()
+	return 0
 }
 
 // pageTree is a b plus tree wrapping the page cache.
@@ -40,7 +41,7 @@ func newPageTree(path string) (*pageTree, error) {
 }
 
 func encodeNode(n *node) {
-	newPtrRecord()
+	// newPtrRecord()
 }
 
 // insert takes a record and inserts it into the tree causing the
@@ -49,11 +50,12 @@ func encodeNode(n *node) {
 // exists within the tree, it will perform an upsert.
 func (pt *pageTree) insert(r *record) error {
 	// If the root of the tree is
+	return nil
 }
 
 // findLeaf traces the path from the root node down to a leaf node,
 // searching according to the record key. It returns the leaf node
 // containing the given key.
 func (pt *pageTree) findLeaf(k []byte) uint32 {
-
+	return 0
 }
