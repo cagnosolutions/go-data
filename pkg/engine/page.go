@@ -23,6 +23,10 @@ var (
 	decU64 = binary.LittleEndian.Uint64
 )
 
+/*
+ * Section containing types and constants used in the page and associated parts
+ */
+
 // page latch
 var pgLatch sync.Mutex
 
@@ -69,6 +73,10 @@ const (
 	offUpper    uint16 = 22 // upper=uint16		offs=22-24	(2 bytes)
 )
 
+/*
+ * Section containing types and methods for `pageHeader`
+ */
+
 // pageHeader represents the header of a page.
 type pageHeader struct {
 	ID    uint32 // id of page
@@ -94,6 +102,10 @@ func (h *pageHeader) String() string {
 	}
 	return string(b)
 }
+
+/*
+ * Section containing types and methods for `page`
+ */
 
 // page represents a page
 type page []byte
@@ -873,6 +885,10 @@ func (p *page) String() string {
 	return ss
 }
 
+/*
+ * Section containing types and methods for `cellptr`
+ */
+
 const (
 	// C_FREE C_USED and C_MAGK are flags for the cellptrs
 	C_MAGK uint16 = 0x5a00
@@ -993,9 +1009,25 @@ func (c *cellptr) String() string {
 	)
 }
 
+/*
+ * Section containing types and methods for `record`
+ */
+
 // https://go.dev/play/p/1CRP9LeYuiC
 
 const (
+	_ = 0x11
+
+	_ = 0x0114 // key record with num keys (and ptr values)
+	_ = 0x0124 // key record with str keys (and ptr values)
+	_ = 0x0211 // data record with num keys and num values
+	_ = 0x0212 // data record with num keys and str values
+	_ = 0x0221 // data record with str keys and num values
+	_ = 0x0222 // data record with str keys and str values
+
+	_ = 0x214 // data record with num keys and ptr values <--
+	_ = 0x224 // data record with str keys and ptr values <--
+
 	R_NOD = 0x0100 // b+tree node (root or inner)
 	R_DAT = 0x0200 // data record
 	R_NUM = 0x01   // number type
@@ -1087,6 +1119,31 @@ func checkRecordFlags(flags uint32) error {
 	// 	return ErrBadCustomFlagInRecord
 	// }
 	return nil
+}
+
+/*
+ * Section containing types and methods for the `recordHeader` and `record`
+ */
+
+const (
+	// --->>> https://go.dev/play/p/XUWtw4viTrF <<<---
+	rNum    = 0x01 // number type
+	rStr    = 0x02 // string type
+	rPtr    = 0x04 // pointer type
+	rNumNum = 0x11 // number types for keys, and number types for values
+	rNumStr = 0x12 // number types for keys, and string types for values
+	rNumPtr = 0x14 // number types for keys, and pointer types for values
+	rStrNum = 0x21 // string types for keys, and number types for values
+	rStrStr = 0x22 // string types for keys, and string types for values
+	rStrPtr = 0x24 // string types for keys, and pointer types for values
+)
+
+func setHiBits(flag *uint8, t uint8) {
+	*flag |= t << 4
+}
+
+func setLoBits(flag *uint8, t uint8) {
+	*flag |= t
 }
 
 // recordHeader is a pageHeader struct for encoding and
