@@ -87,7 +87,7 @@ func TestDiskManager_WritePage(t *testing.T) {
 		pg := newPage(uint32(pid), P_USED)
 		rk := []byte(fmt.Sprintf("%.4d", pid))
 		rv := []byte(fmt.Sprintf("some data for page #%.4d", pid))
-		_, err = pg.addRecord(newRecord(R_STR_STR, rk, rv))
+		_, err = pg.addRecord(newRecord(rStrStr, rk, rv))
 		if err != nil {
 			t.Errorf("write: error writing page record: %s", err)
 		}
@@ -131,7 +131,7 @@ func TestDiskManager_ReadPage(t *testing.T) {
 		pg := newPage(uint32(pid), P_USED)
 		rk := []byte(fmt.Sprintf("%.4d", pid))
 		rv := []byte(fmt.Sprintf("some data for page #%.4d", pid))
-		_, err = pg.addRecord(newRecord(R_STR_STR, rk, rv))
+		_, err = pg.addRecord(newRecord(rStrStr, rk, rv))
 		if err != nil {
 			t.Errorf("read: error writing page record: %s", err)
 		}
