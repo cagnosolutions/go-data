@@ -11,20 +11,31 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
-	"strings"
 	"testing"
 	"text/tabwriter"
 )
 
-func Trace() string {
-	pc := make([]uintptr, 10) // at least 1 entry needed
-	runtime.Callers(3, pc)
-	f := runtime.FuncForPC(pc[0])
-	file, line := f.FileLine(pc[0])
-	sfile := strings.Split(file, "/")
-	sname := strings.Split(f.Name(), "/")
-	return fmt.Sprintf("[%s:%d %s]", sfile[len(sfile)-1], line, sname[len(sname)-1])
-}
+// func trace() string {
+// 	pc := make([]uintptr, 10) // at least 1 entry needed
+// 	runtime.Callers(3, pc)
+// 	f := runtime.FuncForPC(pc[0])
+// 	file, line := f.FileLine(pc[0])
+// 	sfile := strings.Split(file, "/")
+// 	sname := strings.Split(f.Name(), "/")
+// 	return fmt.Sprintf("[%s:%d %s]", sfile[len(sfile)-1], line, sname[len(sname)-1])
+// }
+//
+// func Trace(err error) {
+// 	log.Printf("%s (errType=%T, err=%s)", trace(), err, err)
+// }
+//
+// func Traceln(err error) {
+// 	log.Printf("%s (errType=%T, err=%s)\n", trace(), err, err)
+// }
+//
+// func Tracef(format string, v ...interface{}) {
+// 	log.Printf(trace()+" "+format, v...)
+// }
 
 func BtoKB(b uint64) float64 {
 	return float64(b) / 1024
@@ -55,10 +66,6 @@ func PrintStatsTab(mem runtime.MemStats) {
 	fmt.Fprintf(w, "%.2f\t%.2f\t%.2f\t%v\t\n", BtoKB(mem.Alloc), BtoKB(mem.TotalAlloc), BtoKB(mem.HeapAlloc), mem.NumGC)
 	fmt.Fprintln(w, "-----\t-----\t-----\t-----\t")
 	w.Flush()
-}
-
-func DEBUG(format string, v ...interface{}) {
-	log.Printf(Trace()+" "+format, v...)
 }
 
 func AssertExpected(t *testing.T, expected, got interface{}) bool {
