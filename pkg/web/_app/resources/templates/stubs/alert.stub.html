@@ -1,0 +1,61 @@
+<!-- login error -->
+{{ if .RequestParameters.Error }}
+<div id="alert" class="container">
+    <div class="alert alert-danger alert-dismissable">
+        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
+        Invalid username or password. Please try again.
+    </div>
+</div>
+{{ end }}
+
+<!-- login expired -->
+{{ if .RequestParameters.Expired }}
+<div id="alert" class="container">
+    <div class="alert alert-danger alert-dismissable">
+        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
+        Your session has expired due to inactivity. Please login.
+    </div>
+</div>
+{{ end }}
+
+{{ if .RequestParameters.Invalid }}
+<div id="alert" class="container">
+    <div class="alert alert-danger alert-dismissable">
+        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
+        Your session is invalid, maybe you're logged in from another location?
+    </div>
+</div>
+{{ end }}
+
+{{ if .RequestParameters.FormError }}
+<div id="alert" class="container">
+    <div class="alert alert-danger alert-dismissable">
+        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
+        ${RequestParameters.formError}
+    </div>
+</div>
+{{ end }}
+
+<!-- other alerts -->
+{{ if .alert }}
+<div id="alert" class="container">
+    <div class="alert alert-info alert-dismissable">
+        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
+        ${alert}
+    </div>
+</div>
+{{ else if .alertError }}
+<div id="alert" class="container">
+    <div class="alert alert-danger alert-dismissable">
+        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
+        ${alertError}
+    </div>
+</div>
+{{ else if .alertSuccess }}
+<div id="alert" class="container">
+    <div class="alert alert-success alert-dismissable">
+        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
+        ${alertSuccess}
+    </div>
+</div>
+{{ end }}

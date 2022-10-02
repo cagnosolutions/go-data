@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+{{ template "header.stub.gohtml" . }}
+
+    <title>Login</title>
+
+</head>
+
+<body>
+
+<!-- navigation -->
+{{ template "navbar.stub.gohtml" . }}
+<!-- navigation -->
+
+<!-- main section -->
+<!-- beg: login-form -->
+<div class="container">
+    <div class="row justify-content-md-center">
+        <div class="col col-md-4">
+            <div class="row row-pad"></div>
+            <div class="card bg-light mb-3">
+                <div class="card-header text-center">Login</div>
+                <div class="card-body">
+                    <form id="login-form" action="/admin/login" method="post" novalidate="novalidate" autocomplete="off">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="email" class="form-control" name="username" id="username" aria-describedby="username-help">
+                            <!--<div id="username-help" class="form-text">Please login using your email address</div>-->
+                            <!--<div class="invalid-feedback">Username error</div>-->
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" name="password" id="password" aria-describedby="password-help">
+                            <!--<div id="password-help" class="form-text">Password must have at least 6 characters</div>-->
+                            <!--<div class="invalid-feedback">Password error</div>-->
+                        </div>
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="submit" class="btn btn-success me-md-2">Login</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- end: login-form -->
+<!-- main section -->
+
+<!-- scripts -->
+{{ template "scripts.stub.gohtml" . }}
+{{ template "validate.stub.gohtml" . }}
+<!-- scripts -->
+
+</body>
+
+<!-- footer -->
+{{ template "footer.stub.gohtml" . }}
+<!-- footer -->
+
+</html>

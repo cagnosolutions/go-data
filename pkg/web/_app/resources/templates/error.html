@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {{ template "header.stub.html" . }}
+    <title>Error</title>
+</head>
+
+<body>
+
+<!-- navigation -->
+{{ template "navbar.stub.html" . }}
+<!-- navigation -->
+
+<!-- main section -->
+<section class="container">
+    <div class="fs-1 fw-light text-center">
+        <div class="position-absolute top-50 start-50 translate-middle">
+            <span>{{ .ErrorCode }}</span>&nbsp;<span class="text-muted fst-italic">{{ .ErrorText }}</span>
+            <br>
+            <span class="fs-3 fst-italic fw-lighter text-mutex">
+<!--                So sorry, but it appears that something has gone wrong.-->
+                {{ .ErrorTextLong }}
+            </span>
+            <br>
+            <button onclick="history.go(-1)" type="button" class="btn btn-secondary">Please, take me back!</button>
+        </div>
+    </div>
+</section>
+<!-- main section -->
+
+<!-- scripts -->
+{{ template "scripts.stub.html" . }}
+<!-- scripts -->
+
+</body>
+
+<!-- footer -->
+{{ template "footer.stub.html" . }}
+<!-- footer -->
+
+</html>

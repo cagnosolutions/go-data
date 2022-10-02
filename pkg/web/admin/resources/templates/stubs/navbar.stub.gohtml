@@ -1,0 +1,48 @@
+<!--<div class="navbar navbar-default navbar-fixed-top" role="navigation">-->
+<!--    <div class="container">-->
+<!--        <div class="navbar-header">-->
+<!--            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">-->
+<!--                <span class="sr-only">Toggle navigation</span>-->
+<!--                <span class="icon-bar"></span>-->
+<!--                <span class="icon-bar"></span>-->
+<!--                <span class="icon-bar"></span>-->
+<!--            </button>-->
+<!--            <a class="navbar-brand scroll" href="#home">-->
+<!--                {{ template "brand.stub.html" }}-->
+<!--            </a>-->
+<!--        </div>-->
+<!--        <div class="collapse navbar-collapse">-->
+<!--            <ul class="nav navbar-nav navbar-right">-->
+<!--                <li><a href="#link1">Link1</a></li>-->
+<!--                <li><a href="#link2">Link2</a></li>-->
+<!--                {{ if .authenticated }}-->
+<!--                <li><a href="/secure/home">Home</a></li>-->
+<!--                <li><a href="/logout">Logout</a></li>-->
+<!--                {{ else }}-->
+<!--                <li><a href="/login">Login</a></li>-->
+<!--                {{ end }}-->
+<!--            </ul>-->
+<!--        </div>-->
+<!--    </div>-->
+<!--</div>-->
+
+<!-- beg: navbar -->
+<div class="container">
+    <nav class="navbar fixed-top navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="#">Some Company</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavAltMarkup" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
+                <div class="navbar-nav ms-auto">
+                    <a class="nav-link" href="/index">Index</a>
+                    <a class="nav-link" href="/login">Login</a>
+                    <a class="nav-link" href="/secure/home">My Home</a>
+                    <a class="nav-link text-end" href="/logout">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+</div>
+<!-- end: navbar -->
