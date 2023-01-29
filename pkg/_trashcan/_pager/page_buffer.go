@@ -39,15 +39,15 @@ func (pb *pageBuffer) NewPage() page {
 			// removing the page from the page table.
 			if pg.IsDirty() {
 				// NOTE: consider handling error here?
-				pb.disk.WritePage(pg.GetPageID(), pg.Data())
+				pb.disk.WritePage(PageID(pg.getPageID()), pg.Data())
 			}
 			// And remove page from the page table.
-			delete(pb.table, pg.GetPageID())
+			delete(pb.table, PageID(pg.getPageID()))
 		}
 	}
 	// Allocate a new page.
 	pid := pb.disk.AllocatePage()
-	pg := newPage(pid)
+	pg := newPage(uint32(pid))
 
 	// Update page table before returning.
 	pb.table[pid] = fid

@@ -158,13 +158,13 @@ func calcBufferSize(pageSize uint16, bufferSize uint32) uint32 {
 // newPage attempts to allocate and return a new page in the bufferManager.
 //
 // It undertakes the following steps in order to accomplish this task. Steps:
-// 	1.0 - If the buffer pool is full and all pages are pinned return nil.
-// 	2.0 - Pick a victim page P
-// 		2.1 - First look in the free list for P
-// 		2.2 - If P cannot be found in the free list, use the replacer.
-// 	3.0 - Update P's metadata. Zero out memory ad add P to the page table.
-// 	4.0 - Return a pointer to P.
 //
+//	1.0 - If the buffer pool is full and all pages are pinned return nil.
+//	2.0 - Pick a victim page P
+//		2.1 - First look in the free list for P
+//		2.2 - If P cannot be found in the free list, use the replacer.
+//	3.0 - Update P's metadata. Zero out memory ad add P to the page table.
+//	4.0 - Return a pointer to P.
 func (b *bufferManager) newPage() page.Page {
 	// First we need a frameID we can use to proceed. We will call
 	// getUsableFrame which will first check our free list and if we do
@@ -226,11 +226,10 @@ func (b *bufferManager) unpinPage(pid page.PageID, isDirty bool) error {
 //		1.1 - If P exists, pin it and return it immediately.
 //	 	1.2 - If P does not exist, find a replacement page (R).
 //			1.2.0 - First check the free list for R. (always check free list first)
-// 			1.2.1 - If R can not be found in the free list, use the replacer.
+//			1.2.1 - If R can not be found in the free list, use the replacer.
 //	2.0 - If R is dirty, write it back to the disk.
 //	3.0 - Delete R from the page table and insert P.
-// 	4.0 - Update P's metadata. Read in page from disk, and return a pointer to P.
-//
+//	4.0 - Update P's metadata. Read in page from disk, and return a pointer to P.
 func (b *bufferManager) fetchPage(pid page.PageID) page.Page {
 	// Check to see if the frame ID is in the page table.
 	if fid, found := b.table[pid]; found {
