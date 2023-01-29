@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"log"
 	"sync"
+	"time"
 )
 
 // pageCache is the access level structure wrapping up the bufferPool, and DiskManager,
@@ -13,6 +15,9 @@ type pageCache struct {
 	io        *DiskManager       // underlying current manager
 	freeList  []frameID          // list of frames that are free to use
 	pageTable map[PageID]frameID // table of the current page to frame mappings
+
+	hits   uint64 // number of times a page was found in the buffer pool
+	misses uint64 // number of times a page was not found (had to be paged in)
 }
 
 // openPageCache opens an existing storage manager instance if one exists with the same namespace
@@ -47,7 +52,11 @@ func openPageCache(base string, pageCount uint16) (*pageCache, error) {
 }
 
 // newPage returns a fresh empty page from the pool.
+// TODO: consider returning an error from here in the case where the pool is full
 func (pc *pageCache) newPage() page {
+	// latch
+	pc.latch.Lock()
+	defer pc.latch.Unlock()
 	// First we must acquire a Frame in order to store our page. Calling
 	// GetUsableFrame first checks our freeList and if we cannot find one in there
 	// our replacement policy is used to locate a victimized one Frame.
@@ -59,7 +68,7 @@ func (pc *pageCache) newPage() page {
 			return nil
 		}
 		// Nope, it's something more sinister... shoot.
-		DefaultLogger.Panic("%s", err)
+		DefaultLogger.Panic("{!!!} %s", err)
 	}
 	// Allocate (get the next sequential PageID) so we can use it to initialize
 	// the next page we will use.
@@ -78,6 +87,9 @@ func (pc *pageCache) newPage() page {
 
 // fetchPage retrieves specific page from the pool, or storage medium by the page ID.
 func (pc *pageCache) fetchPage(pid PageID) page {
+	// latch
+	pc.latch.Lock()
+	defer pc.latch.Unlock()
 	// Check to see if the PageID is located in the pageTable.
 	if fid, found := pc.pageTable[pid]; found {
 		// We located it, so now we access the Frame and ensure that it will
@@ -85,6 +97,8 @@ func (pc *pageCache) fetchPage(pid PageID) page {
 		pf := pc.pool[fid]
 		pf.pinCount++
 		pc.replacer.Pin(fid)
+		// We have a page hit, so we can increase our hit counter
+		pc.hits++
 		// And now, we can safely return our Page.
 		return pf.page
 	}
@@ -117,12 +131,17 @@ func (pc *pageCache) fetchPage(pid PageID) page {
 	pc.pageTable[pid] = *fid
 	// And update the pool
 	pc.pool[*fid] = pf
+	// We had to swap a page in, so we can update our page miss counter
+	pc.misses++
 	// Finally, return our Page for use
 	return pf.page
 }
 
 // unpinPage allows for manual unpinning of a specific page from the pool by the page ID.
 func (pc *pageCache) unpinPage(pid PageID, isDirty bool) error {
+	// latch
+	pc.latch.Lock()
+	defer pc.latch.Unlock()
 	// Check to see if the PageID is located in the pageTable.
 	fid, found := pc.pageTable[pid]
 	if !found {
@@ -151,6 +170,9 @@ func (pc *pageCache) unpinPage(pid PageID, isDirty bool) error {
 // flushPage forces a page to be written onto the storage medium, and decrements the
 // pin count on the frame potentially enabling the frame to be reused.
 func (pc *pageCache) flushPage(pid PageID) error {
+	// latch
+	pc.latch.Lock()
+	defer pc.latch.Unlock()
 	// Check to see if the PageID is located in the pageTable.
 	fid, found := pc.pageTable[pid]
 	if !found {
@@ -176,6 +198,9 @@ func (pc *pageCache) flushPage(pid PageID) error {
 // deletePage removes the page from the buffer pool, and decrements the pin count on the
 // frame potentially enabling the frame to be reused.
 func (pc *pageCache) deletePage(pid PageID) error {
+	// latch
+	pc.latch.Lock()
+	defer pc.latch.Unlock()
 	// Check to see if the PageID is located in the pageTable.
 	fid, found := pc.pageTable[pid]
 	if !found {
@@ -291,6 +316,20 @@ func (pc *pageCache) close() error {
 		return err
 	}
 	return nil
+}
+
+func (pc *pageCache) monitor() {
+	for {
+		time.Sleep(500 * time.Millisecond)
+		// Check to see if the hit rate is below 80%
+		pc.latch.Lock()
+		hitRate := float64(pc.hits) / float64(pc.misses)
+		pc.latch.Unlock()
+		if hitRate < 0.8 {
+			// We should consider increasing the pool size
+			log.Printf("page cache: hit rate is at %f%%, consider increasing pool size.\n", hitRate)
+		}
+	}
 }
 
 func (pc *pageCache) JSON() string {

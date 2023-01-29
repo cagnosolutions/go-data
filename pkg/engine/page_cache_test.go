@@ -1,9 +1,12 @@
 package engine
 
 import (
+	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/cagnosolutions/go-data/pkg/util"
 )
@@ -77,6 +80,98 @@ func TestPageCache(t *testing.T) {
 	util.Equals(t, PageID(pageCount+4), pg.getPageID())
 	util.Equals(t, page(nil), pc.newPage())
 	util.Equals(t, page(nil), pc.fetchPage(PageID(0)))
+
+	err = pc.flushAll()
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = pc.close()
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = os.Remove(filepath.Join(testDir, testFile))
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = os.Remove(testDir)
+	if err != nil {
+		t.Error(err)
+	}
+
+}
+
+func TestPageCache_HitRate(t *testing.T) {
+
+	pageCount := uint16(16)
+	testDir := "testing"
+	testFile := "page_cache_test.txt"
+
+	pc, err := openPageCache(filepath.Join(testDir, testFile), pageCount)
+	if err != nil {
+		t.Errorf("opening buffer manager: %s\n", err)
+	}
+	go pc.monitor()
+
+	var pageIDs []uint32
+
+	for i := 0; i < 32; i++ {
+		p := pc.newPage()
+		pid := p.getPageID()
+		pageIDs = append(pageIDs, pid)
+		log.Printf("Creating a new page (page %d)\nAdding 32 records...\n", pid)
+		for j := 0; j < 32; j++ {
+			var rid *RecordID
+			rid, err = p.addRecord(
+				newRecord(
+					rNumStr, []byte{byte(j)},
+					[]byte(fmt.Sprintf("this record-%d data for page-%d\n", j, i)),
+				),
+			)
+			if err != nil {
+				t.Errorf("Adding record %d to page %d failed: %s", rid, pid, err)
+			}
+			// log.Printf("Added record %v, to page %d\n", rid, pid)
+
+		}
+		log.Printf("Unpinning page %d\n", pid)
+		err = pc.unpinPage(pid, true)
+		if err != nil {
+			t.Errorf("Unpinning page %d failed: %s", pid, err)
+		}
+		log.Printf("Flushing page %d\n", pid)
+		err = pc.flushPage(pid)
+		if err != nil {
+			t.Errorf("Flushing page %d failed: %s", pid, err)
+		}
+		fmt.Println()
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	fmt.Println()
+	for _, pid := range pageIDs[:10] {
+		p := pc.fetchPage(pid)
+		if p == nil {
+			t.Errorf("Got nil page for pid %d\n", pid)
+		}
+	}
+
+	for _, pid := range pageIDs {
+		log.Printf("Fetching page %d\n", pid)
+		p := pc.fetchPage(pid)
+		if p == nil {
+			t.Errorf("Got nil page for pid %d\n", pid)
+		}
+		time.Sleep(250 * time.Millisecond)
+		log.Printf("Unpinning page %d\n", pid)
+		err = pc.unpinPage(pid, false)
+		if err != nil {
+			t.Errorf("Unpinning page %d failed: %s", pid, err)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 
 	err = pc.flushAll()
 	if err != nil {

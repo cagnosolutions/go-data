@@ -222,7 +222,13 @@ func TestPage_RandomStuff(t *testing.T) {
 	fmt.Println()
 	fmt.Printf("taking a look at the Page details...\n")
 	fmt.Println(p.String())
-	fmt.Println(">>>>> [05 ADDING (12) MORE] <<<<<")
+	ph := p.getPageHeader()
+	adding := (N + 13) - N
+	fmt.Printf(
+		">>>>> (cells=%d, free=%d, adding %d records, cells_after=%d)\n",
+		ph.Cells, ph.Free, adding, int(ph.Cells-ph.Free)+adding,
+	)
+	fmt.Printf(">>>>> [05 ADDING (%d) MORE] <<<<<\n", adding)
 	for i := 32; i < N+13; i++ {
 		id, err := p.addRecord(makeRec(i))
 		if err != nil {

@@ -1,14 +1,14 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="TestBufferPool" type="GoTestRunConfiguration" factoryName="Go Test" singleton="false">
+  <configuration default="false" name="TestPageCache" type="GoTestRunConfiguration" factoryName="Go Test" singleton="false">
     <module name="go-data" />
-    <working_directory value="$PROJECT_DIR$/pkg/pager" />
+    <working_directory value="$PROJECT_DIR$/pkg/engine" />
     <go_parameters value="-race -vet=all" />
     <kind value="PACKAGE" />
-    <package value="github.com/cagnosolutions/go-data/pkg/pager" />
+    <package value="github.com/cagnosolutions/go-data/pkg/engine" />
     <directory value="$PROJECT_DIR$" />
     <filePath value="$PROJECT_DIR$" />
     <framework value="gotest" />
-    <pattern value="^TestBufferPool_.*$" />
+    <pattern value="^TestPageCache_.*$" />
     <method v="2" />
   </configuration>
 </component>
