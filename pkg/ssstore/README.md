@@ -1,0 +1,1 @@
+### SSStore is a Segmented Strings append only Store

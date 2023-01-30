@@ -1,4 +1,4 @@
-package log
+package ssstore
 
 import (
 	"io"
@@ -49,7 +49,7 @@ func TestIndex(t *testing.T) {
 	if err != io.EOF {
 		t.Errorf("bad error value (%v != %v)", err, io.EOF)
 	}
-	//util.AssertEqual(t, io.EOF, err)
+	// util.AssertEqual(t, io.EOF, err)
 	_ = idx.Close()
 
 	// index should build its state from the existing file
@@ -61,11 +61,11 @@ func TestIndex(t *testing.T) {
 	if off != uint32(1) {
 		t.Errorf("bad offset (%d != %d)", off, uint32(1))
 	}
-	//util.AssertEqual(t, uint32(1), off)
+	// util.AssertEqual(t, uint32(1), off)
 	if pos != entries[1].Pos {
 		t.Errorf("bad position (%d != %d)", pos, entries[1].Pos)
 	}
-	//util.AssertEqual(t, entries[1].Pos, pos)
+	// util.AssertEqual(t, entries[1].Pos, pos)
 }
 
 // END: end

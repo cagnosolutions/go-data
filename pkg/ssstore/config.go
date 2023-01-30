@@ -1,4 +1,4 @@
-package log
+package ssstore
 
 type Config struct {
 	Segment struct {

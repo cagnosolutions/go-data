@@ -11,8 +11,7 @@ import (
 	"strings"
 	"sync"
 	"text/tabwriter"
-
-	"github.com/cagnosolutions/go-data/pkg/dbms/errs"
+	// "github.com/cagnosolutions/go-data/pkg/dbms/errs"
 )
 
 // RE: scratch_184.go
@@ -73,12 +72,13 @@ var bin = binary.LittleEndian
 
 // cellPtr is a struct which is an index for a record. **It should be noted
 // that a cellPtr pointer may also just end up becoming a single uint64.
-// type cellPtr struct {
-// 	id     uint16
-// 	flags  uint16
-// 	offset uint16
-// 	length uint16
-// }
+//
+//	type cellPtr struct {
+//		id     uint16
+//		flags  uint16
+//		offset uint16
+//		length uint16
+//	}
 type cellPtr = cell
 
 // bounds returns the starting and ending offsets to the
@@ -278,7 +278,7 @@ func (p *Page) freeSpace() uint16 {
 // checkRecord performs sanity and error checking on a record size
 func (p *Page) checkRecord(size uint16) error {
 	if size < pageCellSize {
-		return errs.ErrRecordTooSmall
+		return ErrRecordTooSmall
 	}
 	// numFree := p.freeSpace() - pageCellSize
 	// util.DEBUG("checkRecord, numFree=%d, prev=%d", numFree, prev)
