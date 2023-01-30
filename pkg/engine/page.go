@@ -107,6 +107,12 @@ func (h *pageHeader) String() string {
  * Section containing types and methods for `page`
  */
 
+type Page = page
+
+func NewPage(id uint32, flags uint32) Page {
+	return newPage(id, flags)
+}
+
 // page represents a page
 type page []byte
 

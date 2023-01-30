@@ -1,3 +1,5 @@
+github.com/cagnosolutions/appstats v0.0.0-20221105215747-145706dd6911 h1:Jac744G3zZSAa3f7EUXGpMEszDdFwkQkFyTMDkJgkqI=
+github.com/cagnosolutions/appstats v0.0.0-20221105215747-145706dd6911/go.mod h1:YllwCy/hzYv+bP6YMSh00axTQpQRUnCC26pLj3UDC5w=
 github.com/scottcagno/go-scratch v0.0.0-20220723223820-47f00f6c2468 h1:CJv3AeT6o6XLXC1k/dcc16IGzh3NwwLVb9kSVDGliV8=
 github.com/scottcagno/go-scratch v0.0.0-20220723223820-47f00f6c2468/go.mod h1:Fl15W2gAHzS2CaRVUhRRVfKy8DZiIqEXLP1fcZG2e7g=
 golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 h1:kQgndtyPBW/JIYERgdxfwMYh3AVStj88WQTlNDi2a+o=

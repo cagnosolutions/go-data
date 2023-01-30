@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestPage_NewPage(t *testing.T) {
@@ -395,6 +396,40 @@ func TestPage_Vacuum(t *testing.T) {
 	p.clear()
 	p = nil
 	runtime.GC()
+}
+
+// make sure to run with `env GODEBUG=gctrace=1 godoc -http=:6060`
+
+func TestPageGC(t *testing.T) {
+	// Create some pages...
+	var pages []page
+	var size int
+	pages, size = createPages(2)
+	fmt.Printf("Created %d pages totaling %dKB\n", len(pages), size)
+
+	// Add them to a map, then watch the gc stats
+	pool := make(map[uint32]page, len(pages))
+	for i := range pages {
+		pool[pages[i].getPageID()] = pages[i]
+	}
+
+	time.Sleep(1 * time.Minute)
+
+	// Wait for user input before exiting...
+	fmt.Println("Press any key to exit...")
+	_, err := fmt.Scanln()
+	if err != nil {
+		return
+	}
+	runtime.GC()
+}
+
+var createPages = func(numPages int) (pages []page, totalSize int) {
+	for i := 0; i < numPages; i++ {
+		pages = append(pages, newPage(uint32(i), P_USED))
+		totalSize += 16
+	}
+	return pages, totalSize
 }
 
 var addRecords = func(p page) ([]*RecordID, error) {
