@@ -1,4 +1,4 @@
-package engine
+package buffer
 
 import (
 	"errors"
@@ -8,7 +8,10 @@ import (
 	"unsafe"
 )
 
-var ErrNoVictimFound = errors.New("replacer may be empty; victim could not be found")
+var (
+	ErrListIsFull    = errors.New("circular-list: full; circular list capacity met")
+	ErrNoVictimFound = errors.New("clock-replacer: may be empty; victim could not be found")
+)
 
 type ClockReplacer = clockReplacer
 
@@ -31,14 +34,10 @@ func newClockReplacer(size uint16) *clockReplacer {
 	}
 }
 
-func (c *ClockReplacer) Pin(fid frameID) {
-	c.pin(fid)
-}
-
 // pin takes a frame ID and "pins" it, indicating that the caller is now
 // using it. Because the caller is now using it, the replacer can now remove
 // it to no longer make it available for victimization.
-func (c *clockReplacer) pin(fid frameID) {
+func (c *clockReplacer) pin(fid FrameID) {
 	n := c.list.find(fid)
 	if n == nil {
 		return
@@ -51,18 +50,18 @@ func (c *clockReplacer) pin(fid frameID) {
 
 // remove is identical to the `pin` call. It is just a wrapper for clarity's
 // sake; I feel the name is more apt in describing the function it is performing.
-func (c *clockReplacer) remove(fid frameID) {
+func (c *clockReplacer) remove(fid FrameID) {
 	c.pin(fid)
 }
 
-func (c *ClockReplacer) Unpin(fid frameID) {
+func (c *ClockReplacer) Unpin(fid FrameID) {
 	c.unpin(fid)
 }
 
 // unpin takes a frame ID and "unpins" it, indicating that the caller is no
 // longer using it. Because the caller is no longer using it, the replacer
 // can now add it to make it available for victimization.
-func (c *clockReplacer) unpin(fid frameID) {
+func (c *clockReplacer) unpin(fid FrameID) {
 	if !c.list.hasKey(fid) {
 		if err := c.list.insert(fid, true); err != nil {
 			log.Panicf("replacer.unpin: failed on insert: %q", err)
@@ -75,12 +74,8 @@ func (c *clockReplacer) unpin(fid frameID) {
 
 // insert is identical to the `unpin` call. It is just a wrapper for clarity's
 // sake; I feel the name is more apt in describing the function it is performing.
-func (c *clockReplacer) insert(fid frameID) {
+func (c *clockReplacer) insert(fid FrameID) {
 	c.unpin(fid)
-}
-
-func (c *ClockReplacer) Victim() *frameID {
-	return c.victim()
 }
 
 // victim searches for a frame ID in the replacer that it can victimize and
@@ -88,11 +83,11 @@ func (c *ClockReplacer) Victim() *frameID {
 // by the replacement policy) and returns it. If there are no frame IDs to
 // victimize, it will simply return nil. In the case of a nil return, the caller
 // will have to figure out how to handle the situation.
-func (c *clockReplacer) victim() *frameID {
+func (c *clockReplacer) victim() *FrameID {
 	if c.list.size == 0 {
 		return nil
 	}
-	var victim *frameID
+	var victim *FrameID
 	cn := *c.ptr
 	for {
 		if cn.val {
@@ -110,7 +105,7 @@ func (c *clockReplacer) victim() *frameID {
 
 // evict is identical to the `victim` call. It is just a wrapper for clarity's
 // sake; I feel the name is more apt in describing the function it is performing.
-func (c *clockReplacer) evict() *frameID {
+func (c *clockReplacer) evict() *FrameID {
 	return c.victim()
 }
 
@@ -124,12 +119,9 @@ func (c *clockReplacer) String() string {
 	return c.list.String()
 }
 
-// ErrListIsFull errors reports when the circular list is at capacity
-var ErrListIsFull = errors.New("list is full; circular list capacity met")
-
 // node is a node in a circular list.
 type dllNode struct {
-	key        frameID
+	key        FrameID
 	val        bool
 	prev, next *dllNode
 }
@@ -160,7 +152,7 @@ func newCircularList(max uint16) *circularList {
 
 // find takes a key and attempts to locate and return a node with
 // the matching key. If said node cannot be found, find returns nil.
-func (c *circularList) find(k frameID) *dllNode {
+func (c *circularList) find(k FrameID) *dllNode {
 	ptr := c.head
 	for i := uint16(0); i < c.size; i++ {
 		if ptr.key == k {
@@ -173,13 +165,13 @@ func (c *circularList) find(k frameID) *dllNode {
 
 // hasKey takes a key and returns a boolean indicating true if that
 // key is found within the list, and false if it is not.
-func (c *circularList) hasKey(k frameID) bool {
+func (c *circularList) hasKey(k FrameID) bool {
 	return c.find(k) != nil
 }
 
 // insert takes a key and value and inserts it into the list, unless
 // the list is at its capacity.
-func (c *circularList) insert(k frameID, v bool) error {
+func (c *circularList) insert(k FrameID, v bool) error {
 	// check capacity
 	if c.size == c.capacity {
 		return ErrListIsFull
@@ -223,7 +215,7 @@ func (c *circularList) insert(k frameID, v bool) error {
 
 // remove takes a key and attempts to locate and remove the node with
 // the matching key.
-func (c *circularList) remove(k frameID) {
+func (c *circularList) remove(k FrameID) {
 	// attempt to locate the node
 	n := c.find(k)
 	if n == nil {

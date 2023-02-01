@@ -1,4 +1,4 @@
-package engine
+package buffer
 
 import (
 	"fmt"
@@ -91,7 +91,7 @@ func TestClockReplacer_CircularList(t *testing.T) {
 
 	// check has key
 	for i := uint16(0); i <= list.size; i++ {
-		keyFound := list.hasKey(frameID(i))
+		keyFound := list.hasKey(FrameID(i))
 		if i%2 == 0 && !keyFound {
 			t.Errorf("got key=%d (%v), wanted key=%d (%v)\n", i, keyFound, i, !keyFound)
 		}

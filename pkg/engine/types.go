@@ -5,13 +5,13 @@ package engine
 type bufferPool interface {
 	// getFrameID attempts to return a frame.FrameID from the free list. If
 	// one is found it will return it along with a boolean indicating true.
-	getFrameID() (*frameID, bool)
-	// addFrameID takes a frameID and adds it to the set of free frames list.
-	addFrameID(fid frameID)
+	getFrameID() (*FrameID, bool)
+	// addFrameID takes a FrameID and adds it to the set of free frames list.
+	addFrameID(fid FrameID)
 	// getUsableFrameID attempts to return a frame.FrameID. It first checks
 	// calls getFrameID to try to return one from the freeList. If the first
 	// call fails, it will then go on to the replacer in search of one.
-	getUsableFrameID() (*frameID, error)
+	getUsableFrameID() (*FrameID, error)
 }
 
 // replacer is an interface describing the basic operations that make up a replacement
@@ -19,12 +19,12 @@ type bufferPool interface {
 type replacer interface {
 	// Pin pins the frame matching the supplied frame ID, indicating that it should
 	// not be victimized until it is unpinned.
-	Pin(fid frameID)
+	Pin(fid FrameID)
 	// Victim removes and returns the next "victim frame", as defined by the policy.
-	Victim() *frameID
+	Victim() *FrameID
 	// Unpin unpins the frame matching the supplied frame ID, indicating that it may
 	// now be victimized.
-	Unpin(fid frameID)
+	Unpin(fid FrameID)
 }
 
 // diskManager is an interface describing the basic operations that the
@@ -42,10 +42,10 @@ type diskManager interface {
 	DeallocatePage(pid PageID) error
 	// ReadPage takes a page.PageID, as well as a (preferably empty) page.Page,
 	// attempts to locate and copy the contents into p.
-	ReadPage(pid PageID, p page) error
+	ReadPage(pid PageID, p Page) error
 	// WritePage takes a page.PageID, as well as a page.Page, attempts to locate
 	// and copy and flush the contents of p onto the io.
-	WritePage(pid PageID, p page) error
+	WritePage(pid PageID, p Page) error
 	// Close closes the io manager.
 	Close() error
 }
@@ -57,10 +57,10 @@ type bufferPoolManager interface {
 	replacer
 	diskManager
 	// newPage returns a new "fresh" page.Page for use.
-	NewPage() page
+	NewPage() Page
 	// FetchPage takes a page.PageID, and attempts to locate it (either in the
 	// buffer pool, or on io) and return the associated page.Page.
-	FetchPage(pid PageID) page
+	FetchPage(pid PageID) Page
 	// UnpinPage takes a page.PageID, and a boolean hinting at the page.Page
 	// associated with the supplied page.pageID being dirty or not. It instructs
 	// the replacer to unpin the page making it available for victimization.

@@ -1,10 +1,11 @@
-package engine
+package logging
 
 import (
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,20 +25,20 @@ const (
 
 var (
 	maxFileSize       = defaultMaxFileSize
-	ErrOutOfBounds    = errors.New("error: out of bounds")
-	ErrSegmentFull    = errors.New("error: segment is full")
-	ErrFileClosed     = errors.New("error: file closed")
-	ErrBadArgument    = errors.New("error: bad argument")
-	ErrNoPathProvided = errors.New("error: no path provided")
-	ErrOptionsMissing = errors.New("error: options missing")
+	ErrOutOfBounds    = errors.New("wal: out of bounds")
+	ErrSegmentFull    = errors.New("wal: segment is full")
+	ErrFileClosed     = errors.New("wal: file closed")
+	ErrBadArgument    = errors.New("wal: bad argument")
+	ErrNoPathProvided = errors.New("wal: no path provided")
+	ErrOptionsMissing = errors.New("wal: options missing")
 )
 
 var (
 	// ErrFileClosed    = errors.New("binary: file closed")
-	ErrBadEntry      = errors.New("binary: bad entry")
-	ErrEntryNotFound = errors.New("binary: entry not found")
-	ErrKeyTooLarge   = errors.New("binary: key too large")
-	ErrValueTooLarge = errors.New("binary: value too large")
+	ErrBadEntry      = errors.New("wal: bad entry")
+	ErrEntryNotFound = errors.New("wal: entry not found")
+	ErrKeyTooLarge   = errors.New("wal: key too large")
+	ErrValueTooLarge = errors.New("wal: value too large")
 )
 
 // segEntry contains the metadata for a single segEntry within the file segment
@@ -230,16 +231,17 @@ func (l *WAL) loadIndex() error {
 		if err != nil {
 			return err
 		}
+		fullPath := filepath.ToSlash(filepath.Join(l.conf.BasePath, file.Name()))
 		// if the file is empty, remove it and skip to next file
 		if fi.Size() == 0 {
-			err = os.Remove(filepath.Join(l.conf.BasePath, file.Name()))
+			err = os.Remove(fullPath)
 			if err != nil {
 				return err
 			}
 			continue // make sure we skip to next segment
 		}
 		// attempt to load segment (and index entries in segment)
-		s, err := l.loadSegmentFile(filepath.Join(l.conf.BasePath, file.Name()))
+		s, err := l.loadSegmentFile(fullPath)
 		if err != nil {
 			return err
 		}
@@ -350,7 +352,7 @@ func (l *WAL) loadSegmentFile(path string) (*segment, error) {
 // as the segment name. On success, it will simply return a new segment and a nil error
 func (l *WAL) makeSegmentFile(index int64) (*segment, error) {
 	// create a new file
-	path := filepath.Join(l.conf.BasePath, MakeFileNameFromIndex(index))
+	path := filepath.ToSlash(filepath.Join(l.conf.BasePath, MakeFileNameFromIndex(index)))
 	fd, err := os.Create(path)
 	if err != nil {
 		return nil, err
@@ -616,7 +618,7 @@ func (l *WAL) TruncateFront(index int64) error {
 	// isolate whole segments that can be removed
 	for i := 0; i < sidx; i++ {
 		// remove segment file
-		err := os.Remove(l.segments[i].path)
+		err := os.Remove(filepath.ToSlash(l.segments[i].path))
 		if err != nil {
 			return err
 		}
@@ -633,7 +635,16 @@ func (l *WAL) TruncateFront(index int64) error {
 	// prepare to re-write partial segment
 	var err error
 	var entries []segEntry
-	tmpfd, err := os.Create(filepath.Join(l.conf.BasePath, "tmp-partial.seg"))
+	tmpfd, err := os.Create(filepath.ToSlash(filepath.Join(l.conf.BasePath, "tmp-partial.seg")))
+	if err != nil {
+		return err
+	}
+	// sync and close current file pointer
+	err = l.file.Sync()
+	if err != nil {
+		return err
+	}
+	err = l.file.Close()
 	if err != nil {
 		return err
 	}
@@ -670,29 +681,36 @@ func (l *WAL) TruncateFront(index int64) error {
 			// append to a new entries list
 			entries = append(entries, ent)
 		}
-		// close reader
+
+		// sync and close reader
 		err = rd.Close()
 		if err != nil {
 			return err
 		}
-		// close temp file
 		err = tmpfd.Close()
 		if err != nil {
 			return err
 		}
 		// remove partial segment file
-		err = os.Remove(l.segments[0].path)
+		err = os.Remove(filepath.ToSlash(l.segments[0].path))
 		if err != nil {
+			log.Println("DEBUG")
 			return err
 		}
 		// change temp file name
-		err = os.Rename(tmpfd.Name(), l.segments[0].path)
+		err = os.Rename(tmpfd.Name(), filepath.ToSlash(l.segments[0].path))
 		if err != nil {
 			return err
 		}
 		// update segment
 		l.segments[0].entries = entries
 		l.segments[0].index = entries[0].index
+	}
+	// re-open file writer associated with active segment
+	l.active = l.getLastSegment()
+	l.file, err = os.OpenFile(l.active.path, os.O_WRONLY|os.O_SYNC, 0644)
+	if err != nil {
+		return err
 	}
 	return nil
 }

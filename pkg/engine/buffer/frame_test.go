@@ -1,24 +1,26 @@
-package engine
+package buffer
 
 import (
 	"testing"
+
+	"github.com/cagnosolutions/go-data/pkg/engine/page"
 )
 
 func TestNewFrame(t *testing.T) {
-	var f frame
-	if f.fid > 0 || f.pid > 0 || f.page != nil {
+	var f Frame
+	if f.fid > 0 || f.pid > 0 || f.Page != nil {
 		t.Errorf("new frame: frame should be nil")
 	}
-	f = newFrame(5, 3, PageSize)
-	if f.fid == 0 || f.pid == 0 || f.page == nil {
+	f = newFrame(5, 3, page.PageSize)
+	if f.fid == 0 || f.pid == 0 || f.Page == nil {
 		t.Errorf("new frame: frame should not be nil")
 	}
 	_ = f
 }
 
 func TestFrame_DecrPinCount(t *testing.T) {
-	f := newFrame(5, 3, PageSize)
-	if f.fid == 0 || f.pid == 0 || f.page == nil {
+	f := newFrame(5, 3, page.PageSize)
+	if f.fid == 0 || f.pid == 0 || f.Page == nil {
 		t.Errorf("decr pin count: frame should not be nil")
 	}
 	f.pinCount += 2
@@ -35,12 +37,12 @@ func TestFrame_DecrPinCount(t *testing.T) {
 }
 
 func TestFrame_Reset(t *testing.T) {
-	f := newFrame(5, 3, PageSize)
-	if f.fid == 0 || f.pid == 0 || f.page == nil {
+	f := newFrame(5, 3, page.PageSize)
+	if f.fid == 0 || f.pid == 0 || f.Page == nil {
 		t.Errorf("reset: frame should not be nil")
 	}
-	f.reset()
-	if f.fid > 0 || f.pid > 0 || f.page != nil {
+	f.resetFrame()
+	if f.fid > 0 || f.pid > 0 || f.Page != nil {
 		t.Errorf("reset: frame should be nil")
 	}
 	_ = f

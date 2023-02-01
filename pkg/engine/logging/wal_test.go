@@ -1,4 +1,4 @@
-package engine
+package logging
 
 import (
 	"fmt"
@@ -150,6 +150,9 @@ func TestLog_TruncateFront(t *testing.T) {
 	if err != nil {
 		t.Fatalf("got error: %v\n", err)
 	}
+
+	time.Sleep(3 * time.Second)
+
 	//
 	// open log
 	wal, err = OpenWAL(conf)

@@ -1,4 +1,4 @@
-package engine
+package page
 
 import (
 	"bytes"
@@ -10,15 +10,15 @@ import (
 )
 
 func TestPage_NewPage(t *testing.T) {
-	var p page
+	var p Page
 	if p != nil {
 		t.Errorf("got %v, expected %v\n", p, nil)
 	}
-	p = newPage(3, P_USED)
+	p = NewPage(3, P_USED)
 	if p == nil {
 		t.Errorf("got %v, expected %v\n", len(p), PageSize)
 	}
-	tmp := pageHeader{
+	tmp := PageHeader{
 		ID:    3,
 		Prev:  0,
 		Next:  0,
@@ -28,22 +28,22 @@ func TestPage_NewPage(t *testing.T) {
 		Lower: pageHeaderSize,
 		Upper: PageSize,
 	}
-	hdr := p.getPageHeader()
+	hdr := p.GetPageHeader()
 	if *hdr != tmp || hdr == nil {
 		t.Errorf("got %v, expected %v\n", hdr, tmp)
 	}
 }
 
 func TestPage_NewEmptyPage(t *testing.T) {
-	var ep page
+	var ep Page
 	if ep != nil {
 		t.Errorf("got %v, expected %v\n", ep, nil)
 	}
-	ep = newPage(4, P_FREE)
+	ep = NewPage(4, P_FREE)
 	if ep == nil {
 		t.Errorf("got %v, expected %v\n", len(ep), PageSize)
 	}
-	tmp := pageHeader{
+	tmp := PageHeader{
 		ID:    4,
 		Prev:  0,
 		Next:  0,
@@ -53,14 +53,14 @@ func TestPage_NewEmptyPage(t *testing.T) {
 		Lower: pageHeaderSize,
 		Upper: PageSize,
 	}
-	hdr := ep.getPageHeader()
+	hdr := ep.GetPageHeader()
 	if *hdr != tmp || hdr == nil {
 		t.Errorf("got %v, expected %v\n", hdr, tmp)
 	}
 }
 
 func TestPage_addRecord(t *testing.T) {
-	p := newPage(3, P_USED)
+	p := NewPage(3, P_USED)
 	_, err := addRecords(p)
 	if err != nil {
 		t.Error(err)
@@ -69,14 +69,14 @@ func TestPage_addRecord(t *testing.T) {
 }
 
 func TestPage_addRecordAndRange(t *testing.T) {
-	p := newPage(3, P_USED)
+	p := NewPage(3, P_USED)
 	_, err := addRecords(p)
 	if err != nil {
 		t.Error(err)
 	}
 	var i int
-	err = p.rangeRecords(
-		func(r *record) error {
+	err = p.RangeRecords(
+		func(r *Record) error {
 			fmt.Printf("record #%.3d, key=%q, val=%q\n", i, r.Key(), r.Val())
 			i++
 			return nil
@@ -88,7 +88,7 @@ func TestPage_addRecordAndRange(t *testing.T) {
 }
 
 func TestPage_getRecord(t *testing.T) {
-	p := newPage(3, P_USED)
+	p := NewPage(3, P_USED)
 	rids, err := addRecords(p)
 	if err != nil {
 		t.Error(err)
@@ -100,12 +100,12 @@ func TestPage_getRecord(t *testing.T) {
 }
 
 func TestPage_DelRecord(t *testing.T) {
-	p := newPage(3, P_USED)
+	p := NewPage(3, P_USED)
 	rids, err := addRecords(p)
 	if err != nil {
 		t.Error(err)
 	}
-	sz := p.size()
+	sz := p.Size()
 	if sz == 0 {
 		t.Errorf("got %v, expected %v\n", sz, 3)
 	}
@@ -116,7 +116,7 @@ func TestPage_DelRecord(t *testing.T) {
 }
 
 func TestPage_Sync(t *testing.T) {
-	p := newPage(3, P_USED)
+	p := NewPage(3, P_USED)
 	ids, err := addRecords(p)
 	if err != nil {
 		t.Error(err)
@@ -146,24 +146,24 @@ func TestPage_RandomStuff(t *testing.T) {
 	const N = 32
 	var ids []*RecordID
 
-	makeRec := func(n int) record {
+	makeRec := func(n int) Record {
 		rk := fmt.Sprintf("%.2d", n)
 		rv := fmt.Sprintf("[record number %.2d]", n)
-		return newRecord(rStrStr, []byte(rk), []byte(rv))
+		return NewRecord(R_STR, R_STR, []byte(rk), []byte(rv))
 	}
 
-	makeRecSize := func(n int, data []byte) record {
+	makeRecSize := func(n int, data []byte) Record {
 		rk := fmt.Sprintf("%.2d", n)
 		rv := fmt.Sprintf("[record number %.2d %s]", n, string(data))
-		return newRecord(rStrStr, []byte(rk), []byte(rv))
+		return NewRecord(R_STR, R_STR, []byte(rk), []byte(rv))
 	}
 
-	p := newPage(1, P_USED)
+	p := NewPage(1, P_USED)
 	fmt.Println(p.String())
 	fmt.Println(">>>>> [01 ADDING] <<<<<")
 	fmt.Printf("created Page, adding %d records...\n", N)
 	for i := 0; i < N; i++ {
-		id, err := p.addRecord(makeRec(i))
+		id, err := p.AddRecord(makeRec(i))
 		if err != nil {
 			panic(err)
 		}
@@ -175,7 +175,7 @@ func TestPage_RandomStuff(t *testing.T) {
 	fmt.Println(">>>>> [02 GETTING] <<<<<")
 	fmt.Printf("now, we will be getting the records...\n")
 	for _, id := range ids {
-		rec, err := p.getRecord(id)
+		rec, err := p.GetRecord(id)
 		if err != nil {
 			panic(err)
 		}
@@ -187,7 +187,7 @@ func TestPage_RandomStuff(t *testing.T) {
 	for _, id := range ids {
 		if (id.CellID+1)%3 == 0 || id.CellID == 31 {
 			fmt.Printf("deleting record: %v\n", id)
-			err := p.delRecord(id)
+			err := p.DelRecord(id)
 			if err != nil {
 				panic(err)
 			}
@@ -211,7 +211,7 @@ func TestPage_RandomStuff(t *testing.T) {
 	fmt.Println(">>>>> [04 GETTING] <<<<<")
 	fmt.Printf("now, we will be getting the records...\n")
 	for _, id := range ids {
-		rec, err := p.getRecord(id)
+		rec, err := p.GetRecord(id)
 		if err != nil {
 			if err == ErrRecordNotFound {
 				continue
@@ -223,7 +223,7 @@ func TestPage_RandomStuff(t *testing.T) {
 	fmt.Println()
 	fmt.Printf("taking a look at the Page details...\n")
 	fmt.Println(p.String())
-	ph := p.getPageHeader()
+	ph := p.GetPageHeader()
 	adding := (N + 13) - N
 	fmt.Printf(
 		">>>>> (cells=%d, free=%d, adding %d records, cells_after=%d)\n",
@@ -231,13 +231,13 @@ func TestPage_RandomStuff(t *testing.T) {
 	)
 	fmt.Printf(">>>>> [05 ADDING (%d) MORE] <<<<<\n", adding)
 	for i := 32; i < N+13; i++ {
-		id, err := p.addRecord(makeRec(i))
+		id, err := p.AddRecord(makeRec(i))
 		if err != nil {
 			panic(err)
 		}
 		ids = append(ids, id)
 	}
-	id, err := p.addRecord(makeRecSize(255, bytes.Repeat([]byte("A"), 13000)))
+	id, err := p.AddRecord(makeRecSize(255, bytes.Repeat([]byte("A"), 13000)))
 	if err != nil {
 		panic(err)
 	}
@@ -247,7 +247,7 @@ func TestPage_RandomStuff(t *testing.T) {
 	fmt.Println(">>>>> [06 GETTING] <<<<<")
 	fmt.Printf("now, we will be getting the records...\n")
 	for _, id := range ids {
-		rec, err := p.getRecord(id)
+		rec, err := p.GetRecord(id)
 		if err != nil {
 			if err == ErrRecordNotFound {
 				continue
@@ -258,9 +258,9 @@ func TestPage_RandomStuff(t *testing.T) {
 	}
 	fmt.Println()
 	fmt.Println(">>>>> [07 NEW PAGE] <<<<<")
-	p = newPage(2, P_USED)
+	p = NewPage(2, P_USED)
 	for i := 0; ; i++ {
-		_, err := p.addRecord(makeRec(i))
+		_, err := p.AddRecord(makeRec(i))
 		if err != nil {
 			if err == ErrNoRoom {
 				fmt.Println(">>>>>+<<ErrNoRoom>>+<<<<<")
@@ -281,88 +281,88 @@ func TestPage_RandomStuff(t *testing.T) {
 
 func TestPage_Vacuum(t *testing.T) {
 	var rids []*RecordID
-	p := newPage(1, P_USED)
-	id, err := p.addRecord(newRecord(rStrStr, []byte("rec-01"), []byte("this is record 01")))
+	p := NewPage(1, P_USED)
+	id, err := p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-01"), []byte("this is record 01")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-02"), []byte("this is record 02")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-02"), []byte("this is record 02")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-03"), []byte("this is record 03")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-03"), []byte("this is record 03")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-04"), []byte("this is record 04")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-04"), []byte("this is record 04")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-05"), []byte("this is record 05")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-05"), []byte("this is record 05")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-06"), []byte("this is record 06")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-06"), []byte("this is record 06")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-07"), []byte("this is record 07")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-07"), []byte("this is record 07")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-08"), []byte("this is record 08")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-08"), []byte("this is record 08")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-09"), []byte("this is record 09")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-09"), []byte("this is record 09")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-10"), []byte("this is record 10")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-10"), []byte("this is record 10")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-11"), []byte("this is record 11")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-11"), []byte("this is record 11")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-12"), []byte("this is record 12")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-12"), []byte("this is record 12")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-13"), []byte("this is record 13")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-13"), []byte("this is record 13")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-14"), []byte("this is record 14")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-14"), []byte("this is record 14")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-15"), []byte("this is record 15")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-15"), []byte("this is record 15")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-16"), []byte("this is record 16")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-16"), []byte("this is record 16")))
 	if err != nil {
 		t.Error(err)
 	}
 	rids = append(rids, id)
-	id, err = p.addRecord(newRecord(rStrStr, []byte("rec-17"), []byte("this is record 17")))
+	id, err = p.AddRecord(NewRecord(R_STR, R_STR, []byte("rec-17"), []byte("this is record 17")))
 	if err != nil {
 		t.Error(err)
 	}
@@ -371,7 +371,7 @@ func TestPage_Vacuum(t *testing.T) {
 	var deleted uint16
 	for i := range rids {
 		if i%3 == 0 {
-			err := p.delRecord(rids[i])
+			err := p.DelRecord(rids[i])
 			if err != nil {
 				t.Error(err)
 			}
@@ -379,11 +379,11 @@ func TestPage_Vacuum(t *testing.T) {
 		}
 	}
 
-	rcb := p.getNumCells()
-	rcbf := p.getNumFree()
+	rcb := p.GetNumCells()
+	rcbf := p.GetNumFree()
 	p.Vacuum()
-	rca := p.getNumCells()
-	rcaf := p.getNumFree()
+	rca := p.GetNumCells()
+	rcaf := p.GetNumFree()
 
 	if rcb == rca && rcb-deleted != rca {
 		t.Errorf("total records: expected=%d, got=%d\n", rcb-deleted, rca)
@@ -393,7 +393,7 @@ func TestPage_Vacuum(t *testing.T) {
 		t.Errorf("records free: expected=%d, got=%d\n", rcb-deleted, rca)
 	}
 
-	p.clear()
+	p.Clear()
 	p = nil
 	runtime.GC()
 }
@@ -402,15 +402,15 @@ func TestPage_Vacuum(t *testing.T) {
 
 func TestPageGC(t *testing.T) {
 	// Create some pages...
-	var pages []page
+	var pages []Page
 	var size int
 	pages, size = createPages(2)
 	fmt.Printf("Created %d pages totaling %dKB\n", len(pages), size)
 
 	// Add them to a map, then watch the gc stats
-	pool := make(map[uint32]page, len(pages))
+	pool := make(map[uint32]Page, len(pages))
 	for i := range pages {
-		pool[pages[i].getPageID()] = pages[i]
+		pool[pages[i].GetPageID()] = pages[i]
 	}
 
 	time.Sleep(1 * time.Minute)
@@ -424,20 +424,20 @@ func TestPageGC(t *testing.T) {
 	runtime.GC()
 }
 
-var createPages = func(numPages int) (pages []page, totalSize int) {
+var createPages = func(numPages int) (pages []Page, totalSize int) {
 	for i := 0; i < numPages; i++ {
-		pages = append(pages, newPage(uint32(i), P_USED))
+		pages = append(pages, NewPage(uint32(i), P_USED))
 		totalSize += 16
 	}
 	return pages, totalSize
 }
 
-var addRecords = func(p page) ([]*RecordID, error) {
+var addRecords = func(p Page) ([]*RecordID, error) {
 	var ids []*RecordID
 	for i := 0; i < 128; i++ {
 		rk := fmt.Sprintf("record-%.6d", i)
 		rv := fmt.Sprintf("this is the value for record #%.6d", i)
-		id, err := p.addRecord(newRecord(rStrStr, []byte(rk), []byte(rv)))
+		id, err := p.AddRecord(NewRecord(R_STR, R_STR, []byte(rk), []byte(rv)))
 		if err != nil {
 			return nil, err
 		}
@@ -446,10 +446,10 @@ var addRecords = func(p page) ([]*RecordID, error) {
 	return ids, nil
 }
 
-var getRecords = func(p page, ids []*RecordID) error {
+var getRecords = func(p Page, ids []*RecordID) error {
 	for i := range ids {
 		rid := ids[i]
-		_, err := p.getRecord(rid)
+		_, err := p.GetRecord(rid)
 		if err != nil {
 			return err
 		}
@@ -457,10 +457,10 @@ var getRecords = func(p page, ids []*RecordID) error {
 	return nil
 }
 
-var delRecords = func(p page, ids []*RecordID) error {
+var delRecords = func(p Page, ids []*RecordID) error {
 	for i := range ids {
 		rid := ids[i]
-		err := p.delRecord(rid)
+		err := p.DelRecord(rid)
 		if err != nil {
 			return err
 		}

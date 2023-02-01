@@ -1,28 +1,7 @@
-package engine
+package errors
 
 import (
 	"errors"
-	"fmt"
-)
-
-var ErrPageIDHasNotBeenAllocated = func(pid PageID) error {
-	return fmt.Errorf("page ID has not been allocated yet (pid=%d)", pid)
-}
-
-var (
-	ErrBadKeyFlagInRecord    = errors.New("the record header contained an incorrect flag in the key flag space")
-	ErrBadValFlagInRecord    = errors.New("the record header contained an incorrect flag in the val flag space")
-	ErrBadCustomFlagInRecord = errors.New("the record header contained an incorrect custom flag implementation")
-)
-
-// page errors
-var (
-	ErrRecordTooSmall = fmt.Errorf("[page] record is too small")
-	ErrNoRoom         = fmt.Errorf("[page] the page is full")
-	ErrEmptyPage      = fmt.Errorf("[page] the page is empty")
-	ErrInvalidPID     = fmt.Errorf("[page] page ID is not valid")
-	ErrInvalidSID     = fmt.Errorf("[page] slot ID is not valid")
-	ErrRecordNotFound = fmt.Errorf("[page] record not found")
 )
 
 // segment errors

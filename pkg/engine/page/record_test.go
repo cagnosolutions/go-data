@@ -1,4 +1,4 @@
-package engine
+package page
 
 import (
 	"fmt"
@@ -12,14 +12,14 @@ func TestRecord_Flags(t *testing.T) {
 		valid bool
 	}{
 		// plain types
-		{0x11, rNumNum, true},
-		{0x12, rNumStr, true},
-		{0x21, rStrNum, true},
-		{0x22, rStrStr, true},
+		{0x11, R_NUM_NUM, true},
+		{0x12, R_NUM_STR, true},
+		{0x21, R_STR_NUM, true},
+		{0x22, R_STR_STR, true},
 
 		// pointer types
-		{0x14, rNumPtr, true},
-		{0x24, rStrPtr, true},
+		{0x14, R_NUM_PTR, true},
+		{0x24, R_STR_PTR, true},
 	}
 	for i, tt := range tests {
 		if tt.got != tt.want {

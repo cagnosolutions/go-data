@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/cagnosolutions/go-data/pkg/engine/buffer"
+	"github.com/cagnosolutions/go-data/pkg/engine/logging"
+	"github.com/cagnosolutions/go-data/pkg/engine/page"
 )
 
 // error values
@@ -18,8 +22,8 @@ var (
 )
 
 type store struct {
-	cache  *pageCache
-	recent *RecordID
+	cache  *buffer.BufferCacheManager
+	recent *page.RecordID
 }
 
 // StorageEngine is a high level data storage and management engine type that can
@@ -31,8 +35,8 @@ type StorageEngine struct {
 	dataPath    string
 	mu          sync.Mutex
 	stores      map[string]store
-	recents     map[string]*RecordID
-	journal     *WAL
+	recents     map[string]*page.RecordID
+	journal     *logging.WAL
 }
 
 // Open opens a data store using the provided store name. If the store does not exist,
@@ -48,8 +52,8 @@ func Open(path string) (*StorageEngine, error) {
 	jp := filepath.Join(path, "journal")
 	dp := filepath.Join(path, "data")
 	// Enable the journal
-	journal, err := OpenWAL(
-		&WALConfig{
+	journal, err := logging.OpenWAL(
+		&logging.WALConfig{
 			BasePath:    jp,
 			MaxFileSize: 256 << 10,
 			SyncOnWrite: true,
@@ -88,7 +92,7 @@ func (se *StorageEngine) Close() error {
 	defer se.mu.Unlock()
 	var err error
 	for _, st := range se.stores {
-		err = st.cache.close()
+		err = st.cache.Close()
 		if err != nil {
 			return err
 		}
@@ -109,13 +113,13 @@ func (se *StorageEngine) CreateNamespace(name string) error {
 	if found {
 		return ErrDataStoreExists
 	}
-	pc, err := openPageCache(filepath.Join(se.dataPath), 64)
+	pc, err := buffer.OpenBufferCacheManager(filepath.Join(se.dataPath), 64)
 	if err != nil {
 		return err
 	}
 	se.stores[name] = store{
 		cache:  pc,
-		recent: new(RecordID),
+		recent: new(page.RecordID),
 	}
 	return nil
 }
@@ -147,20 +151,20 @@ func (se *StorageEngine) Insert(ns string, p []byte) (uint32, error) {
 	}
 	// Got it; do our thing
 	pid := st.recent.PageID
-	pg := st.cache.fetchPage(PageID(pid))
+	pg := st.cache.FetchPage(page.PageID(pid))
 	if pg == nil {
 		// Page not found
-		return 0, ErrPageNotFound
+		return 0, page.ErrPageNotFound
 	}
 	// Add the record to the page
-	rid, err := pg.addRecord(p)
+	rid, err := pg.AddRecord(p)
 	if err != nil {
 		return 0, err
 	}
 	// Update the most recent record ID
 	st.recent = rid
 	// Unpin the page
-	err = st.cache.unpinPage(PageID(pid), true)
+	err = st.cache.UnpinPage(page.PageID(pid), true)
 	if err != nil {
 		return 0, err
 	}

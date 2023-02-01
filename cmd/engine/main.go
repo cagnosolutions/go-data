@@ -2,17 +2,26 @@ package main
 
 import (
 	"fmt"
-	"runtime"
+	"strconv"
 
 	"github.com/cagnosolutions/go-data/pkg/engine"
-	"github.com/cagnosolutions/go-data/pkg/web/utils"
 )
 
 func main() {
+	testPageV1()
+	// go func() {
+	// 	for {
+	// 		time.Sleep(1 * time.Second)
+	// 		runtime.GC()
+	// 	}
+	// }()
+	//
+	// time.Sleep(30 * time.Second)
+}
+
+func testPageV1() {
 	// Create some pages...
-	var pages []engine.Page
-	var size int
-	pages, size = createPages(2)
+	pages, size := createPages(16)
 	fmt.Printf("Created %d pages totaling %dKB\n", len(pages), size)
 
 	// Add them to a map, then watch the gc stats
@@ -21,9 +30,23 @@ func main() {
 		pool[uint32(i)] = pages[i]
 	}
 
-	utils.HandleSignalInterrupt("")
-	fmt.Scanln()
-	runtime.GC()
+	createRecord := func(i int) engine.Record {
+		return engine.NewRecord(
+			0x12,
+			[]byte(strconv.Itoa(i)),
+			[]byte(fmt.Sprintf("this is record %d", i)),
+		)
+	}
+
+	// Write data to a page
+	for pid, page := range pool {
+		if pid < 0 || page == nil {
+			panic("should not happen")
+		}
+		for i := 0; i < 64; i++ {
+			engine.AddRecord(&page, createRecord(i))
+		}
+	}
 }
 
 var createPages = func(numPages int) (pages []engine.Page, totalSize int) {
