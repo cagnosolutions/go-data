@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cagnosolutions/go-data/pkg/engine"
 	"github.com/cagnosolutions/go-data/pkg/engine/page"
 )
 
@@ -88,7 +87,7 @@ func (f *DiskManager) load() error {
 func (f *DiskManager) logicalOffset(pid page.PageID) (int64, error) {
 	// Check to see if the requested pid falls within the set that has been distributed
 	if pid > f.nextPID {
-		return -1, engine.ErrPageIDHasNotBeenAllocated(pid)
+		return -1, page.ErrPageIDHasNotBeenAllocated(pid)
 	}
 	// We are good, so we will calculate the logical page offset.
 	return int64(pid * page.PageSize), nil
