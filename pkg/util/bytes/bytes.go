@@ -64,7 +64,7 @@ func Delete[T comparable](x []T, i int) {
 // insert, vector (no control over len/cap)
 // a = append(a[:i], append(b, a[i:]...)...)
 
-// insert, vector and expand to size j (control over len/cap)
+// insert, vector and expand to pos j (control over len/cap)
 // a = append(a[:i], append(make([]T, j), a[i:]...)...)
 
 // insert, single value (non-vector) (no control over len/cap)

@@ -59,14 +59,11 @@ func SlidingWindow(size int, input []int) [][]int {
 	if len(input) <= size {
 		return [][]int{input}
 	}
-
 	// allocate slice at the precise size we need
 	r := make([][]int, 0, len(input)-size+1)
-
 	for i, j := 0, size; j <= len(input); i, j = i+1, j+1 {
 		r = append(r, input[i:j])
 	}
-
 	return r
 }
 
@@ -80,19 +77,20 @@ type slot struct {
 	used   bool
 }
 
-func (s slot) bounds() (int, int) {
-	return s.offset, s.offset + s.length
-}
+//
+// func (s slot) bounds() (int, int) {
+// 	return s.offset, s.offset + s.length
+// }
 
-func _move(slice *[]int, sl *slot) {
-	beg, end := sl.bounds()
-	copy((*slice)[beg:], (*slice)[end:])
-	for k, n := len(*slice)-end+beg, len(*slice); k < n; k++ {
-		fmt.Println((*slice)[k])
-		(*slice)[k] = -1 // or the zero value of T
-	}
-	// slice = slice[:len(slice)-end+beg]
-}
+// func _move(slice *[]int, sl *slot) {
+// 	beg, end := sl.bounds()
+// 	copy((*slice)[beg:], (*slice)[end:])
+// 	for k, n := len(*slice)-end+beg, len(*slice); k < n; k++ {
+// 		fmt.Println((*slice)[k])
+// 		(*slice)[k] = -1 // or the zero value of T
+// 	}
+// 	// slice = slice[:len(slice)-end+beg]
+// }
 
 func Filter(slice []int, keep func(i int) bool) []int {
 	n := 0
