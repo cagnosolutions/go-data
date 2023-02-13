@@ -14,6 +14,8 @@ import (
 
 func TestPageCache(t *testing.T) {
 
+	cleanUpWhenDone := true
+
 	pageCount := uint16(64)
 	testDir := "testing"
 	testFile := "page_cache_test.txt"
@@ -22,6 +24,8 @@ func TestPageCache(t *testing.T) {
 	if err != nil {
 		t.Errorf("opening buffer manager: %s\n", err)
 	}
+
+	fmt.Println(">>>\n", pc)
 
 	page0 := pc.NewPage()
 
@@ -41,11 +45,15 @@ func TestPageCache(t *testing.T) {
 	}
 	util.Equals(t, page.NewRecord(page.R_NUM, page.R_STR, []byte{1}, []byte("Hello, World!")), rec)
 
+	fmt.Println(">>>\n", pc)
+
 	// Scenario 3: We should be able to create new pages until we fill up the buffer pool.
 	for i := uint16(1); i < pageCount; i++ {
 		p := pc.NewPage()
 		util.Equals(t, page.PageID(i), p.GetPageID())
 	}
+
+	fmt.Println(">>>\n", pc)
 
 	// Scenario 4: Once the buffer pool is full, we should not be able to create any new pages.
 	for i := pageCount; i < pageCount*2; i++ {
@@ -64,6 +72,8 @@ func TestPageCache(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		pc.NewPage()
 	}
+
+	fmt.Println(">>>\n", pc)
 
 	// Scenario 6: We should be able to fetch the data we wrote a while ago.
 	page0 = pc.FetchPage(page.PageID(0))
@@ -92,14 +102,16 @@ func TestPageCache(t *testing.T) {
 		t.Error(err)
 	}
 
-	err = os.Remove(filepath.Join(testDir, testFile))
-	if err != nil {
-		t.Error(err)
-	}
+	if cleanUpWhenDone {
+		err = os.Remove(filepath.Join(testDir, testFile))
+		if err != nil {
+			t.Error(err)
+		}
 
-	err = os.Remove(testDir)
-	if err != nil {
-		t.Error(err)
+		err = os.Remove(testDir)
+		if err != nil {
+			t.Error(err)
+		}
 	}
 
 }

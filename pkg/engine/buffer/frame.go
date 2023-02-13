@@ -1,6 +1,7 @@
 package buffer
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -23,6 +24,24 @@ type Frame struct {
 	pinCount  uint32      // how many threads are mutating the Frame
 	isDirty   bool        // page data has been modified and not flushed
 	page.Page             // actual page data
+}
+
+func (f *Frame) MarshalJSON() ([]byte, error) {
+	if len(f.Page) == 0 {
+		return []byte("{}"), nil
+	}
+	info := struct {
+		FID      uint32 `json:"fid"`
+		PID      uint32 `json:"pid"`
+		PinCount uint32 `json:"pin_count"`
+		IsDirty  bool   `json:"is_dirty"`
+	}{
+		FID:      uint32(f.fid),
+		PID:      f.pid,
+		PinCount: f.pinCount,
+		IsDirty:  f.isDirty,
+	}
+	return json.Marshal(&info)
 }
 
 // newFrame takes a page id, a frame id along with a page size

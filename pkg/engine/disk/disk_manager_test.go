@@ -4,7 +4,40 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/cagnosolutions/go-data/pkg/engine/page"
 )
+
+func TestDiskManager_NewDiskManager(t *testing.T) {
+	var fm *DiskManager
+	if fm != nil {
+		t.Errorf("open: io manager should be nil, got %v", fm)
+	}
+
+	var filename string
+	file, err := os.CreateTemp("", "my-temp-file.txt")
+	if err != nil {
+		t.Errorf("create temp: %s", err)
+	}
+	filename = file.Name()
+	fm, err = NewDiskManager(file)
+	if err != nil {
+		t.Errorf("open: io manager open error: %s", err)
+	}
+	defer func() {
+		err := os.Remove(filename)
+		if err != nil {
+			t.Errorf("open: error removing io: %s", err)
+		}
+	}()
+	if fm == nil {
+		t.Errorf("open: io manager should NOT be nil, got %v", fm)
+	}
+	err = fm.Close()
+	if err != nil {
+		t.Errorf("open: error closing io: %s", err)
+	}
+}
 
 func TestDiskManager_OpenDiskManager(t *testing.T) {
 	var fm *DiskManager
@@ -45,7 +78,7 @@ func TestDiskManager_AllocatePage(t *testing.T) {
 		t.Errorf("allocate: io manager should NOT be nil, got %v", fm)
 	}
 
-	var pages []PageID
+	var pages []page.PageID
 	for i := 0; i < 8; i++ {
 		pages = append(pages, fm.AllocatePage())
 	}
@@ -74,7 +107,7 @@ func TestDiskManager_WritePage(t *testing.T) {
 		t.Errorf("write: io manager should NOT be nil, got %v", fm)
 	}
 
-	var pages []PageID
+	var pages []page.PageID
 	for i := 0; i < 8; i++ {
 		pages = append(pages, fm.AllocatePage())
 	}
@@ -84,10 +117,10 @@ func TestDiskManager_WritePage(t *testing.T) {
 	fmt.Printf("page id's allocated: %v\n", pages)
 
 	for _, pid := range pages {
-		pg := newPage(uint32(pid), P_USED)
+		pg := page.NewPage(pid, page.P_USED)
 		rk := []byte(fmt.Sprintf("%.4d", pid))
 		rv := []byte(fmt.Sprintf("some data for page #%.4d", pid))
-		_, err = pg.addRecord(newRecord(rStrStr, rk, rv))
+		_, err = pg.AddRecord(page.NewRecord(page.R_STR, page.R_STR, rk, rv))
 		if err != nil {
 			t.Errorf("write: error writing page record: %s", err)
 		}
@@ -118,7 +151,7 @@ func TestDiskManager_ReadPage(t *testing.T) {
 		t.Errorf("read: io manager should NOT be nil, got %v", fm)
 	}
 
-	var pages []PageID
+	var pages []page.PageID
 	for i := 0; i < 8; i++ {
 		pages = append(pages, fm.AllocatePage())
 	}
@@ -128,10 +161,10 @@ func TestDiskManager_ReadPage(t *testing.T) {
 	fmt.Printf("page id's allocated: %v\n", pages)
 
 	for _, pid := range pages {
-		pg := newPage(uint32(pid), P_USED)
+		pg := page.NewPage(pid, page.P_USED)
 		rk := []byte(fmt.Sprintf("%.4d", pid))
 		rv := []byte(fmt.Sprintf("some data for page #%.4d", pid))
-		_, err = pg.addRecord(newRecord(rStrStr, rk, rv))
+		_, err = pg.AddRecord(page.NewRecord(page.R_STR, page.R_STR, rk, rv))
 		if err != nil {
 			t.Errorf("read: error writing page record: %s", err)
 		}
@@ -142,7 +175,7 @@ func TestDiskManager_ReadPage(t *testing.T) {
 	}
 
 	for _, pid := range pages {
-		pg := newPage(uint32(pid), P_USED)
+		pg := page.NewPage(pid, page.P_USED)
 		err = fm.ReadPage(pid, pg)
 		if err != nil {
 			t.Errorf("read: error writing page: %s", err)
@@ -150,7 +183,7 @@ func TestDiskManager_ReadPage(t *testing.T) {
 		if pg == nil {
 			t.Errorf("read: page should not be nil")
 		}
-		fmt.Printf("page header: %+v\n", pg.getPageHeader())
+		fmt.Printf("page header: %+v\n", pg.GetPageHeader())
 	}
 
 	err = fm.Close()

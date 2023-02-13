@@ -39,9 +39,9 @@ type StorageEngine struct {
 	journal     *logging.WAL
 }
 
-// Open opens a data store using the provided store name. If the store does not exist,
+// OpenStorageEngine opens a data store using the provided store name. If the store does not exist,
 // it will create a data store at the base path provided.
-func Open(path string) (*StorageEngine, error) {
+func OpenStorageEngine(path string) (*StorageEngine, error) {
 	// Create a new base path
 	path = filepath.ToSlash(strings.Replace(path, filepath.Ext(path), "", -1))
 	err := os.MkdirAll(path, 0644|os.ModeDir)
@@ -137,6 +137,10 @@ func (se *StorageEngine) DropNamespace(name string) error {
 	return nil
 }
 
+func (se *StorageEngine) Save() error {
+	return nil
+}
+
 // Insert will attempt to insert the provided data p into the provided namespace ns.
 // It will return a record ID, or any potential errors encountered.
 func (se *StorageEngine) Insert(ns string, p []byte) (uint32, error) {
@@ -150,8 +154,9 @@ func (se *StorageEngine) Insert(ns string, p []byte) (uint32, error) {
 		return 0, ErrDataStoreDoesNotExist
 	}
 	// Got it; do our thing
-	pid := st.recent.PageID
-	pg := st.cache.FetchPage(page.PageID(pid))
+	pg := st.cache.NewPage()
+	// pid := st.recent.PageID
+	// pg := st.cache.FetchPage(page.PageID(pid))
 	if pg == nil {
 		// Page not found
 		return 0, page.ErrPageNotFound
@@ -164,7 +169,8 @@ func (se *StorageEngine) Insert(ns string, p []byte) (uint32, error) {
 	// Update the most recent record ID
 	st.recent = rid
 	// Unpin the page
-	err = st.cache.UnpinPage(page.PageID(pid), true)
+	err = st.cache.UnpinPage(pg.GetPageID(), true)
+	// err = st.cache.UnpinPage(page.PageID(pid), true)
 	if err != nil {
 		return 0, err
 	}

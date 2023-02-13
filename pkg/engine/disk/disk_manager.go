@@ -21,6 +21,40 @@ type DiskManager struct {
 	size    int64
 }
 
+func (dm *DiskManager) GetFile() *os.File {
+	return dm.file
+}
+
+func (dm *DiskManager) GetNextPID() page.PageID {
+	return dm.nextPID
+}
+
+func NewDiskManager(file *os.File) (*DiskManager, error) {
+	// Get the current file size
+	fi, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	size := fi.Size()
+	nextPageID := page.PageID(0)
+	if size > 0 {
+		nextPageID = page.PageID(size / page.PageSize)
+	}
+	// Initialize a new DiskManager instance
+	fm := &DiskManager{
+		file:    file,
+		nextPID: nextPageID,
+		size:    size,
+	}
+	// Load the meta info for the DiskManager instance
+	err = fm.load()
+	if err != nil {
+		return nil, err
+	}
+	// Return our instance
+	return fm, nil
+}
+
 // OpenDiskManager opens an existing disk manager instance if one exists with the same
 // name, otherwise it creates a new instance and returns it along with any potential
 // errors encountered.

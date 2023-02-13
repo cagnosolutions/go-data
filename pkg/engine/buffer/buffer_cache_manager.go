@@ -1,7 +1,10 @@
 package buffer
 
 import (
+	"encoding/json"
 	"log"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -22,6 +25,35 @@ type BufferCacheManager struct {
 
 	hits   uint64 // number of times a page was found in the buffer pool
 	misses uint64 // number of times a page was not found (had to be paged in)
+}
+
+func NewBufferCacheManager(file *os.File, pageCount uint16) (*BufferCacheManager, error) {
+	// open current manager
+	fm, err := disk.NewDiskManager(file)
+	if err != nil {
+		return nil, err
+	}
+	// create buffer manager instance
+	bm := &BufferCacheManager{
+		pool:      make([]Frame, pageCount, pageCount),
+		replacer:  NewClockReplacer(pageCount),
+		disk:      fm,
+		freeList:  make([]FrameID, pageCount),
+		pageTable: make(map[page.PageID]FrameID),
+	}
+	// initialize the pool in the buffer manager
+	for i := uint16(0); i < pageCount; i++ {
+		bm.pool[i] = Frame{
+			pid:      0,
+			fid:      0,
+			pinCount: 0,
+			isDirty:  false,
+			Page:     nil,
+		}
+		bm.freeList[i] = FrameID(i)
+	}
+	// return buffer manager
+	return bm, nil
 }
 
 // OpenBufferCacheManager opens an existing storage manager instance if one exists with the same namespace
@@ -347,5 +379,81 @@ func (pc *BufferCacheManager) monitor() {
 }
 
 func (pc *BufferCacheManager) JSON() string {
-	return ""
+	info := struct {
+		UsedFrames  []Frame   `json:"used_frames"`
+		FreeFrames  []FrameID `json:"free_frames"`
+		DiskManager struct {
+			FileName   string
+			NextPageID uint32
+		} `json:"disk_manager"`
+		PageTable map[page.PageID]FrameID `json:"page_table"`
+		Hits      uint64                  `json:"hits"`
+		Misses    uint64                  `json:"misses"`
+	}{
+		UsedFrames: pc.pool,
+		FreeFrames: pc.freeList,
+		DiskManager: struct {
+			FileName   string
+			NextPageID uint32
+		}{
+			FileName:   filepath.Base(pc.disk.GetFile().Name()),
+			NextPageID: pc.disk.GetNextPID(),
+		},
+		PageTable: pc.pageTable,
+		Hits:      pc.hits,
+		Misses:    pc.misses,
+	}
+
+	b, err := json.MarshalIndent(&info, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
 }
+
+func (pc *BufferCacheManager) String() string {
+	// var sb strings.Builder
+	//
+	// // Frame info
+	// sb.WriteString(heading("Frame info"))
+	// var used int
+	// var notused int
+	// for i := range pc.pool {
+	// 	if pc.pool[i].pid > 0 && pc.pool[i].pinCount > 0 || len(pc.pool[i].Page) > 0 {
+	// 		used++
+	// 	} else {
+	// 		notused++
+	// 	}
+	// }
+	// sb.WriteString("used: ")
+	// sb.WriteString(strconv.Itoa(used))
+	// sb.WriteString("\n")
+	// sb.WriteString("free: ")
+	// sb.WriteString(strconv.Itoa(notused))
+	// sb.WriteString("\n")
+	//
+	// // Hits and misses info
+	// sb.WriteString(heading("Cache info"))
+	// sb.WriteString("hits: ")
+	// sb.WriteString(strconv.Itoa(int(pc.hits)))
+	// sb.WriteString("\n")
+	// sb.WriteString("misses: ")
+	// sb.WriteString(strconv.Itoa(int(pc.misses)))
+	// sb.WriteString("\n")
+	//
+	// return sb.String()
+	return pc.JSON()
+}
+
+func heading(s string) string {
+	return "\n" + s + "\n-----\n"
+}
+
+// pool      []Frame                 // buffer pool page frames
+// replacer  *ClockReplacer          // page replacement policy structure
+// disk      *disk.DiskManager       // underlying current manager
+// freeList  []FrameID               // list of frames that are free to use
+// pageTable map[page.PageID]FrameID // table of the current page to frame mappings
+//
+// hits   uint64 // number of times a page was found in the buffer pool
+// misses uint64 // number of times a page was not found (had to be paged in)

@@ -41,5 +41,5 @@ func ModBit16Hi(n uint16, pos uint16, on bool) uint16 {
 		b = 1
 	}
 	mask := 1<<15 - pos
-	return (n & ^mask) | (b<<31 - pos)
+	return (n & ^mask) | (b<<15 - pos)
 }
