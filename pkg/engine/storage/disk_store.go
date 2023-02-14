@@ -1,6 +1,7 @@
-package disk
+package storage
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,54 +12,20 @@ import (
 
 const dataFilePerm = 1466
 
-// DiskManager is a structure responsible for creating and managing access with
+// DiskStore is a structure responsible for creating and managing access with
 // the actual files stored on disk. The current disk manager instance is only
 // responsible for dealing with one file at a time.
-type DiskManager struct {
+type DiskStore struct {
 	sync.RWMutex
 	file    *os.File
 	nextPID page.PageID
 	size    int64
 }
 
-func (dm *DiskManager) GetFile() *os.File {
-	return dm.file
-}
-
-func (dm *DiskManager) GetNextPID() page.PageID {
-	return dm.nextPID
-}
-
-func NewDiskManager(file *os.File) (*DiskManager, error) {
-	// Get the current file size
-	fi, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-	size := fi.Size()
-	nextPageID := page.PageID(0)
-	if size > 0 {
-		nextPageID = page.PageID(size / page.PageSize)
-	}
-	// Initialize a new DiskManager instance
-	fm := &DiskManager{
-		file:    file,
-		nextPID: nextPageID,
-		size:    size,
-	}
-	// Load the meta info for the DiskManager instance
-	err = fm.load()
-	if err != nil {
-		return nil, err
-	}
-	// Return our instance
-	return fm, nil
-}
-
-// OpenDiskManager opens an existing disk manager instance if one exists with the same
+// Open opens an existing disk manager instance if one exists with the same
 // name, otherwise it creates a new instance and returns it along with any potential
 // errors encountered.
-func OpenDiskManager(path string) (*DiskManager, error) {
+func Open(path string) (*DiskStore, error) {
 	// Clean path
 	path, err := filepath.Abs(filepath.ToSlash(path))
 	if err != nil {
@@ -96,13 +63,13 @@ func OpenDiskManager(path string) (*DiskManager, error) {
 	if size > 0 {
 		nextPageID = page.PageID(size / page.PageSize)
 	}
-	// Initialize a new DiskManager instance
-	fm := &DiskManager{
+	// Initialize a new DiskStore instance
+	fm := &DiskStore{
 		file:    fp,
 		nextPID: nextPageID,
 		size:    size,
 	}
-	// Load the meta info for the DiskManager instance
+	// Load the meta info for the DiskStore instance
 	err = fm.load()
 	if err != nil {
 		return nil, err
@@ -111,16 +78,16 @@ func OpenDiskManager(path string) (*DiskManager, error) {
 	return fm, nil
 }
 
-// load attempts to populate our DiskManager instance with metadata about the file.
-func (f *DiskManager) load() error {
+// load attempts to populate our DiskStore instance with metadata about the file.
+func (s *DiskStore) load() error {
 	return nil
 }
 
 // logicalOffset checks for any out of bounds errors, and returns an error if there
 // is one. Otherwise, it takes a page ID and returns a logical page offset.
-func (f *DiskManager) logicalOffset(pid page.PageID) (int64, error) {
+func (s *DiskStore) logicalOffset(pid page.PageID) (int64, error) {
 	// Check to see if the requested pid falls within the set that has been distributed
-	if pid > f.nextPID {
+	if pid > s.nextPID {
 		return -1, page.ErrPageIDHasNotBeenAllocated(pid)
 	}
 	// We are good, so we will calculate the logical page offset.
@@ -128,16 +95,16 @@ func (f *DiskManager) logicalOffset(pid page.PageID) (int64, error) {
 }
 
 // AllocatePage simply returns the next logical page ID that is can be written to.
-func (f *DiskManager) AllocatePage() page.PageID {
+func (s *DiskStore) AllocatePage() page.PageID {
 	// increment and return the nextpage.PageID
-	return page.PageID(atomic.SwapUint32((*uint32)(&f.nextPID), uint32(f.nextPID+1)))
+	return page.PageID(atomic.SwapUint32((*uint32)(&s.nextPID), uint32(s.nextPID+1)))
 }
 
 // DeallocatePage writes zeros to the page located at the logical address
 // calculated using the page ID provided.
-func (f *DiskManager) DeallocatePage(pid page.PageID) error {
+func (s *DiskStore) DeallocatePage(pid page.PageID) error {
 	// Calculate the logical page offset.
-	off, err := f.logicalOffset(pid)
+	off, err := s.logicalOffset(pid)
 	if err != nil {
 		return err
 	}
@@ -145,12 +112,12 @@ func (f *DiskManager) DeallocatePage(pid page.PageID) error {
 	ep := page.NewPage(uint32(pid), page.P_FREE)
 	// Then, we can attempt to write the contents of the empty page data directly
 	// to the calculated offset
-	_, err = f.file.WriteAt(ep, off)
+	_, err = s.file.WriteAt(ep, off)
 	if err != nil {
 		return err
 	}
 	// Don't forget to sync it up
-	err = f.file.Sync()
+	err = s.file.Sync()
 	if err != nil {
 		return err
 	}
@@ -161,14 +128,14 @@ func (f *DiskManager) DeallocatePage(pid page.PageID) error {
 
 // ReadPage reads the page located at the logical address calculated using the
 // page ID provided.
-func (f *DiskManager) ReadPage(pid page.PageID, p page.Page) error {
+func (s *DiskStore) ReadPage(pid page.PageID, p page.Page) error {
 	// Calculate the logical page offset.
-	off, err := f.logicalOffset(pid)
+	off, err := s.logicalOffset(pid)
 	if err != nil {
 		return err
 	}
 	// Read page data
-	_, err = f.file.ReadAt(p, off)
+	_, err = s.file.ReadAt(p, off)
 	if err != nil {
 		return err
 	}
@@ -177,19 +144,19 @@ func (f *DiskManager) ReadPage(pid page.PageID, p page.Page) error {
 
 // WritePage writes the page located at the logical address calculated using the
 // page ID provided.
-func (f *DiskManager) WritePage(pid page.PageID, p page.Page) error {
+func (s *DiskStore) WritePage(pid page.PageID, p page.Page) error {
 	// Calculate the logical page offset.
-	off, err := f.logicalOffset(pid)
+	off, err := s.logicalOffset(pid)
 	if err != nil {
 		return err
 	}
 	// Write page data
-	_, err = f.file.WriteAt(p, off)
+	_, err = s.file.WriteAt(p, off)
 	if err != nil {
 		return err
 	}
 	// Make sure we sync
-	err = f.file.Sync()
+	err = s.file.Sync()
 	if err != nil {
 		return err
 	}
@@ -199,7 +166,36 @@ func (f *DiskManager) WritePage(pid page.PageID, p page.Page) error {
 }
 
 // Close closes the current manager instance
-func (f *DiskManager) Close() error {
+func (s *DiskStore) Close() error {
 	// close the underlying io
-	return f.file.Close()
+	return s.file.Close()
+}
+
+func (s *DiskStore) String() string {
+	return s.JSON()
+}
+
+func (s *DiskStore) JSON() string {
+	fi, err := s.file.Stat()
+	if err != nil {
+		panic(err)
+	}
+	info := struct {
+		BasePath string `json:"base_path"`
+		FileName string `json:"file_name"`
+		FileSize int64  `json:"file_size"`
+		NextPID  uint32 `json:"next_pid"`
+		Size     int64  `json:"size"`
+	}{
+		BasePath: filepath.Dir(s.file.Name()),
+		FileName: filepath.Base(s.file.Name()),
+		FileSize: fi.Size(),
+		NextPID:  s.nextPID,
+		Size:     s.size,
+	}
+	b, err := json.MarshalIndent(&info, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
 }

@@ -1,4 +1,4 @@
-package disk
+package storage
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestDiskManager_NewDiskManager(t *testing.T) {
-	var fm *DiskManager
+	var fm *DiskStore
 	if fm != nil {
 		t.Errorf("open: io manager should be nil, got %v", fm)
 	}
@@ -40,7 +40,7 @@ func TestDiskManager_NewDiskManager(t *testing.T) {
 }
 
 func TestDiskManager_OpenDiskManager(t *testing.T) {
-	var fm *DiskManager
+	var fm *DiskStore
 	if fm != nil {
 		t.Errorf("open: io manager should be nil, got %v", fm)
 	}

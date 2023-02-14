@@ -6,63 +6,63 @@ import (
 )
 
 func TestClockReplacer_Size(t *testing.T) {
-	cr := newClockReplacer(10)
-	fmt.Println(cr.size())
-	cr.unpin(1)
-	fmt.Println(cr.size())
+	cr := NewClockReplacer(10)
+	fmt.Println(cr.Size())
+	cr.Unpin(1)
+	fmt.Println(cr.Size())
 
 }
 
 func TestClockReplacer_All(t *testing.T) {
-	cr := newClockReplacer(10)
-	cr.unpin(1)
-	cr.unpin(2)
-	cr.unpin(3)
-	cr.unpin(4)
-	cr.unpin(5)
-	cr.unpin(6)
-	cr.unpin(1)
+	cr := NewClockReplacer(10)
+	cr.Unpin(1)
+	cr.Unpin(2)
+	cr.Unpin(3)
+	cr.Unpin(4)
+	cr.Unpin(5)
+	cr.Unpin(6)
+	cr.Unpin(1)
 
-	ans := cr.size()
+	ans := cr.Size()
 	if ans != 6 {
 		t.Errorf("got %d, want %d", ans, 6)
 	}
 
-	val := cr.victim()
+	val := cr.Victim()
 	if *val != 1 {
 		t.Errorf("got %d, want %d", val, 1)
 	}
 
-	val = cr.victim()
+	val = cr.Victim()
 	if *val != 2 {
 		t.Errorf("got %d, want %d", val, 2)
 	}
 
-	val = cr.victim()
+	val = cr.Victim()
 	if *val != 3 {
 		t.Errorf("got %d, want %d", val, 3)
 	}
 
-	cr.pin(3)
-	cr.pin(4)
-	ans = cr.size()
+	cr.Pin(3)
+	cr.Pin(4)
+	ans = cr.Size()
 	if ans != 2 {
 		t.Errorf("got %d, want %d", ans, 2)
 	}
 
-	cr.unpin(4)
+	cr.Unpin(4)
 
-	val = cr.victim()
+	val = cr.Victim()
 	if *val != 5 {
 		t.Errorf("got %d, want %d", val, 5)
 	}
 
-	val = cr.victim()
+	val = cr.Victim()
 	if *val != 6 {
 		t.Errorf("got %d, want %d", val, 6)
 	}
 
-	val = cr.victim()
+	val = cr.Victim()
 	if *val != 4 {
 		t.Errorf("got %d, want %d", val, 4)
 	}
@@ -71,7 +71,7 @@ func TestClockReplacer_All(t *testing.T) {
 func TestClockReplacer_CircularList(t *testing.T) {
 
 	// create list
-	list := newCircularList(10)
+	list := newCircularList[FrameID, bool](10)
 
 	// test print
 	// fmt.Println("list:", list)
@@ -116,7 +116,7 @@ func TestClockReplacer_CircularList(t *testing.T) {
 	// fmt.Println("list:", list)
 
 	// test scan
-	iter := func(n *dllNode) bool {
+	iter := func(n *dllNode[FrameID, bool]) bool {
 		// fmt.Println(n)
 		return n != nil
 	}

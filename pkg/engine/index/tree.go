@@ -33,7 +33,7 @@ func (n *node) min() uint32 {
 
 // pageTree is a b plus tree wrapping the page cache.
 type pageTree struct {
-	cache *buffer.BufferCacheManager
+	cache *buffer.BufferPoolManager
 	root  page.PageID
 }
 

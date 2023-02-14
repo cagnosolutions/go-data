@@ -13,9 +13,9 @@ var (
 )
 
 // FrameID is a unsigned 32bit integer.
-type FrameID uint32
+type FrameID = uint32
 
-// Frame is a page frame that is used by the BufferCacheManager to
+// Frame is a page frame that is used by the BufferPoolManager to
 // hold and cache a page that may be written to disk, or that has
 // been read from disk.
 type Frame struct {

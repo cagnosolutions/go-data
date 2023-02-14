@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cagnosolutions/go-data/pkg/engine/page"
+	"github.com/cagnosolutions/go-data/pkg/engine/storage"
 	"github.com/cagnosolutions/go-data/pkg/util"
 )
 
@@ -20,7 +21,19 @@ func TestPageCache(t *testing.T) {
 	testDir := "testing"
 	testFile := "page_cache_test.txt"
 
-	pc, err := OpenBufferCacheManager(filepath.Join(testDir, testFile), pageCount)
+	ds, err := storage.Open(filepath.Join(testDir, testFile))
+	if err != nil {
+		t.Errorf("opening disk store")
+	}
+
+	defer func(ds *storage.DiskStore) {
+		err := ds.Close()
+		if err != nil {
+
+		}
+	}(ds)
+
+	pc, err := New(ds, pageCount)
 	if err != nil {
 		t.Errorf("opening buffer manager: %s\n", err)
 	}
@@ -122,7 +135,12 @@ func TestPageCache_HitRate(t *testing.T) {
 	testDir := "testing"
 	testFile := "page_cache_test.txt"
 
-	pc, err := OpenBufferCacheManager(filepath.Join(testDir, testFile), pageCount)
+	ds, err := storage.Open(filepath.Join(testDir, testFile))
+	if err != nil {
+		t.Errorf("opening disk store")
+	}
+
+	pc, err := New(ds, pageCount)
 	if err != nil {
 		t.Errorf("opening buffer manager: %s\n", err)
 	}

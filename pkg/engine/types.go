@@ -14,42 +14,6 @@ package engine
 // 	getUsableFrameID() (*buffer.FrameID, error)
 // }
 
-// // replacer is an interface describing the basic operations that make up a replacement
-// // policy. The replacer is used by the bufferPoolManager.
-// type replacer interface {
-// 	// Pin pins the frame matching the supplied frame ID, indicating that it should
-// 	// not be victimized until it is unpinned.
-// 	Pin(fid buffer.FrameID)
-// 	// Victim removes and returns the next "victim frame", as defined by the policy.
-// 	Victim() *buffer.FrameID
-// 	// Unpin unpins the frame matching the supplied frame ID, indicating that it may
-// 	// now be victimized.
-// 	Unpin(fid buffer.FrameID)
-// }
-
-// // diskManager is an interface describing the basic operations that the
-// // io manager is responsible for handling. The diskManager is usually
-// // something that is used by a bufferPoolManager.
-// type diskManager interface {
-// 	// AllocatePage allocates and returns the next sequential page.PageID.
-// 	// in some cases, if there are a lot of empty fragmented pages, it may
-// 	// return a non-sequential page.PageID.
-// 	AllocatePage() PageID
-// 	// DeallocatePage takes a page.PageID and attempts to locate and mark
-// 	// the associated page status as free to use in the future. The data
-// 	// may be wiped, so this is a destructive call and should be used with
-// 	// care.
-// 	DeallocatePage(pid PageID) error
-// 	// ReadPage takes a page.PageID, as well as a (preferably empty) page.Page,
-// 	// attempts to locate and copy the contents into p.
-// 	ReadPage(pid PageID, p Page) error
-// 	// WritePage takes a page.PageID, as well as a page.Page, attempts to locate
-// 	// and copy and flush the contents of p onto the io.
-// 	WritePage(pid PageID, p Page) error
-// 	// Close closes the io manager.
-// 	Close() error
-// }
-
 // // bufferPoolManager is an interface for describing the basic operations that
 // // the buffer pool manager is responsible for handling.
 // type bufferPoolManager interface {
@@ -75,4 +39,24 @@ package engine
 // 	// Close flushes and dirty page.Page data to the underlying io, and then
 // 	// shuts down the bufferPoolManager.
 // 	Close() error
+// }
+
+// var InitializerError = func(err error) error {
+// 	return fmt.Errorf("initializer error: %w", err)
+// }
+//
+// type Initializer interface {
+// 	Init(args any) error
+// }
+//
+// // Loader is an interface that should have a method for loading
+// // and a method to check to see if something is loaded.
+// type Loader interface {
+// 	// IsLoaded should return a boolean indicating the status
+// 	// of whether Loader has successfully been called.
+// 	IsLoaded() bool
+//
+// 	// Load should do any necessary work and return any errors
+// 	// encountered.
+// 	Load() error
 // }
