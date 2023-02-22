@@ -3,6 +3,7 @@ package page
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -904,6 +905,30 @@ func (p *Page) String() string {
 	}
 	ss += fmt.Sprintf("%10v +---------+ %10v\n", "", "")
 	return ss
+}
+
+func (p *Page) HexDump() string {
+	var buf strings.Builder
+	dumper := hex.Dumper(&buf)
+	pg := []byte(*p)
+	var line []byte
+	var n int
+	for i := 0; i < len(pg); i += 16 {
+		// if the current line is the same
+		// as the last line, write a single
+		// asterisk, and continue...
+		if bytes.Equal(pg[i:i+16], line) {
+			dumper.Write()
+			continue
+		}
+		line = pg[i : i+16]
+		dumper.Write(line)
+	}
+	// dumper.Write([]byte(*p)[0:64])
+	// dumper.Write(make([]byte, 16))
+	// dumper.Write([]byte(*p)[len(*p)-64:])
+	dumper.Close()
+	return buf.String()
 }
 
 /*

@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cagnosolutions/go-data/pkg/engine/disk"
 	"github.com/cagnosolutions/go-data/pkg/engine/logging"
 	"github.com/cagnosolutions/go-data/pkg/engine/page"
-	"github.com/cagnosolutions/go-data/pkg/engine/storage"
 )
 
 // BufferPoolManager is the access level structure wrapping up the bufferPool, and DiskStore,
@@ -17,7 +17,7 @@ type BufferPoolManager struct {
 	latch     sync.Mutex
 	pool      []Frame                 // buffer pool page frames
 	replacer  Replacer                // page replacement policy structure
-	store     storage.Storer          // underlying current manager
+	store     disk.Storer             // underlying current manager
 	freeList  []FrameID               // list of frames that are free to use
 	pageTable map[page.PageID]FrameID // table of the current page to frame mappings
 
@@ -26,7 +26,7 @@ type BufferPoolManager struct {
 }
 
 // New initializes and returns a new buffer cache manager instance.
-func New(storage storage.Storer, size uint16) (*BufferPoolManager, error) {
+func New(storage disk.Storer, size uint16) (*BufferPoolManager, error) {
 	// Create a new replacer instance
 	replacer := NewClockReplacer(size)
 	// Create buffer manager instance
@@ -354,7 +354,7 @@ func (bm *BufferPoolManager) JSON() string {
 	}{
 		UsedFrames:     bm.pool,
 		FreeFrames:     bm.freeList,
-		StorageManager: storage.Storer.String,
+		StorageManager: disk.Storer.String,
 		PageTable:      bm.pageTable,
 		Hits:           bm.hits,
 		Misses:         bm.misses,

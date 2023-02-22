@@ -1,14 +1,14 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="TestDiskManager" type="GoTestRunConfiguration" factoryName="Go Test" singleton="false">
+  <configuration default="false" name="TestDiskStore" type="GoTestRunConfiguration" factoryName="Go Test" singleton="false">
     <module name="go-data" />
-    <working_directory value="$PROJECT_DIR$/pkg/pager" />
+    <working_directory value="$PROJECT_DIR$/pkg/engine/storage" />
     <go_parameters value="-race -vet=all" />
     <kind value="PACKAGE" />
-    <package value="github.com/cagnosolutions/go-data/pkg/pager" />
+    <package value="github.com/cagnosolutions/go-data/pkg/engine/storage" />
     <directory value="$PROJECT_DIR$" />
     <filePath value="$PROJECT_DIR$" />
     <framework value="gotest" />
-    <pattern value="^TestDiskManager_.*$" />
+    <pattern value="^TestDiskStore_.*$" />
     <method v="2" />
   </configuration>
 </component>

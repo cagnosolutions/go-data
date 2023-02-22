@@ -9,6 +9,17 @@ import (
 	"time"
 )
 
+func TestPage_HexDump(t *testing.T) {
+	p := NewPage(3, P_USED)
+	_, err := addRecords(p)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(p.HexDump())
+	// fmt.Println(hex.Dump(p))
+	// os.WriteFile("pagedump.txt", p, 0666)
+}
+
 func TestPage_NewPage(t *testing.T) {
 	var p Page
 	if p != nil {

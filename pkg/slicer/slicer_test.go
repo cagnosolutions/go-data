@@ -203,6 +203,10 @@ func (s slots) Swap(i, j int) {
 	*s[i], *s[j] = *s[j], *s[i]
 }
 
+func (s *slot) bounds() (int, int) {
+	return s.offset, s.offset + s.length
+}
+
 func compaction(nn []int, index map[int]slot) []int {
 	// get free space slice
 	free := SubSlice(nn, index[-1].offset, index[-1].length)

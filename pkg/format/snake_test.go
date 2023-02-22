@@ -58,7 +58,7 @@ func BenchmarkToSnakeCaseCopy(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		for _, s := range toSnakeCases {
-			out := ToSnakeCaseCopy(s.args)
+			out := _ToSnakeCaseCopy(s.args)
 			if out != s.want {
 				b.Errorf("out=%q, wanted=%q\n", out, s.want)
 			}
