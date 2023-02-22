@@ -42,7 +42,7 @@ func NewIndexer(delim byte) *Indexer {
 func (i *Indexer) Index(b []byte) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	br := bufio.NewReader(bytes.NewReader(b))
+	br := bufio.NewReaderSize(bytes.NewReader(b), 64)
 	var part, off int
 	for {
 		p, err := br.ReadBytes(i.delim)

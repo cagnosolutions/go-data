@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cagnosolutions/go-data/pkg/spanindexer"
 	"github.com/cagnosolutions/go-data/pkg/util"
 )
 
@@ -161,6 +162,24 @@ func TestFileUtils_ReadSlice(t *testing.T) {
 	}
 }
 
+func BenchmarkAll(b *testing.B) {
+
+	benches := []struct {
+		name string
+		f    func(b *testing.B)
+	}{
+		{"LineScanner", BenchmarkFileUtils_LineScanner},
+		{"ReadSlice", BenchmarkFileUtils_ReadSlice},
+		{"IndexSpans", BenchmarkFileUtils_IndexSpans},
+		{"FieldsFunc", BenchmarkFileUtils_FieldsFunc},
+		{"SpanIndexer", BenchmarkSpanIndexer},
+	}
+	for _, bench := range benches {
+		b.Run(bench.name, bench.f)
+	}
+
+}
+
 func BenchmarkFileUtils_LineScanner(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
@@ -215,6 +234,17 @@ func BenchmarkFileUtils_FieldsFunc(b *testing.B) {
 			},
 		)
 		if res == nil || len(res) < 1 {
+			b.Fatal("bad return value")
+		}
+	}
+}
+
+func BenchmarkSpanIndexer(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		r := spanindexer.NewIndexer('\n')
+		r.Index(data)
+		if r.Len() < 1 {
 			b.Fatal("bad return value")
 		}
 	}
