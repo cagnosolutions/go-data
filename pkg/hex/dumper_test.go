@@ -9,6 +9,10 @@ import (
 	"testing"
 )
 
+func TestSkipDiplicates(t *testing.T) {
+	fmt.Println(HexDumpSkipDuplicates([]byte(testData)))
+}
+
 var testData = `This line is A+
 AAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAA

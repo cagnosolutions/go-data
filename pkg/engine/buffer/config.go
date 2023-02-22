@@ -3,7 +3,7 @@ package buffer
 import (
 	"errors"
 
-	"github.com/cagnosolutions/go-data/pkg/engine/disk"
+	"github.com/cagnosolutions/go-data/pkg/engine/storage"
 )
 
 var (
@@ -14,7 +14,7 @@ var (
 type Config struct {
 	PageCount uint16
 	Replacer
-	disk.Storer
+	storage.Storer
 }
 
 func checkConfig(conf *Config) error {
