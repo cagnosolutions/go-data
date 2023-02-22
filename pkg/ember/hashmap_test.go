@@ -1,18 +1,16 @@
-package ohmap
+package ember
 
 import (
 	"bytes"
 	"fmt"
-	"hash/maphash"
 	"math/rand"
 	"strconv"
 	"testing"
 
-	"github.com/cagnosolutions/go-data/pkg/bits"
+	"github.com/cagnosolutions/go-data/pkg/hash/murmur3"
 	"github.com/cagnosolutions/go-data/pkg/util"
 )
 
-// 25 words
 var words = []string{
 	"reproducibility",
 	"eruct",
@@ -45,30 +43,10 @@ var words = []string{
 	"bar",
 	"FooBar",
 	"foobar",
-	"",
+	" ",
 	" foo",
 	"foo ",
 	" foo ",
-}
-
-func Test_maphashHashFunc(t *testing.T) {
-	set := make(map[uint64]string, len(words))
-	var h maphash.Hash
-	var hash uint64
-	var coll int
-	for _, word := range words {
-		h.Write([]byte(word))
-		hash = h.Sum64()
-		if old, ok := set[hash]; !ok {
-			set[hash] = word
-		} else {
-			coll++
-			fmt.Printf(
-				"collision: current word: %s, old word: %s, hash: %d\n", word, old, hash,
-			)
-		}
-	}
-	fmt.Printf("encountered %d collisions comparing %d words\n", coll, len(words))
 }
 
 func Test_defaultHashFunc(t *testing.T) {
@@ -90,77 +68,82 @@ func Test_defaultHashFunc(t *testing.T) {
 }
 
 func Test_HashMap_Del(t *testing.T) {
-	hm := NewHashMap(128)
+	hm := newHashMap(128, nil)
 	for i := 0; i < len(words); i++ {
-		hm.Set(words[i], []byte{0x69})
+		hm.set(words[i], []byte{0x69})
 	}
 	util.AssertExpected(t, 35, hm.Len())
 	count := hm.Len()
 	var stop = hm.Len()
 	for i := 0; i < stop; i++ {
-		ret, ok := hm.Del(words[i])
+		ret, ok := hm.del(words[i])
 		util.AssertExpected(t, true, ok)
 		util.AssertExpected(t, []byte{0x69}, ret)
 		count--
 	}
 	util.AssertExpected(t, 0, count)
-	hm.Close()
+	hm.close()
 }
 
 func Test_HashMap_Get(t *testing.T) {
-	hm := NewHashMap(128)
+	hm := newHashMap(
+		128, func(key string) uint64 {
+			return murmur3.Sum64([]byte(key))
+		},
+	)
 	for i := 0; i < len(words); i++ {
-		hm.Set(words[i], []byte{0x69})
+		hm.set(words[i], []byte{0x69})
 	}
 	util.AssertExpected(t, 35, hm.Len())
 	var count int
 	for i := 0; i < hm.Len(); i++ {
-		ret, ok := hm.Get(words[i])
+		ret, ok := hm.get(words[i])
 		util.AssertExpected(t, true, ok)
 		util.AssertExpected(t, []byte{0x69}, ret)
 		count++
 	}
 	util.AssertExpected(t, 35, count)
-	hm.Close()
+	hm.close()
 }
 
 func Test_HashMap_Len(t *testing.T) {
-	hm := NewHashMap(128)
+	hm := newHashMap(128, nil)
 	for i := 0; i < len(words); i++ {
-		hm.Set(words[i], []byte{0x69})
+		hm.set(words[i], []byte{0x69})
 	}
 	util.AssertExpected(t, 35, hm.Len())
-	hm.Close()
+	hm.close()
 }
 
 func Test_HashMap_PercentFull(t *testing.T) {
-	hm := NewHashMap(0)
+	hm := newHashMap(0, nil)
 	for i := 0; i < len(words)-10; i++ {
-		hm.Set(words[i], []byte{0x69})
+		hm.set(words[i], []byte{0x69})
 	}
-	percent := fmt.Sprintf("%.2f", hm.PercentFull())
+	percent := fmt.Sprintf("%.2f", hm.percentFull())
 	util.AssertExpected(t, "0.78", percent)
-	hm.Close()
+	hm.close()
 }
 
 func Test_HashMap_Set(t *testing.T) {
-	hm := NewHashMap(128)
+	hm := newHashMap(128, nil)
 	for i := 0; i < len(words); i++ {
-		hm.Set(words[i], []byte{0x69})
+		hm.set(words[i], []byte{0x69})
 	}
-	util.AssertExpected(t, 25, hm.Len())
-	hm.Close()
+	util.AssertExpected(t, 35, hm.Len())
+	hm.close()
 }
 
 func Test_HashMap_Range(t *testing.T) {
-	hm := NewHashMap(128)
+	hm := newHashMap(128, nil)
 	for i := 0; i < len(words); i++ {
-		hm.Set(words[i], []byte{0x69})
+		hm.set(words[i], []byte{0x69})
 	}
-	util.AssertExpected(t, 25, hm.Len())
+	util.AssertExpected(t, 35, hm.Len())
 	var counted int
 	hm.Range(
 		func(key string, value []byte) bool {
+			fmt.Printf("key=%s, value=%q\n", key, value)
 			if key != "" && bytes.Equal(value, []byte{0x69}) {
 				counted++
 				return true
@@ -168,14 +151,14 @@ func Test_HashMap_Range(t *testing.T) {
 			return false
 		},
 	)
-	util.AssertExpected(t, 25, counted)
-	hm.Close()
+	util.AssertExpected(t, 35, counted)
+	hm.close()
 }
 
 var result interface{}
 
 func BenchmarkHashMap_Set1(b *testing.B) {
-	hm := NewHashMap(128)
+	hm := newHashMap(128, nil)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -183,32 +166,32 @@ func BenchmarkHashMap_Set1(b *testing.B) {
 	var v []byte
 	for n := 0; n < b.N; n++ {
 		// try to get key/value "foo"
-		v, ok := hm.Get("foo")
+		v, ok := hm.get("foo")
 		if !ok {
 			// if it doesn't exist, then initialize it
-			hm.Set("foo", make([]byte, 32))
+			hm.set("foo", make([]byte, 32))
 		} else {
 			// if it does exist, then pick a random number between
 			// 0 and 256--this will be our bit we try and set
 			ri := uint(rand.Intn(128))
-			if ok := bits.RawBytesHasBit(&v, ri); !ok {
+			if ok := rawbytesHas(&v, ri); !ok {
 				// we check the bit to see if it's already set, and
 				// then we go ahead and set it if it is not set
-				bits.RawBytesSetBit(&v, ri)
+				rawbytesSet(&v, ri)
 			}
 			// after this, we make sure to save the bitset back to the hashmap
 			if n < 64 {
 				fmt.Printf("addr: %p, %+v\n", v, v)
 				// PrintBits(v)
 			}
-			hm.Set("foo", v)
+			hm.set("foo", v)
 		}
 	}
 	result = v
 }
 
 func BenchmarkHashMap_Set2(b *testing.B) {
-	hm := NewHashMap(128)
+	hm := newHashMap(128, nil)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -216,10 +199,10 @@ func BenchmarkHashMap_Set2(b *testing.B) {
 	var v []byte
 	for n := 0; n < b.N; n++ {
 		// try to get key/value "foo"
-		v, ok := hm.Get("foo")
+		v, ok := hm.get("foo")
 		if !ok {
 			// if it doesn't exist, then initialize it
-			hm.Set("foo", make([]byte, 32))
+			hm.set("foo", make([]byte, 32))
 		} else {
 			v = append(v, []byte{byte(n >> 8)}...)
 			// after this, we make sure to save the bitset back to the hashmap
@@ -227,7 +210,7 @@ func BenchmarkHashMap_Set2(b *testing.B) {
 				fmt.Printf("addr: %p, %+v\n", v, v)
 				// PrintBits(v)
 			}
-			hm.Set("foo", v)
+			hm.set("foo", v)
 		}
 	}
 	result = v
@@ -235,9 +218,9 @@ func BenchmarkHashMap_Set2(b *testing.B) {
 
 func TestHashMapMillionEntriesSize(t *testing.T) {
 	count := 1000000
-	hm := NewHashMap(512)
+	hm := newHashMap(512, nil)
 	for i := 0; i < count; i++ {
-		_, ok := hm.Set(strconv.Itoa(i), nil)
+		_, ok := hm.set(strconv.Itoa(i), nil)
 		if ok {
 			t.Errorf("error: could not located value for key: %q\n", strconv.Itoa(i))
 		}
@@ -250,13 +233,13 @@ func TestHashMapMillionEntriesSize(t *testing.T) {
 		count, util.Sizeof(hm), float64(util.Sizeof(hm)/1024), float64(util.Sizeof(hm)/1024/1024),
 	)
 	for i := 0; i < count; i++ {
-		_, ok := hm.Get(strconv.Itoa(i))
+		_, ok := hm.get(strconv.Itoa(i))
 		if !ok {
 			t.Errorf("error: could not located value for key: %q\n", strconv.Itoa(i))
 		}
 	}
 	for i := 0; i < count; i++ {
-		_, ok := hm.Del(strconv.Itoa(i))
+		_, ok := hm.del(strconv.Itoa(i))
 		if !ok {
 			t.Errorf("error: could not remove value for key: %q\n", strconv.Itoa(i))
 		}
@@ -264,5 +247,5 @@ func TestHashMapMillionEntriesSize(t *testing.T) {
 	if hm.Len() != count-count {
 		t.Errorf("error: incorrect count of entries\n")
 	}
-	hm.Close()
+	hm.close()
 }

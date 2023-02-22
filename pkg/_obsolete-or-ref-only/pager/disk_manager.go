@@ -111,7 +111,7 @@ func getChecksum(signature uint64, version, pageSize, pageCount uint16) uint32 {
 
 func (dm *diskManager) writeHeader() error {
 	// get out byte slice buffer from the pool
-	hb := headerBufPool.Get().([]byte)
+	hb := headerBufPool.get().([]byte)
 	defer headerBufPool.Put(hb)
 	// serialize the fileHeader into our buffer
 	bin.PutUint64(hb[offSign:offSign+8], dm.header.signature)
@@ -136,7 +136,7 @@ func (dm *diskManager) writeHeader() error {
 
 func (dm *diskManager) readHeader() error {
 	// get out byte slice buffer from the pool
-	hb := headerBufPool.Get().([]byte)
+	hb := headerBufPool.get().([]byte)
 	defer headerBufPool.Put(hb)
 	// read the file header into the buffer from the disk
 	_, err := dm.file.ReadAt(hb, 0)
@@ -183,7 +183,7 @@ const (
 
 // diskManager is a disk storageManager
 type diskManager struct {
-	//header     *fileHeader
+	// header     *fileHeader
 	file       *os.File
 	filePath   string
 	nextPageID pageID

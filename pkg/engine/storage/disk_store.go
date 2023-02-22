@@ -53,7 +53,7 @@ func Open(path string) (*DiskStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Get the current file size
+	// get the current file size
 	fi, err := fp.Stat()
 	if err != nil {
 		return nil, err

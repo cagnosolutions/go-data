@@ -56,7 +56,7 @@ func (s Span) String() string {
 // against ReadBytes, ReadSlice and Scanner, and it is as fast (or faster) and
 // uses the smallest buffer of all of them.
 // func (dr *DelimReader) IndexData() ([]Span, error) {
-// 	// Get a new buffered reader
+// 	// get a new buffered reader
 // 	br := bufio.NewReader(dr.r)
 // 	// Declare span offsets
 // 	var beg, end int
@@ -199,7 +199,7 @@ func (dr *DelimReader) LineReader() ([]Span, error) {
 	var id, beg, end int
 	// This lf variable is our system dependent number of characters for a linefeed.
 	lf := newLineBytes()
-	// Get a new buffered reader set to our determined buffer size.
+	// get a new buffered reader set to our determined buffer size.
 	br := bufio.NewReaderSize(dr.r, 4096)
 	for {
 		// Read up to buffer size length of data and look for the delimiter. If we fill
@@ -263,7 +263,7 @@ func IndexSpans(r io.Reader, delim byte, size int) ([]Span, error) {
 	}
 	// Initialize our spans
 	spans := make([]Span, 0, 8)
-	// Get a new buffered reader set to our determined buffer size.
+	// get a new buffered reader set to our determined buffer size.
 	br := bufio.NewReaderSize(r, size)
 	for {
 		// Read up to buffer size length of data and look for the delimiter. If we fill

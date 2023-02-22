@@ -76,7 +76,7 @@ type bufferManager struct {
 // newBufferManager initializes and returns a new instance of a bufferManager.
 func newBufferManager(file string, pageSize, pageCount uint16) *bufferManager {
 	// sanitize the page size
-	//pageSize = calcPageSize(pageSize)
+	// pageSize = calcPageSize(pageSize)
 	dm, err := disk.NewDiskManagerSize(file, pageSize, pageCount)
 	if err != nil {
 		panic(errs.ErrOpeningDiskManager)
@@ -134,7 +134,7 @@ func newBufferManager(file string, pageSize, pageCount uint16) *bufferManager {
 // buffer sizes. It also ensures that the page size works well
 // with the provided buffer size--otherwise, it will be adjusted.
 func calcBufferSize(pageSize uint16, bufferSize uint32) uint32 {
-	//pageSize = calcPageSize(pageSize)
+	// pageSize = calcPageSize(pageSize)
 	if bufferSize <= 0 {
 		bufferSize = DefaultBufferSize
 	}
@@ -281,7 +281,7 @@ func (b *bufferManager) flushPage(pid page.PageID) error {
 		// We have not found it, return an error.
 		return errs.ErrPageNotFound
 	}
-	// Get our the page frame from our frame set using our frame ID.
+	// get our the page frame from our frame set using our frame ID.
 	pf := b.frames[fid]
 	// Decrement the pin count and flush it.
 	pf.DecrPinCount()
@@ -364,7 +364,7 @@ func (b *bufferManager) getUsableFrame() (*frame.FrameID, error) {
 	// check the frame and possible flush it to disk before using the frame; so let's
 	// see if it was returned using the allocator and go from there.
 	if !foundInFreeList {
-		// Get the current frame.
+		// get the current frame.
 		cf := b.frames[*fid]
 		// Check and handle empty or nil frame.
 		if &cf != nil {

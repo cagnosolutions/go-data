@@ -195,7 +195,7 @@ func (df *DataFile) load() error {
 	// Latch down our file
 	df.latch.Lock()
 	defer df.latch.Unlock()
-	// Get the current size of the file
+	// get the current size of the file
 	fi, err := df.fp.Stat()
 	if err != nil {
 		return err

@@ -212,7 +212,7 @@ func TestPage_RandomStuff(t *testing.T) {
 			fmt.Printf("deleting from slice: %s\n", id)
 			// remove = append(remove, id)
 			// slicer.DelPtr(&ids, i)
-			// ids = slicer.Del[*RecordID](ids, i)
+			// ids = slicer.del[*RecordID](ids, i)
 			newids = append(newids, id)
 		}
 	}

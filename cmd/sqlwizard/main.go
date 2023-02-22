@@ -144,7 +144,7 @@ func (s *sqlWizard) String() string {
 }
 
 func (s *sqlWizard) parseFiles(dir string) error {
-	// Get a list of files in dir
+	// get a list of files in dir
 	list, err := os.ReadDir(dir)
 	if err != nil {
 		return err
@@ -269,7 +269,7 @@ func (s *sqlWizard) collectStructs(src []byte, f *ast.File) {
 				// next node in the AST.
 				return true
 			}
-			// Get the package name offset
+			// get the package name offset
 			// beg := s.fset.Position(f.Name.Pos())
 			// end := s.fset.Position(f.Name.End())
 			// Otherwise, our struct type assertion is good, so we can

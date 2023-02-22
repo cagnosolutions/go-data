@@ -105,7 +105,7 @@ func (b *BufferPoolManager) UnpinPage(pid page.PageID, isDirty bool) error {
 	if pg.PinCount() <= 0 {
 		(*b.replacer).Unpin(fid)
 	}
-	// Set the dirty status on the page. NOTE: potentially refactor this dirty call.
+	// set the dirty status on the page. NOTE: potentially refactor this dirty call.
 	if pg.IsDirty() || isDirty {
 		pg.SetIsDirty(true)
 	} else {

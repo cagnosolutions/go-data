@@ -228,7 +228,7 @@ func (p page) Remove(rid *RID) error {
 	if rid == nil || rid.PageID != p.getPageID() {
 		return ErrInvalidRecordID
 	}
-	// Get the slot for the record.
+	// get the slot for the record.
 	s := p.getSlotN(rid.SlotID)
 	// Update the slot to reflect the record removal.
 	s.status = slotStatusFree

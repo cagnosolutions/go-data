@@ -598,7 +598,7 @@ func (p *page) compact() error {
 	// Now, we iterate the slots of the current page. The iterator skips all
 	// records that are marked free.
 	for sl := it.next(); it.hasMore() == true; sl = it.next() {
-		// Get the record bounds for the current record on the current page.
+		// get the record bounds for the current record on the current page.
 		beg, end := sl.bounds()
 		// Call addRecord from the new page passing the record slice
 		// in from the current page.

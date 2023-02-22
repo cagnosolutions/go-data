@@ -22,7 +22,7 @@ func newPageBuffer(size int) *pageBuffer {
 }
 
 func (pb *pageBuffer) NewPage() page {
-	// Get a page frame to pin to
+	// get a page frame to pin to
 	fid, fromFree := pb.GetFrameID()
 	if &fid == nil {
 		// The buffer is full, it can't find a frame

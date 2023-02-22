@@ -45,7 +45,7 @@ func newDiskManager(path string, pagesInSeg int) *diskManager {
 	// if sz == 0 {
 	// 	allocSeg = true
 	// }
-	// // Set up the nextID according to the file sz.
+	// // set up the nextID according to the file sz.
 	// npgs := uint32(sz / szPg)
 	// var nextID pageID
 	// if npgs > 0 {

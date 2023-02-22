@@ -449,7 +449,7 @@ func (p *Page) getRecForCellPtrAt(pos uint16) []byte {
 func (p *Page) getCellPtrByID(id uint16) (cellPtr, error) {
 	// First, create a cellPtr instance we can return when we are finished.
 	var cp cellPtr
-	// Get the max number of usable cells in our list.
+	// get the max number of usable cells in our list.
 	numCells := p.getNumCells() // - p.getNumFree()
 	// Start ranging our cell pointer list in search for a matching ID.
 	for pos := uint16(0); pos < numCells; pos++ {
@@ -507,14 +507,14 @@ func (p *Page) AddRecord(data []byte) (*RecID, error) {
 	// Use our page latches
 	pgLatch.Lock()
 	defer pgLatch.Unlock()
-	// Get our record size
+	// get our record size
 	rsize := uint16(len(data))
 	// Perform sanity checks on our data
 	err := p.checkRecord(rsize)
 	if err != nil {
 		return nil, err
 	}
-	// Get our page header for doing some updates.
+	// get our page header for doing some updates.
 	h := p.getPageHeader()
 	// Now, we must get a new (or free to use) cellPtr to index the record
 	cp, usedFree := p.acquireCellPtr(rsize)
@@ -536,7 +536,7 @@ func (p *Page) AddRecord(data []byte) (*RecID, error) {
 	}
 	// Now, we can encode our updated header to the page.
 	p.setPageHeader(h)
-	// Get our record bounds from the cellPtr index
+	// get our record bounds from the cellPtr index
 	beg, end := cp.bounds()
 	// Write record data to the Page
 	copy((*p)[beg:end], data)
@@ -719,7 +719,7 @@ func (p *Page) compact() error {
 	// Now, we iterate the numCells of the current Page. The iterator skips all
 	// records that are marked numFree.
 	for sl := it.next(); it.hasMore() == true; sl = it.next() {
-		// Get the record bounds for the current record on the current Page.
+		// get the record bounds for the current record on the current Page.
 		beg, end := sl.bounds()
 		// Call AddRecord from the new Page passing the record slice
 		// in from the current Page.

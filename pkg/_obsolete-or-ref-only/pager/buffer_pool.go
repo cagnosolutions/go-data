@@ -274,7 +274,7 @@ func (b *bufferPool) flushPage(pid pageID) error {
 		// We have not found it, return an error.
 		return ErrPageNotFound
 	}
-	// Get our the page frame from our frame set using our frame ID.
+	// get our the page frame from our frame set using our frame ID.
 	pf := b.frames[fid]
 	// Decrement the pin count and flush it.
 	pf.decrPinCount()
@@ -357,7 +357,7 @@ func (b *bufferPool) getUsableFrame() (*frameID, error) {
 	// check the frame and possible flush it to disk before using the frame; so let's
 	// see if it was returned using the allocator and go from there.
 	if !foundInFreeList {
-		// Get the current frame.
+		// get the current frame.
 		cf := b.frames[*fid]
 		// Check and handle empty or nil frame.
 		if &cf != nil {

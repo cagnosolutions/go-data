@@ -51,7 +51,7 @@ func OpenStorageEngine(path string) (*StorageEngine, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Set up a StorageEngine instance
+	// set up a StorageEngine instance
 	se := &StorageEngine{
 		base:        path,
 		journalPath: jp,

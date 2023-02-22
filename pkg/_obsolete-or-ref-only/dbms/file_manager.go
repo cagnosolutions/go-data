@@ -136,7 +136,7 @@ func (f *FileManager) MakeFileSegment(id uint32) (*FileSegment, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Get the page boundaries
+	// get the page boundaries
 	first, last := PageRangeForFile(id)
 	// Create and return new *FileSegment
 	fs := &FileSegment{

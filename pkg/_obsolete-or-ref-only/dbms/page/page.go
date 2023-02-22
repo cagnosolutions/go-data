@@ -492,10 +492,12 @@ func (p *page) checkRID(id *recID) error {
 }
 
 func (p *Page) GetRecord(rid *RecID) ([]byte, error) {
-	return p.getRecord(&recID{
-		pid: rid.PID,
-		sid: rid.SID,
-	})
+	return p.getRecord(
+		&recID{
+			pid: rid.PID,
+			sid: rid.SID,
+		},
+	)
 }
 
 // getRecord reads a record from the page. It returns the record data
@@ -542,10 +544,12 @@ func (p *page) delSlot(sid uint16) *slot {
 }
 
 func (p *Page) DelRecord(rid *RecID) error {
-	return p.delRecord(&recID{
-		pid: rid.PID,
-		sid: rid.SID,
-	})
+	return p.delRecord(
+		&recID{
+			pid: rid.PID,
+			sid: rid.SID,
+		},
+	)
 }
 
 // delRecord removes a record from the page. It overwrites the record
@@ -642,7 +646,7 @@ func (p *page) compact() error {
 	// Now, we iterate the slots of the current page. The iterator skips all
 	// records that are marked free.
 	for sl := it.next(); it.hasMore() == true; sl = it.next() {
-		// Get the record bounds for the current record on the current page.
+		// get the record bounds for the current record on the current page.
 		beg, end := sl.bounds()
 		// Call addRecord from the new page passing the record slice
 		// in from the current page.

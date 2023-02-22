@@ -632,7 +632,7 @@ func (p *Page) compact() error {
 	// Now, we iterate the numCells of the current Page. The iterator skips all
 	// records that are marked numFree.
 	for sl := it.next(); it.hasMore() == true; sl = it.next() {
-		// Get the record bounds for the current record on the current Page.
+		// get the record bounds for the current record on the current Page.
 		beg, end := sl.bounds()
 		// Call AddRecord from the new Page passing the record slice
 		// in from the current Page.

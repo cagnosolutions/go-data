@@ -184,7 +184,7 @@ func (p *Page) SetPageHeader(h *PageHeader) {
 func (p *Page) getRecordKeyUsingCellPos(pos uint16) []byte {
 	// Decode the cellptr at the provided location.
 	cp := p.decCell(pos)
-	// Get the record bounds from the decoded cellptr.
+	// get the record bounds from the decoded cellptr.
 	beg, end := cp.getBounds()
 	// Return the record that the cellptr points to.
 	r := Record((*p)[beg:end])
@@ -196,7 +196,7 @@ func (p *Page) getRecordKeyUsingCellPos(pos uint16) []byte {
 func (p *Page) getRecordUsingCellPos(pos uint16) Record {
 	// Decode the cellptr at the provided location.
 	cp := p.decCell(pos)
-	// Get the record bounds from the decoded cellptr.
+	// get the record bounds from the decoded cellptr.
 	beg, end := cp.getBounds()
 	// Return the record that the cellptr points to.
 	return Record((*p)[beg:end])
@@ -205,7 +205,7 @@ func (p *Page) getRecordUsingCellPos(pos uint16) Record {
 // getRecordKeyUsingCell takes a cellptr and uses it to decode and return
 // the associated Record key.
 func (p *Page) getRecordKeyUsingCell(c cellptr) []byte {
-	// Get the record bounds from the provided cellptr.
+	// get the record bounds from the provided cellptr.
 	beg, end := c.getBounds()
 	// Return the record that the cellptr points to.
 	r := Record((*p)[beg:end])
@@ -215,7 +215,7 @@ func (p *Page) getRecordKeyUsingCell(c cellptr) []byte {
 // getRecordUsingCell takes a cellptr and uses it to decode and return
 // the associated Record.
 func (p *Page) getRecordUsingCell(c cellptr) Record {
-	// Get the record bounds from the provided cellptr.
+	// get the record bounds from the provided cellptr.
 	beg, end := c.getBounds()
 	// Return the record that the cellptr points to.
 	return Record((*p)[beg:end])
@@ -261,7 +261,7 @@ func (p *Page) delCell(c cellptr, pos uint16) {
 // encCell takes a cellptr and a position and attempts to encode the provided
 // cellptr at the provided position. It panics if anything doesn't work.
 func (p *Page) encCell(c cellptr, pos uint16) {
-	// Get the offset from the provided position.
+	// get the offset from the provided position.
 	off := pageHeaderSize + (pos * pageCellPtrSize)
 	// Check the offset to ensure it is correct, otherwise panic.
 	if off < pageHeaderSize || off > p.GetLower() {
@@ -278,7 +278,7 @@ func (p *Page) encCell(c cellptr, pos uint16) {
 // decCell takes a position and attempts to decode and return a cellptr
 // at the provided position. It panics if anything doesn't work.
 func (p *Page) decCell(pos uint16) cellptr {
-	// Get the offset from the provided position.
+	// get the offset from the provided position.
 	off := pageHeaderSize + (pos * pageCellPtrSize)
 	// Check the offset to ensure it is correct, otherwise panic.
 	if off < pageHeaderSize || off > p.GetLower() {
@@ -311,7 +311,7 @@ func (p *Page) recycleCell(r Record) cellptr {
 	var cp cellptr
 	for pos := uint16(0); pos < p.GetNumCells(); pos++ {
 		// for pos := numCells - 1; pos > numCells-freeCells-1; pos-- {
-		// Get the free cell at the first location
+		// get the free cell at the first location
 		cp = p.decCell(pos)
 		// Check the cell to see if it's a candidate
 		if cp.hasFlag(C_FREE) && cp.canFit(uint16(len(r))) {
@@ -369,7 +369,7 @@ func (p *Page) AddRecord(r Record) (*RecordID, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Get our free cells, and our total cell count.
+	// get our free cells, and our total cell count.
 	freeCells := p.GetNumFree()
 	// Allocate our cell pointer, we will need to use one no matter what.
 	var cp cellptr
@@ -476,7 +476,7 @@ func (p *Page) DelRecord(id *RecordID) error {
 				// We have located our used record.
 				// First, lock, then we can set it free.
 				pgLatch.Lock()
-				// Get our record boundaries
+				// get our record boundaries
 				beg, end := cp.getBounds()
 				// Overwrite the old record
 				copy((*p)[beg:end], make([]byte, cp.getLength()))
@@ -678,7 +678,7 @@ func (p *Page) Vacuum() {
 	numCells, lowerBound, upperBound := uint16(0), uint16(pageHeaderSize), uint16(PageSize)
 	// Next we iterate the current non-free cells and add the records to the new page.
 	for pos := uint16(0); pos < p.GetNumCells(); pos++ {
-		// Get the cell for the current position.
+		// get the cell for the current position.
 		c := p.decCell(pos)
 		if c.hasFlag(C_USED) {
 			// We will only add valid, used, records. So we need to grab the record.

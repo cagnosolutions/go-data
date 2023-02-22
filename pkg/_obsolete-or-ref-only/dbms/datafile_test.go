@@ -76,7 +76,7 @@ func OpenNamespace(base, name string) (*Namespace, error) {
 		base: dir,
 		name: name,
 	}
-	// Set up our filenames and file pointers for later
+	// set up our filenames and file pointers for later
 	metaName := filepath.Join(dir, metaFile)
 	// Check to see if we need to create the files
 	_, err = os.Stat(metaName)
@@ -232,7 +232,7 @@ func NewMeta(base, name string) (*Meta, error) {
 	}
 	copy(m.base[:], base)
 	copy(m.name[:], name)
-	// Set up our filenames and file pointers for later
+	// set up our filenames and file pointers for later
 	fileName := filepath.Join(path, metaFile)
 	var fd *os.File
 	// Check to see if we need to create the files

@@ -205,10 +205,10 @@ func (p *page) getSlot(recSize uint16) *slot {
 	// First, we iterate through the slots and check for any
 	// slot statuses that are set to statFree.
 	var status, size, slotCount uint16
-	// Get the slot count
+	// get the slot count
 	slotCount = getU16(p.data, offSlots)
 	for sid := uint16(0); sid < slotCount; sid++ {
-		// Get the slot offset, and check each slot status...
+		// get the slot offset, and check each slot status...
 		off := int(hdrSize + (sid * slotSize))
 		status = getU16(p.data, off)
 		if status == statFree {
@@ -242,7 +242,7 @@ func (p *page) getSlot(recSize uint16) *slot {
 // findSlot attempts to locate and return the slot matching the
 // slotID provided.
 func (p *page) findSlot(sid slotID) *slot {
-	// Get the slot offset.
+	// get the slot offset.
 	off := int(hdrSize + (uint16(sid) * slotSize))
 	// Decode and return the slot.
 	return &slot{
@@ -265,10 +265,10 @@ func (p *page) getFreeSpace() (uint16, uint16) {
 	// First, we iterate through the slots and check for any slot stats
 	// that say they are set to statFree.
 	var status, size, slotCount uint16
-	// Get the slot count
+	// get the slot count
 	slotCount = getU16(p.data, offSlots)
 	for sid := uint16(0); sid < slotCount; sid++ {
-		// Get the slot offset, and check each slot status...
+		// get the slot offset, and check each slot status...
 		off := int(hdrSize + (sid * slotSize))
 		status = getU16(p.data, off)
 		if status == statFree {

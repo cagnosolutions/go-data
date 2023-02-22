@@ -174,7 +174,7 @@ func NewStructor(pDirectory string) *Structor {
 		getTemplate: template.Must(
 			template.New("getter").Parse(
 				`
-func (t *{{.SName}}) Get{{ .CName }}() {{ .FType }} {
+func (t *{{.SName}}) get{{ .CName }}() {{ .FType }} {
 	return t.{{ .FName }}
 }
 `,
@@ -183,7 +183,7 @@ func (t *{{.SName}}) Get{{ .CName }}() {{ .FType }} {
 		setTemplate: template.Must(
 			template.New("setter").Parse(
 				`
-func (t *{{.SName}}) Set{{ .CName }}(f {{ .FType }}) {
+func (t *{{.SName}}) set{{ .CName }}(f {{ .FType }}) {
 	t.{{ .FName}} = f
 }
 `,

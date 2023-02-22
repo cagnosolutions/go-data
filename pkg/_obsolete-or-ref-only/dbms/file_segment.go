@@ -90,9 +90,9 @@ func LoadFileSegment(path string) (*FileSegment, error) {
 	if os.IsNotExist(err) {
 		return nil, err
 	}
-	// Get the file segment size for later
+	// get the file segment size for later
 	size := fi.Size()
-	// Get the file segment id from the file name
+	// get the file segment id from the file name
 	id := GetIDFromFileName(filepath.Base(path))
 	// Find the PageID boundaries
 	first, last := PageRangeForFile(id)
