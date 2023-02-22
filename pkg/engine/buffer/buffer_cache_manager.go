@@ -64,7 +64,7 @@ func (bm *BufferPoolManager) AllocatePage() page.PageID {
 
 // NewPage returns a fresh empty page from the pool.
 // TODO: consider returning an error from here in the case where the pool is full
-func (bm *BufferPoolManager) NewPage() page.Page {
+func (bm *BufferPoolManager) NewPage() (page.Page, error) {
 	// latch
 	bm.latch.Lock()
 	defer bm.latch.Unlock()
@@ -75,11 +75,16 @@ func (bm *BufferPoolManager) NewPage() page.Page {
 	if err != nil {
 		// This can happen when the BufferPoolManager is full, so let's make sure that
 		// it's something like that, and not something more sinister.
-		if len(bm.freeList) == 0 && bm.replacer.Size() == 0 {
-			return nil
+		// if len(bm.freeList) == 0 && bm.replacer.Size() == 0 {
+		// 	return nil
+		// }
+		if err != ErrUsableFrameNotFound {
+			// Something went terribly wrong if this happens.
+			logging.DefaultLogger.Panic("%s", err)
 		}
 		// Nope, it's something more sinister... shoot.
-		logging.DefaultLogger.Panic("{!!!} %s", err)
+		// logging.DefaultLogger.Panic("{!!!} %s", err)
+		return nil, err
 	}
 	// Allocate (get the next sequential PageID) so we can use it to initialize
 	// the next page we will use.
@@ -93,11 +98,11 @@ func (bm *BufferPoolManager) NewPage() page.Page {
 	// And update the pool
 	bm.pool[*fid] = pf
 	// Finally, return our Page for use
-	return pf.Page
+	return pf.Page, nil
 }
 
 // FetchPage retrieves specific page from the pool, or storage medium by the page ID.
-func (bm *BufferPoolManager) FetchPage(pid page.PageID) page.Page {
+func (bm *BufferPoolManager) FetchPage(pid page.PageID) (page.Page, error) {
 	// latch
 	bm.latch.Lock()
 	defer bm.latch.Unlock()
@@ -111,7 +116,7 @@ func (bm *BufferPoolManager) FetchPage(pid page.PageID) page.Page {
 		// We have a page hit, so we can increase our hit counter
 		bm.hits++
 		// And now, we can safely return our Page.
-		return pf.Page
+		return pf.Page, nil
 	}
 	// A match was not found in our pageTable, so now we must swap the Page in
 	// from disk. But first, we must get a Frame to hold our Page. We will
@@ -125,7 +130,7 @@ func (bm *BufferPoolManager) FetchPage(pid page.PageID) page.Page {
 			// Something went terribly wrong if this happens.
 			logging.DefaultLogger.Panic("%s", err)
 		}
-		return nil
+		return nil, err
 	}
 	// Now, we will swap the Page in from the disk using the DiskStore.
 	data := make([]byte, page.PageSize)
@@ -145,7 +150,7 @@ func (bm *BufferPoolManager) FetchPage(pid page.PageID) page.Page {
 	// We had to swap a page in, so we can update our page miss counter
 	bm.misses++
 	// Finally, return our Page for use
-	return pf.Page
+	return pf.Page, nil
 }
 
 // UnpinPage allows for manual unpinning of a specific page from the pool by the page ID.

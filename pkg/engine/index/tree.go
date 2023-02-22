@@ -3,6 +3,7 @@ package index
 import (
 	"github.com/cagnosolutions/go-data/pkg/engine/buffer"
 	"github.com/cagnosolutions/go-data/pkg/engine/page"
+	"github.com/cagnosolutions/go-data/pkg/engine/storage"
 )
 
 // node represents a b plus tree node.
@@ -34,12 +35,17 @@ func (n *node) min() uint32 {
 // pageTree is a b plus tree wrapping the page cache.
 type pageTree struct {
 	cache *buffer.BufferPoolManager
+	store storage.Storer
 	root  page.PageID
 }
 
 // newPageTree initializes and returns a new pageTree instance.
 func newPageTree(path string) (*pageTree, error) {
-	pc, err := buffer.OpenBufferCacheManager(path, 5)
+	st, err := storage.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	pc, err := buffer.New(st, 5)
 	if err != nil {
 		return nil, err
 	}
