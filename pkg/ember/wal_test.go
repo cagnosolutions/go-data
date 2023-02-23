@@ -1,4 +1,4 @@
-package v2
+package ember
 
 import (
 	"fmt"
@@ -105,7 +105,7 @@ func TestLog_Reset(t *testing.T) {
 	// do some reading
 	err = wal.Scan(
 		func(e []byte) bool {
-			fmt.Printf("%s\n", e[0:8])
+			fmt.Printf("%s\n", e)
 			return true
 		},
 	)
@@ -124,6 +124,8 @@ func TestLog_Reset(t *testing.T) {
 }
 
 func TestLog_TruncateFront(t *testing.T) {
+
+	conf.MaxFileSize = 1 << 10
 
 	//
 	// open log
@@ -150,6 +152,9 @@ func TestLog_TruncateFront(t *testing.T) {
 	if err != nil {
 		t.Fatalf("got error: %v\n", err)
 	}
+
+	time.Sleep(3 * time.Second)
+
 	//
 	// open log
 	wal, err = OpenWAL(conf)

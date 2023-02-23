@@ -344,7 +344,7 @@ func (l *WAL) loadSegmentFile(path string) (*segment, error) {
 		return nil, err
 	}
 	// update the segment remaining bytes
-	s.remaining = maxFileSize - offset
+	s.remaining = l.conf.MaxFileSize - offset
 	return s, nil
 }
 
@@ -687,6 +687,7 @@ func (l *WAL) TruncateFront(index int64) error {
 		if err != nil {
 			return err
 		}
+		// close temp file
 		err = tmpfd.Close()
 		if err != nil {
 			return err

@@ -125,6 +125,8 @@ func TestLog_Reset(t *testing.T) {
 
 func TestLog_TruncateFront(t *testing.T) {
 
+	conf.MaxFileSize = 1 << 10
+
 	//
 	// open log
 	wal, err := OpenWAL(conf)

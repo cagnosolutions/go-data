@@ -109,6 +109,7 @@ func Bench_WAL_Read(b *testing.B, wal *WAL) {
 
 func BenchmarkWAL(b *testing.B) {
 
+	b.ReportAllocs()
 	// count
 	count := 10
 

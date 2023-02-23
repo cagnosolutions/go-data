@@ -1,4 +1,4 @@
-package v2
+package ember
 
 import (
 	"encoding/binary"
@@ -17,7 +17,7 @@ import (
 const (
 	FilePrefix               = "dat-"
 	FileSuffix               = ".seg"
-	defaultMaxFileSize int64 = 16 << 10 // 16 KB
+	defaultMaxFileSize int64 = 256 << 10 // 16 KB
 	defaultBasePath          = "log"
 	defaultSyncOnWrite       = false
 	remainingTrigger         = 64
@@ -25,20 +25,20 @@ const (
 
 var (
 	maxFileSize       = defaultMaxFileSize
-	ErrOutOfBounds    = errors.New("error: out of bounds")
-	ErrSegmentFull    = errors.New("error: segment is full")
-	ErrFileClosed     = errors.New("error: file closed")
-	ErrBadArgument    = errors.New("error: bad argument")
-	ErrNoPathProvided = errors.New("error: no path provided")
-	ErrOptionsMissing = errors.New("error: options missing")
+	ErrOutOfBounds    = errors.New("wal: out of bounds")
+	ErrSegmentFull    = errors.New("wal: segment is full")
+	ErrFileClosed     = errors.New("wal: file closed")
+	ErrBadArgument    = errors.New("wal: bad argument")
+	ErrNoPathProvided = errors.New("wal: no path provided")
+	ErrOptionsMissing = errors.New("wal: options missing")
 )
 
 var (
 	// ErrFileClosed    = errors.New("binary: file closed")
-	ErrBadEntry      = errors.New("binary: bad entry")
-	ErrEntryNotFound = errors.New("binary: entry not found")
-	ErrKeyTooLarge   = errors.New("binary: key too large")
-	ErrValueTooLarge = errors.New("binary: value too large")
+	ErrBadEntry      = errors.New("wal: bad entry")
+	ErrEntryNotFound = errors.New("wal: entry not found")
+	ErrKeyTooLarge   = errors.New("wal: key too large")
+	ErrValueTooLarge = errors.New("wal: value too large")
 )
 
 // segEntry contains the metadata for a single segEntry within the file segment
