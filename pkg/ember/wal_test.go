@@ -13,6 +13,54 @@ var conf = &WALConfig{
 	SyncOnWrite: false,
 }
 
+func TestWAL_DefaultConfig(t *testing.T) {
+	//
+	// open log
+	wal, err := OpenWAL(DefaultWALConfig)
+	if err != nil {
+		t.Fatalf("got error: %v\n", err)
+	}
+	//
+	// get path for cleanup
+	path := wal.GetConfig().BasePath
+	//
+	// do some writing
+	for i := 0; i < 500; i++ {
+		key := fmt.Sprintf("key-%04d", i+1)
+		val := fmt.Sprintf("my-value-%06d-%s", i+1, lgVal)
+		_, err := wal.Write([]byte(key + val))
+		if err != nil {
+			t.Fatalf("error writing: %v\n", err)
+		}
+	}
+	//
+	// do some reading
+	err = wal.Scan(
+		func(e []byte) bool {
+			fmt.Printf("%s\n", e)
+			return true
+		},
+	)
+	if err != nil {
+		t.Fatalf("got error: %v\n", err)
+	}
+	//
+	// close log
+	err = wal.Close()
+	if err != nil {
+		t.Fatalf("got error: %v\n", err)
+	}
+	//
+	// clean up
+	doClean := false
+	if doClean {
+		err = os.RemoveAll(path)
+		if err != nil {
+			t.Fatalf("got error: %v\n", err)
+		}
+	}
+}
+
 func TestOpenAndCloseNoWrite(t *testing.T) {
 	// open
 	wal, err := OpenWAL(conf)

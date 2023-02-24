@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"log"
 	"os"
@@ -15,16 +16,15 @@ import (
 )
 
 const (
-	FilePrefix               = "dat-"
-	FileSuffix               = ".seg"
+	filePrefix               = "dat-"
+	fileSuffix               = ".seg"
 	defaultMaxFileSize int64 = 256 << 10 // 16 KB
-	defaultBasePath          = "log"
+	defaultBasePath          = "wal/data"
 	defaultSyncOnWrite       = false
 	remainingTrigger         = 64
 )
 
 var (
-	maxFileSize       = defaultMaxFileSize
 	ErrOutOfBounds    = errors.New("wal: out of bounds")
 	ErrSegmentFull    = errors.New("wal: segment is full")
 	ErrFileClosed     = errors.New("wal: file closed")
@@ -72,11 +72,11 @@ func (s *segment) String() string {
 
 func MakeFileNameFromIndex(index int64) string {
 	hexa := strconv.FormatInt(index, 16)
-	return fmt.Sprintf("%s%010s%s", FilePrefix, hexa, FileSuffix)
+	return fmt.Sprintf("%s%010s%s", filePrefix, hexa, fileSuffix)
 }
 
 func GetIndexFromFileName(name string) (int64, error) {
-	hexa := name[len(FilePrefix) : len(name)-len(FileSuffix)]
+	hexa := name[len(filePrefix) : len(name)-len(fileSuffix)]
 	return strconv.ParseInt(hexa, 16, 32)
 }
 
@@ -109,6 +109,8 @@ func (s *segment) findEntryIndex(index int64) int {
 	return i - 1
 }
 
+var DefaultWALConfig = defaultWALConfig
+
 var defaultWALConfig = &WALConfig{
 	BasePath:    defaultBasePath,
 	MaxFileSize: defaultMaxFileSize,
@@ -117,7 +119,7 @@ var defaultWALConfig = &WALConfig{
 
 type WALConfig struct {
 	BasePath    string // base storage path
-	MaxFileSize int64  // memtable flush threshold in KB
+	MaxFileSize int64  // max segment size flush threshold in KB
 	SyncOnWrite bool   // perform sync every time an entry is write
 }
 
@@ -138,8 +140,7 @@ func checkWALConfig(conf *WALConfig) *WALConfig {
 type WAL struct {
 	lock sync.RWMutex // lock is a mutual exclusion lock
 	conf *WALConfig
-	// r          *binenc.Reader // r is a binary reader
-	// w          *binenc.Writer // w is a binary writer
+
 	file       *os.File
 	firstIndex int64      // firstIndex is the index of the first segEntry
 	lastIndex  int64      // lastIndex is the index of the last segEntry
@@ -222,8 +223,8 @@ func (l *WAL) loadIndex() error {
 	for _, file := range files {
 		// skip non data files
 		if file.IsDir() ||
-			!strings.HasPrefix(file.Name(), FilePrefix) ||
-			!strings.HasSuffix(file.Name(), FileSuffix) {
+			!strings.HasPrefix(file.Name(), filePrefix) ||
+			!strings.HasSuffix(file.Name(), fileSuffix) {
 			continue // skip this, continue on to the next file
 		}
 		// check the size of segment file
@@ -463,6 +464,69 @@ func (l *WAL) Read(index int64) ([]byte, error) {
 	return e, nil
 }
 
+type record struct {
+	op       uint32 // op is an operator flag
+	length   uint32 // length of data section
+	checksum uint32 // CRC32 checksum of data
+	data     []byte // serialized data
+}
+
+func newRecord(op uint32, b []byte) *record {
+	r := &record{
+		op:       op,
+		length:   uint32(len(b)),
+		checksum: crc32.ChecksumIEEE(b),
+		data:     make([]byte, len(b)),
+	}
+	copy(r.data, b)
+	return r
+}
+
+func encodeRecord(op uint32, e []byte) []byte {
+	// record layout:
+	// +----+--------+------+-------+
+	// | op | length | data | crc32 |
+	// +----+--------+------+-------+
+	//
+	b := make([]byte, 12+len(e))
+	bin.PutUint32(b[0:4], op)
+	bin.PutUint32(b[4:8], uint32(len(e)))
+	copy(b[8:8+len(e)], e)
+	bin.PutUint32(b[8+len(e):8+len(e)+4], crc32.ChecksumIEEE(e))
+	return b
+}
+
+func decodeRecord(e []byte) ([]byte, error) {
+	// record layout:
+	// +----+--------+------+-------+
+	// | op | length | data | crc32 |
+	// +----+--------+------+-------+
+	//
+	length := bin.Uint32(e[4:8])
+	checksum := bin.Uint32(e[8+length : 8+length+4])
+	// validate checksum
+	computed := crc32.ChecksumIEEE(e[:8+length])
+	if computed != checksum {
+		log.Printf("computed=%d, checksum=%d\n", computed, checksum)
+		return nil, errors.New("decode: got bad checksum")
+	}
+	b := make([]byte, length)
+	copy(b, e[8:8+length])
+	return b, nil
+}
+
+func (l *WAL) writeLog(op uint32, e []byte) (int64, error) {
+	return l.Write(encodeRecord(op, e))
+}
+
+func (l *WAL) readLog(id int64) ([]byte, error) {
+	r, err := l.Read(id)
+	if err != nil {
+		return nil, err
+	}
+	return decodeRecord(r)
+}
+
 // Write writes an segEntry to the write-ahead log in an append-only fashion
 func (l *WAL) Write(e []byte) (int64, error) {
 	// lock
@@ -554,6 +618,19 @@ func (l *WAL) WriteBatch(batch *Batch) error {
 		return err
 	}
 	return nil
+}
+
+func (l *WAL) ScanLogs(iter func(op uint32, e []byte) bool) error {
+	return l.Scan(
+		func(e []byte) bool {
+			r, err := decodeRecord(e)
+			if err != nil {
+				log.Println(err)
+				return false
+			}
+			return iter(bin.Uint32(e[0:4]), r)
+		},
+	)
 }
 
 // Scan provides an iterator method for the write-ahead log
@@ -825,9 +902,13 @@ func encodeEntry(w io.WriteSeeker, e []byte) (int64, error) {
 		return -1, err
 	}
 	// make buffer
-	buf := make([]byte, 8)
-	// encode and write entry length
+	buf := make([]byte, 12)
+	// encode entry length
 	binary.LittleEndian.PutUint64(buf, uint64(len(e)))
+	// compute and encode checksum
+	checksum := crc32.ChecksumIEEE(e)
+	binary.LittleEndian.PutUint32(buf[8:], checksum)
+	// write header
 	_, err = w.Write(buf)
 	if err != nil {
 		return -1, err
@@ -841,10 +922,10 @@ func encodeEntry(w io.WriteSeeker, e []byte) (int64, error) {
 	return offset, nil
 }
 
-// decodeEntry encodes the next entry from the reader provided
+// decodeEntryCRC encodes the next entry from the reader provided
 func decodeEntry(r io.Reader) ([]byte, error) {
 	// make buffer
-	buf := make([]byte, 8)
+	buf := make([]byte, 12)
 	// read entry length
 	_, err := r.Read(buf)
 	if err != nil {
@@ -852,12 +933,19 @@ func decodeEntry(r io.Reader) ([]byte, error) {
 	}
 	// decode entry length
 	size := binary.LittleEndian.Uint64(buf)
+	// decode entry crc
+	checksum := binary.LittleEndian.Uint32(buf[8:])
 	// make entry slice to read data into
 	e := make([]byte, size)
 	// read from data into entry
 	_, err = r.Read(e)
 	if err != nil {
 		return nil, err
+	}
+	// calculate checksums and make sure they match
+	computed := crc32.ChecksumIEEE(e)
+	if computed != checksum {
+		return nil, errors.New("decodeEntry: checksum mismatch")
 	}
 	// return entry
 	return e, nil
@@ -866,7 +954,7 @@ func decodeEntry(r io.Reader) ([]byte, error) {
 // decodeEntryAt encodes the next entry from the reader provided
 func decodeEntryAt(r io.ReaderAt, off int64) ([]byte, error) {
 	// make buffer
-	buf := make([]byte, 8)
+	buf := make([]byte, 12)
 	// read entry length
 	n, err := r.ReadAt(buf, off)
 	if err != nil {
@@ -874,12 +962,19 @@ func decodeEntryAt(r io.ReaderAt, off int64) ([]byte, error) {
 	}
 	// decode entry length
 	size := binary.LittleEndian.Uint64(buf)
+	// decode entry crc
+	checksum := binary.LittleEndian.Uint32(buf[8:])
 	// make entry slice to read data into
 	e := make([]byte, size)
 	// read from data into entry
 	_, err = r.ReadAt(e, off+int64(n))
 	if err != nil {
 		return nil, err
+	}
+	// calculate checksums and make sure they match
+	computed := crc32.ChecksumIEEE(e)
+	if computed != checksum {
+		return nil, errors.New("decodeEntryAt: checksum mismatch")
 	}
 	// return entry
 	return e, nil
