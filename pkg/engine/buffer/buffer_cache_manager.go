@@ -80,7 +80,7 @@ func (bm *BufferPoolManager) NewPage() (page.Page, error) {
 		// }
 		if err != ErrUsableFrameNotFound {
 			// Something went terribly wrong if this happens.
-			logging.DefaultLogger.Panic("%s", err)
+			logging.DefaultLogger.Panic("new page: %s", err)
 		}
 		// Nope, it's something more sinister... shoot.
 		// logging.DefaultLogger.Panic("{!!!} %s", err)
@@ -128,7 +128,7 @@ func (bm *BufferPoolManager) FetchPage(pid page.PageID) (page.Page, error) {
 		// Check the EXACT error
 		if err != ErrUsableFrameNotFound {
 			// Something went terribly wrong if this happens.
-			logging.DefaultLogger.Panic("%s", err)
+			logging.DefaultLogger.Panic("fetch page: %s", err)
 		}
 		return nil, err
 	}

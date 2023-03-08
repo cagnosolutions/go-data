@@ -193,3 +193,28 @@ func (r *Record) String() string {
 	}
 	return fmt.Sprintf("{ flags: %.4x, key: %s, val: %s }", fl, k, v)
 }
+
+func EncodeRecordID(rid *RecordID) uint64 {
+	return encodeRID(rid.PageID, rid.CellID)
+}
+
+func DecodeRecordID(rid uint64) *RecordID {
+	pid, cid := decodeRID(rid)
+	return &RecordID{
+		PageID: pid,
+		CellID: cid,
+	}
+}
+
+func encodeRID(pid uint32, cid uint16) uint64 {
+	var n uint64
+	n |= uint64(pid) << 32
+	n |= uint64(cid)
+	return n
+}
+
+func decodeRID(rid uint64) (uint32, uint16) {
+	pid := uint32(rid >> 32)
+	cid := uint16(rid)
+	return pid, cid
+}

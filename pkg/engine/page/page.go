@@ -332,6 +332,14 @@ func (p *Page) recycleCell(r Record) cellptr {
 	return 0
 }
 
+func HasRoom(p Page, r Record) bool {
+	err := p.checkRecord(r)
+	if err != nil {
+		return !errors.Is(err, ErrNoRoom)
+	}
+	return true
+}
+
 // checkRecord performs some error checking on the Record to ensure it is a good
 // Record, and that we also have plenty of room for it in the Page.
 func (p *Page) checkRecord(r Record) error {

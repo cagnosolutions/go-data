@@ -174,10 +174,10 @@ func BenchmarkHashMap_Set1(b *testing.B) {
 			// if it does exist, then pick a random number between
 			// 0 and 256--this will be our bit we try and set
 			ri := uint(rand.Intn(128))
-			if ok := rawbytesHas(&v, ri); !ok {
+			if ok := bitsetHas(&v, ri); !ok {
 				// we check the bit to see if it's already set, and
 				// then we go ahead and set it if it is not set
-				rawbytesSet(&v, ri)
+				bitsetSet(&v, ri)
 			}
 			// after this, we make sure to save the bitset back to the hashmap
 			if n < 64 {

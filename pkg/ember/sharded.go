@@ -78,10 +78,10 @@ func (s *shardedHashMap) setBit(key string, idx uint, bit uint) bool {
 	s.shards[buk].mu.Lock()
 	ret, _ := s.shards[buk].hm.lookup(hashkey, key)
 	if bit == 1 {
-		rawbytesSet(&ret, idx)
+		bitsetSet(&ret, idx)
 	}
 	if bit == 0 {
-		rawbytesSet(&ret, idx)
+		bitsetSet(&ret, idx)
 	}
 	_, _ = s.shards[buk].hm.insert(hashkey, key, ret)
 	s.shards[buk].mu.Unlock()
@@ -96,7 +96,7 @@ func (s *shardedHashMap) getBit(key string, idx uint) (uint, bool) {
 		return 0, false
 	}
 	s.shards[buk].mu.Unlock()
-	bit := rawbytesGet(&ret, idx)
+	bit := bitsetGet(&ret, idx)
 	return bit, bit != 0
 }
 

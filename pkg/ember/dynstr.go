@@ -1,7 +1,6 @@
 package ember
 
 import (
-	"encoding/binary"
 	"fmt"
 	"unsafe"
 )
@@ -84,8 +83,6 @@ func calcNum(n uint) int {
 	}
 	return -1
 }
-
-var bin = binary.BigEndian
 
 // dynstr is a lot like the sds (simple dynamic strings) library derived
 // from the original version used in redis. It is a particularly useful

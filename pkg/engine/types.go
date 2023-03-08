@@ -1,5 +1,53 @@
 package engine
 
+import (
+	"encoding"
+)
+
+type OpenEngine func(path string) (Engine, error)
+
+// Engine represents a low level database engine
+type Engine interface {
+
+	// Select takes a name and should return a DBNamespace matching
+	// the provided name. If one does not exist, and error should
+	// be returned describing the issue.
+	Select(name string) (Namespace, error)
+
+	// Create takes a name and should create and return a new
+	// DBNamespace with the provided name. If the DBNamespace already
+	// exists Create should return a nil error.
+	Create(name string) (Namespace, error)
+
+	// Drop takes a name and should remove the associated DBNamespace
+	Drop(name string) error
+
+	// Close should close the DBEngine
+	Close() error
+}
+
+type RecordID string
+
+type Record interface {
+	GetID() uint32
+	SetID(id uint32)
+	encoding.BinaryMarshaler
+	encoding.BinaryUnmarshaler
+}
+
+type Namespace interface {
+	Find(func(Record) bool) ([]Record, error)
+	FindOne(id uint64, ptr Record) error
+	FindAll() ([]Record, error)
+	Insert(data Record) (uint64, error)
+	Update(id uint64, data Record) (uint64, error)
+	Delete(id uint64) error
+	Commit() error
+
+	destroy() error
+	close() error
+}
+
 // // bufferPool is an interface describing the basic operations that the buffer pool
 // // is responsible for handling. The bufferPool is used by the bufferPoolManager.
 // type bufferPool interface {
