@@ -1,5 +1,10 @@
 package ember
 
+import (
+	"bytes"
+	"unsafe"
+)
+
 const (
 	_ byte = iota
 	typString
@@ -61,13 +66,17 @@ func newZiplist() ziplist {
 }
 
 func makeZLEntry(prevlen uint16, encoding uint16, data any) []byte {
-	b := make([]byte, 4+len(data))
+	b := make([]byte, 4+unsafe.Sizeof(data))
 	// encode the length to the previous entry
 	bin.PutUint16(b[0:2], prevlen)
 	// encode the encoding
 	bin.PutUint16(b[2:4], encoding)
 	// encode data
-	copy(b[4:], data)
+	err := binw(bytes.NewBuffer(b[4:]), data)
+	if err != nil {
+		return nil
+	}
+	// copy(b[4:], data)
 	return b
 }
 
@@ -114,7 +123,9 @@ func (zl *ziplist) rpush(ss ...any) {
 		// get the offset of the last entry
 		lastoff = bin.Uint32((*zl)[4:8])
 		// encode new entry
-		entry := makeZLEntry(lastoff, enc, s)
+		ent := makeZLEntry(uint16(lastoff), uint16(enc), s)
+		if ent == nil {
+			panic("makeZLEntry is nil")
+		}
 	}
-
 }
