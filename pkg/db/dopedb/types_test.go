@@ -2,8 +2,11 @@ package dopedb
 
 import (
 	"bytes"
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestStrings(t *testing.T) {
@@ -108,27 +111,21 @@ func TestStrings(t *testing.T) {
 
 	// testing string encoding
 	for i, tt := range strTests {
-		out, err := encStr(tt.str)
-		if err != nil {
-			t.Errorf("%s", err)
-			continue
+		buf := make([]byte, tt.len)
+		encStr(buf, tt.str)
+
+		if buf[0] != tt.exp {
+			t.Errorf("error: type byte encoded incorrectly, got=%x, wanted=%x\n", buf[0], tt.exp)
 		}
-		if out[0] != tt.exp {
-			t.Errorf("error: type byte encoded incorrectly, got=%x, wanted=%x\n", out[0], tt.exp)
+		if len(buf) != tt.len {
+			t.Errorf("error: length of encoded output is incorrect, got=%d, wanted=%d\n", len(buf), tt.len)
 		}
-		if len(out) != tt.len {
-			t.Errorf("error: length of encoded output is incorrect, got=%d, wanted=%d\n", len(out), tt.len)
-		}
-		strTests[i].bin = out
+		strTests[i].bin = buf
 	}
 
 	// testing string decoding
 	for _, tt := range strTests {
-		out, err := decStr(tt.bin)
-		if err != nil {
-			t.Errorf("%s", err)
-			continue
-		}
+		out := decStr(tt.bin)
 		if out != tt.str {
 			t.Errorf("error: decoded string did not match origional string\n")
 		}
@@ -237,27 +234,21 @@ func TestBinaryBytes(t *testing.T) {
 
 	// testing bytes encoding
 	for i, tt := range binTests {
-		out, err := encBin(tt.str)
-		if err != nil {
-			t.Errorf("%s", err)
-			continue
+		buf := make([]byte, tt.len)
+		encBin(buf, tt.str)
+
+		if buf[0] != tt.exp {
+			t.Errorf("error: type byte encoded incorrectly, got=%x, wanted=%x\n", buf[0], tt.exp)
 		}
-		if out[0] != tt.exp {
-			t.Errorf("error: type byte encoded incorrectly, got=%x, wanted=%x\n", out[0], tt.exp)
+		if len(buf) != tt.len {
+			t.Errorf("error: length of encoded output is incorrect, got=%d, wanted=%d\n", len(buf), tt.len)
 		}
-		if len(out) != tt.len {
-			t.Errorf("error: length of encoded output is incorrect, got=%d, wanted=%d\n", len(out), tt.len)
-		}
-		binTests[i].bin = out
+		binTests[i].bin = buf
 	}
 
 	// testing bytes decoding
 	for _, tt := range binTests {
-		out, err := decBin(tt.bin)
-		if err != nil {
-			t.Errorf("%s", err)
-			continue
-		}
+		out := decBin(tt.bin)
 		if !bytes.Equal(out, tt.str) {
 			t.Errorf("error: decoded string did not match origional string\n")
 		}
@@ -402,6 +393,106 @@ func TestBasicTypes(t *testing.T) {
 	}
 }
 
+func TestTypeSwitch(t *testing.T) {
+	testTypes := []struct {
+		val any
+		exp int
+	}{
+		{
+			true,
+			BoolTrue,
+		},
+		{
+			false,
+			BoolFalse,
+		},
+		{
+			"foobar",
+			FixStr,
+		},
+		{
+			"this is another string type that should be str8",
+			Str8,
+		},
+		{
+			[]byte("foobar"),
+			Bin8,
+		},
+		{
+			int8(123),
+			Int8,
+		},
+		{
+			int16(12345),
+			Int16,
+		},
+		{
+			int32(123456789),
+			Int32,
+		},
+		{
+			int64(1234567890123456789),
+			Int64,
+		},
+		{
+			uint8(123),
+			Uint8,
+		},
+		{
+			uint16(12345),
+			Uint16,
+		},
+		{
+			uint32(123456789),
+			Uint32,
+		},
+		{
+			uint64(1234567890123456789),
+			Uint64,
+		},
+		{
+			map[string]any{"foo": 1, "bar": 2, "baz": 3},
+			FixMap,
+		},
+		{
+			val: map[string]any{
+				"a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8, "i": 9, "j": 10, "k": 11, "l": 12,
+				"m": 13,
+				"n": 14, "o": 15, "p": 16, "q": 17, "r": 18, "s": 19, "t": 20, "u": 21, "v": 22, "w": 23, "x": 24,
+				"y": 25, "z": 26,
+			},
+			exp: Map16,
+		},
+		{
+			map[int]int{1: 1, 2: 2, 3: 3},
+			FixMap, // will use reflect
+		},
+		{
+			[]any{1, 2, 3, 4, 5, 6, 7, 8, 9},
+			FixArray,
+		},
+		{
+			[]any{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+			Array16,
+		},
+		{
+			[]int{1, 2, 3, 4, 5, 6, 7, 8, 9},
+			FixArray, // will use reflect
+		},
+	}
+	for _, tt := range testTypes {
+
+		t1 := time.Now()
+		typ := getType(tt.val)
+		t2 := time.Now().Sub(t1)
+
+		if typ != tt.exp {
+			t.Errorf("error: got=%x (%s), expected=%x (%s)\n", typ, typeToString[typ], tt.exp, typeToString[tt.exp])
+		}
+		fmt.Printf("got type %s, took %s\n", typeToString[typ], t2)
+	}
+}
+
 /*
 func TestStrType(t *testing.T) {
 
@@ -439,3 +530,110 @@ func TestNumType(t *testing.T) {
 	fmt.Printf("%#v\n", out)
 }
 */
+
+func switchTest(value interface{}) int {
+	switch switchType := value.(type) {
+	case nil:
+		if switchType == nil { // make the compiler happy.
+			return 666
+		}
+		return 1
+	case string:
+		return 2
+	case int:
+		return 3
+	case int8:
+		return 4
+	case int16:
+		return 5
+	case int32:
+		return 6
+	case int64:
+		return 7
+	case float32:
+		return 8
+	case float64:
+		return 9
+	case uint:
+		return 10
+	}
+	return 0
+}
+
+func reflectTest(value interface{}) int {
+	rvalue := reflect.ValueOf(value)
+	switch rvalue.Kind() {
+	case reflect.Ptr:
+		return 1
+	case reflect.String:
+		return 2
+	case reflect.Int:
+		return 3
+	case reflect.Int8:
+		return 4
+	case reflect.Int16:
+		return 5
+	case reflect.Int32:
+		return 6
+	case reflect.Int64:
+		return 7
+	case reflect.Float32:
+		return 8
+	case reflect.Float64:
+		return 9
+	case reflect.Uint:
+		return 10
+	}
+	return 0
+}
+
+var globalSum int
+
+func makeWeirdList() []interface{} {
+	var list []interface{}
+	for i := 0; i < 10; i++ {
+		list = append(list, []interface{}{"string", 5, 5.5, nil, int8(5), uint(3), uint32(6)}...)
+	}
+	return list
+}
+
+func Benchmark_TypeSwitch(b *testing.B) {
+	sum := 0
+	list := makeWeirdList()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, val := range list {
+			sum = sum + switchTest(val)
+		}
+	}
+	globalSum = sum
+}
+func Benchmark_Reflect(b *testing.B) {
+	sum := 0
+	list := makeWeirdList()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, val := range list {
+			sum = sum + reflectTest(val)
+		}
+	}
+	globalSum = sum
+
+}
+
+// Make sure that both typeSwitch and reflection evaluate the weird list and get the same result.
+func Test_Benchmark(t *testing.T) {
+	list := makeWeirdList()
+	sumReflect := 0
+	for _, val := range list {
+		sumReflect = sumReflect + reflectTest(val)
+	}
+	sumSwitch := 0
+	for _, val := range list {
+		sumSwitch = sumSwitch + reflectTest(val)
+	}
+	if sumReflect != sumSwitch {
+		t.Errorf("reflectiong and typeswich values don't match")
+	}
+
+}

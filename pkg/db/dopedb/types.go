@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"reflect"
 )
 
 var binaryEncoding = binary.BigEndian
@@ -60,11 +61,52 @@ const (
 
 	NegFixInt = 0xe0 // 111xxxxx	0xe0 - 0xff
 
-	bitFix = 0x1f
-	bit8   = 0xff
-	bit16  = 0xffff
-	bit32  = 0xffffffff
+	bitFix  = 0x1f
+	bit8    = 0xff
+	bit16   = 0xffff
+	bit32   = 0xffffffff
+	intSize = 32 << (^uint(0) >> 63)
 )
+
+var typeToString = map[int]string{
+	FixInt:    "fix int",
+	FixMap:    "fix map",
+	FixArray:  "fix array",
+	FixStr:    "fix string",
+	Nil:       "nil",
+	Unused:    "unused",
+	BoolFalse: "bool (false)",
+	BoolTrue:  "bool (true)",
+	Bin8:      "bin8",
+	Bin16:     "bin16",
+	Bin32:     "bin32",
+	Ext8:      "ext8",
+	Ext16:     "ext16",
+	Ext32:     "ext32",
+	Float32:   "float32",
+	Float64:   "float64",
+	Uint8:     "uint8",
+	Uint16:    "uint16",
+	Uint32:    "uint32",
+	Uint64:    "uint64",
+	Int8:      "int8",
+	Int16:     "int16",
+	Int32:     "int32",
+	Int64:     "int64",
+	FixExt1:   "fix ext1",
+	FixExt2:   "fix ext2",
+	FixExt4:   "fix ext4",
+	FixExt8:   "fix ext8",
+	FixExt16:  "fix ext16",
+	Str8:      "str8",
+	Str16:     "str16",
+	Str32:     "str32",
+	Array16:   "array16",
+	Array32:   "array32",
+	Map16:     "map16",
+	Map32:     "map32",
+	NegFixInt: "neg fix int",
+}
 
 var (
 	ErrWritingBuffer = errors.New("error: no more room to write to buffer")
@@ -81,6 +123,127 @@ func decodingError(s string) error {
 
 func hasRoom(p []byte, size int) bool {
 	return len(p) >= size
+}
+
+func encFixArr(p []byte, v []any) {
+	if !hasRoom(p, 1) {
+		panic(ErrWritingBuffer)
+	}
+	p[0] = FixArray
+	for i := range v {
+		fmt.Println(i)
+	}
+}
+
+func getType(v any) int {
+	switch v.(type) {
+	case bool:
+		if v == true {
+			return BoolTrue
+		}
+		return BoolFalse
+	case nil:
+		return Nil
+	case float32:
+		return Float32
+	case float64:
+		return Float64
+	case uint:
+		if intSize == 32 {
+			return Uint32
+		}
+		return Uint64
+	case uint8:
+		return Uint8
+	case uint16:
+		return Uint16
+	case uint32:
+		return Uint32
+	case uint64:
+		return Uint64
+	case int:
+		if intSize == 32 {
+			return Int32
+		}
+		return Int64
+	case int8:
+		return Int8
+	case int16:
+		return Int16
+	case int32:
+		return Int32
+	case int64:
+		return Int64
+	case string:
+		n := len(v.(string))
+		switch {
+		case n <= bitFix:
+			return FixStr
+		case n <= bit8:
+			return Str8
+		case n <= bit16:
+			return Str16
+		case n <= bit32:
+			return Str32
+		}
+	case []byte:
+		n := len(v.([]byte))
+		switch {
+		case n <= bit8:
+			return Bin8
+		case n <= bit16:
+			return Bin16
+		case n <= bit32:
+			return Bin32
+		}
+	case map[string]any:
+		n := len(v.(map[string]any))
+		switch {
+		case n <= (bitFix / 2):
+			return FixMap
+		case n <= bit16:
+			return Map16
+		case n <= bit32:
+			return Map32
+		}
+	case []any:
+		n := len(v.([]any))
+		switch {
+		case n <= (bitFix / 2):
+			return FixArray
+		case n <= bit16:
+			return Array16
+		case n <= bit32:
+			return Array32
+		}
+	default:
+		// use reflect as last resort for map and array types
+		rv := reflect.ValueOf(v)
+
+		if rv.Kind() == reflect.Map {
+			n := rv.Len()
+			switch {
+			case n <= (bitFix / 2):
+				return FixMap
+			case n <= bit16:
+				return Map16
+			case n <= bit32:
+				return Map32
+			}
+		}
+		if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
+			n := rv.Len()
+			switch {
+			case n <= (bitFix / 2):
+				return FixArray
+			case n <= bit16:
+				return Array16
+			case n <= bit32:
+				return Array32
+			}
+		}
+	}
+	return Unused
 }
 
 /*
