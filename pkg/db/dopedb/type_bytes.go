@@ -21,21 +21,22 @@ func encBin(p []byte, data []byte) {
 }
 
 func encBin8(p []byte, data []byte) {
-	n := len(p)
-	if len(p) > bit8 {
+	n := len(data)
+	if len(data) > bit8 {
 		panic(encodingError("encBin8"))
 	}
 	if !hasRoom(p, n+2) {
 		panic(ErrWritingBuffer)
 	}
+
 	p[0] = uint8(Bin8)
 	p[1] = uint8(n)
 	copy(p[2:], data)
 }
 
 func encBin16(p []byte, data []byte) {
-	n := len(p)
-	if len(p) > bit16 {
+	n := len(data)
+	if len(data) > bit16 {
 		panic(encodingError("encBin16"))
 	}
 	if !hasRoom(p, n+3) {
@@ -47,8 +48,8 @@ func encBin16(p []byte, data []byte) {
 }
 
 func encBin32(p []byte, data []byte) {
-	n := len(p)
-	if len(p) > bit32 {
+	n := len(data)
+	if len(data) > bit32 {
 		panic(encodingError("encBin32"))
 	}
 	if !hasRoom(p, n+5) {
