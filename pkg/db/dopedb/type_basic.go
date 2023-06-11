@@ -124,6 +124,16 @@ func decUint64(p []byte) uint64 {
 
 // Int8, Int16, Int32 and Int64 types
 
+func encFixInt(p []byte, n int) {
+	if n > FixIntMax-FixInt {
+		panic(encodingError("encFixInt"))
+	}
+	if !hasRoom(p, 1) {
+		panic(ErrWritingBuffer)
+	}
+	p[0] = byte(FixInt | n)
+}
+
 func encInt8(p []byte, n int8) {
 	if !hasRoom(p, 2) {
 		panic(ErrWritingBuffer)
@@ -154,6 +164,16 @@ func encInt64(p []byte, n int64) {
 	}
 	p[0] = Int64
 	binary.BigEndian.PutUint64(p[1:9], uint64(n))
+}
+
+func decFixInt(p []byte) int {
+	if !hasRoom(p, 1) {
+		panic(ErrReadingBuffer)
+	}
+	if p[0]&FixInt != FixInt {
+		panic("not a fixint type")
+	}
+	return int(p[0] &^ FixInt)
 }
 
 func decInt8(p []byte) int8 {

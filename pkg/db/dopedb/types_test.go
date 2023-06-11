@@ -393,6 +393,126 @@ func TestBasicTypes(t *testing.T) {
 	}
 }
 
+func TestEncoderAndDecoder(t *testing.T) {
+	basicTests := []struct {
+		typ  byte
+		val  any
+		bin  []byte
+		size int
+	}{
+		{
+			BoolTrue,
+			true,
+			[]byte{BoolTrue},
+			1,
+		},
+		{
+			BoolFalse,
+			false,
+			[]byte{BoolFalse},
+			1,
+		},
+		{
+			Nil,
+			nil,
+			[]byte{Nil},
+			1,
+		},
+		{
+			Uint8,
+			uint8(4),
+			[]byte{Uint8, 4},
+			2,
+		},
+		{
+			Uint16,
+			uint16(4444),
+			[]byte{Uint16, 0x11, 0x5c},
+			3,
+		},
+		{
+			Uint32,
+			uint32(44444444),
+			[]byte{Uint32, 0x2, 0xa6, 0x2b, 0x1c},
+			5,
+		},
+		{
+			Uint64,
+			uint64(444444444444),
+			[]byte{Uint64, 0x0, 0x0, 0x0, 0x67, 0x7a, 0xf4, 0x7, 0x1c},
+			9,
+		},
+		{
+			Int8,
+			int8(5),
+			[]byte{Int8, 5},
+			2,
+		},
+		{
+			Int16,
+			int16(5555),
+			[]byte{Int16, 0x15, 0xb3},
+			3,
+		},
+		{
+			Int32,
+			int32(55555555),
+			[]byte{Int32, 0x3, 0x4f, 0xb5, 0xe3},
+			5,
+		},
+		{
+			Int64,
+			int64(555555555555),
+			[]byte{Int64, 0x0, 0x0, 0x0, 0x81, 0x59, 0xb1, 0x8, 0xe3},
+			9,
+		},
+		{
+			Float32,
+			float32(3.14159),
+			[]byte{Float32, 0x40, 0x49, 0xf, 0xd0},
+			5,
+		},
+		{
+			Float64,
+			float64(3.14159),
+			[]byte{Float64, 0x40, 0x9, 0x21, 0xf9, 0xf0, 0x1b, 0x86, 0x6e},
+			9,
+		},
+	}
+
+	for _, tt := range basicTests {
+
+		// create buffer of the correct size
+		buf1 := new(bytes.Buffer)
+		buf2 := new(bytes.Buffer)
+		enc := NewEncoder(buf1)
+		dec := NewDecoder(buf2)
+
+		// run encoding function
+		err := enc.Encode(tt.val)
+		if err != nil {
+			t.Errorf("error encoding: %s\n", err)
+		}
+
+		// check to make sure encodings match
+		if !bytes.Equal(buf1.Bytes(), tt.bin) {
+			t.Errorf("encodings do not match: got=%#v, wanted=%#v\n", buf1, tt.bin)
+		}
+
+		// run decoding function
+		var out any
+		err = dec.Decode(&out)
+		if err != nil {
+			t.Errorf("error decoding: %s\n", err)
+		}
+
+		// compare results
+		if out != tt.val {
+			t.Errorf("decoded result does not match expected value (%#v != %#v)\n", out, tt.val)
+		}
+	}
+}
+
 func TestTypeSwitch(t *testing.T) {
 	testTypes := []struct {
 		val any

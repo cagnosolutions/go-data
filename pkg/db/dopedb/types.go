@@ -1,19 +1,26 @@
 package dopedb
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 )
 
 var binaryEncoding = binary.BigEndian
 
 const (
-	FixInt   = 0x00 // integer type if <= 127 (0x00 - 0x7f)
-	FixMap   = 0x80 // map type containing <= 15 elements (0x80 - 0x8f)
-	FixArray = 0x90 // array type containing <= 15 elements (0x90 - 0x9f)
-	FixStr   = 0xa0 // string type with <= 31 characters (0xa0 - 0xbf)
+	FixInt      = 0x00 // integer type if <= 127 (0x00 - 0x7f)
+	FixIntMax   = 0x7f
+	FixMap      = 0x80 // map type containing <= 15 elements (0x80 - 0x8f)
+	FixMapMax   = 0x8f
+	FixArray    = 0x90 // array type containing <= 15 elements (0x90 - 0x9f)
+	FixArrayMax = 0x9f
+	FixStr      = 0xa0 // string type with <= 31 characters (0xa0 - 0xbf)
+	FixStrMax   = 0xbf
 
 	Nil = 0xc0
 
@@ -121,18 +128,187 @@ func decodingError(s string) error {
 	return fmt.Errorf("decoding: there was an issue while decoding [%q]", s)
 }
 
-func hasRoom(p []byte, size int) bool {
-	return len(p) >= size
+type Encoder struct {
+	w   *bufio.Writer
+	buf *bytes.Buffer
 }
 
-func encFixArr(p []byte, v []any) {
-	if !hasRoom(p, 1) {
-		panic(ErrWritingBuffer)
+func NewEncoder(w io.Writer) *Encoder {
+	return &Encoder{
+		w:   bufio.NewWriter(w),
+		buf: new(bytes.Buffer),
 	}
-	p[0] = FixArray
-	for i := range v {
-		fmt.Println(i)
+}
+
+func (e *Encoder) Encode(v any) error {
+	e.buf.Grow(4096)
+	b := e.buf.Bytes()
+	switch v.(type) {
+	case bool:
+		var ok bool
+		if v == true {
+			ok = true
+		}
+		encBool(b, ok)
+	case nil:
+		encNil(b)
+	case float32:
+		encFloat32(b, v.(float32))
+	case float64:
+		encFloat64(b, v.(float64))
+	case uint:
+		if intSize == 32 {
+			encUint32(b, v.(uint32))
+			break
+		}
+		encUint64(b, v.(uint64))
+	case uint8:
+		encUint8(b, v.(uint8))
+	case uint16:
+		encUint16(b, v.(uint16))
+	case uint32:
+		encUint32(b, v.(uint32))
+	case uint64:
+		encUint64(b, v.(uint64))
+	case int:
+		if intSize == 32 {
+			encInt32(b, v.(int32))
+			break
+		}
+		encInt64(b, v.(int64))
+	case int8:
+		encInt8(b, v.(int8))
+	case int16:
+		encInt16(b, v.(int16))
+	case int32:
+		encInt32(b, v.(int32))
+	case int64:
+		encInt64(b, v.(int64))
+	case string:
+		n := len(v.(string))
+		switch {
+		case n <= bitFix:
+			encFixStr(b, v.(string))
+		case n <= bit8:
+			encStr8(b, v.(string))
+		case n <= bit16:
+			encStr16(b, v.(string))
+		case n <= bit32:
+			encStr32(b, v.(string))
+		}
+	case []byte:
+		n := len(v.([]byte))
+		switch {
+		case n <= bit8:
+			encBin8(b, v.([]byte))
+		case n <= bit16:
+			encBin16(b, v.([]byte))
+		case n <= bit32:
+			encBin32(b, v.([]byte))
+		}
+	case map[string]any:
+		n := len(v.(map[string]any))
+		switch {
+		case n <= (bitFix / 2):
+			encFixMap(b, v.(map[string]any))
+		case n <= bit16:
+			encMap16(b, v.(map[string]any))
+		case n <= bit32:
+			encMap32(b, v.(map[string]any))
+		}
+	case []any:
+		n := len(v.([]any))
+		switch {
+		case n <= (bitFix / 2):
+			encFixArray(b, v.([]any))
+		case n <= bit16:
+			encArray16(b, v.([]any))
+		case n <= bit32:
+			encArray32(b, v.([]any))
+		}
 	}
+	_, err := e.w.Write(b)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+type Decoder struct {
+	r *bufio.Reader
+}
+
+func NewDecoder(r io.Reader) *Decoder {
+	return &Decoder{r: bufio.NewReader(r)}
+}
+
+func (d *Decoder) Decode(v any) error {
+	b := make([]byte, 4096)
+	_, err := d.r.Read(b)
+	if err != nil {
+		return err
+	}
+	switch b[0] {
+	case BoolTrue:
+		v = decBool(b)
+	case BoolFalse:
+		v = decBool(b)
+	case Nil:
+		v = decNil(b)
+	case Float32:
+		v = decFloat32(b)
+	case Float64:
+		v = decFloat64(b)
+	case Uint8:
+		v = decUint8(b)
+	case Uint16:
+		v = decUint16(b)
+	case Uint32:
+		v = decUint32(b)
+	case Uint64:
+		v = decUint64(b)
+	case b[0] & FixInt:
+		v = decFixInt(b)
+	case Int8:
+		v = decInt8(b)
+	case Int16:
+		v = decInt16(b)
+	case Int32:
+		v = decInt32(b)
+	case Int64:
+		v = decInt64(b)
+	case b[0] & FixStr:
+		v = decFixStr(b)
+	case Str8:
+		v = decStr8(b)
+	case Str16:
+		v = decStr16(b)
+	case Str32:
+		v = decStr32(b)
+	case Bin8:
+		v = decBin8(b)
+	case Bin16:
+		v = decBin16(b)
+	case Bin32:
+		v = decBin32(b)
+	case b[0] & FixMap:
+		v = decFixMap(b)
+	case Map16:
+		v = decMap16(b)
+	case Map32:
+		v = decMap32(b)
+	case b[0] & FixArray:
+		v = decFixArray(b)
+	case Array16:
+		v = decArray16(b)
+	case Array32:
+		v = decArray32(b)
+	}
+	return nil
+}
+
+func hasRoom(p []byte, size int) bool {
+	return len(p) >= size
 }
 
 func getType(v any) int {
