@@ -7,41 +7,266 @@ import (
 
 // Bool and Nil types
 
-func encBool(p []byte, ok bool) {
-	if !hasRoom(p, 1) {
-		panic(ErrWritingBuffer)
-	}
-	if ok {
+var Primitive primitiveTypes
+
+type primitiveTypes struct{}
+
+func (e *Encoder) EncNil(p []byte) {
+	_ = p[0] // early bounds check to guarantee safety of writes below
+	p[0] = Nil
+}
+
+func (e primitiveTypes) EncBool(p []byte, v bool) {
+	_ = p[0] // early bounds check to guarantee safety of writes below
+	if v {
 		p[0] = BoolTrue
 		return
 	}
 	p[0] = BoolFalse
 }
 
-func decBool(p []byte) bool {
-	if !hasRoom(p, 1) {
-		panic(ErrReadingBuffer)
+func (e primitiveTypes) EncFloat32(p []byte, v float32) {
+	_ = p[5] // early bounds check to guarantee safety of writes below
+	p[0] = Float32
+	binary.BigEndian.PutUint32(p[1:5], math.Float32bits(v))
+}
+
+func (e primitiveTypes) EncFloat64(p []byte, v float64) {
+	_ = p[9] // early bounds check to guarantee safety of writes below
+	p[0] = Float64
+	binary.BigEndian.PutUint64(p[1:9], math.Float64bits(v))
+}
+
+func (e primitiveTypes) EncUint(p []byte, v uint) {
+	if intSize == 32 {
+		e.EncUint32(p, uint32(v))
+		return
+	}
+	e.EncUint64(p, uint64(v))
+}
+
+func (e primitiveTypes) EncUint8(p []byte, v uint8) {
+	_ = p[1] // early bounds check to guarantee safety of writes below
+	p[0] = Uint8
+	p[1] = v
+}
+
+func (e primitiveTypes) EncUint16(p []byte, v uint16) {
+	_ = p[3] // early bounds check to guarantee safety of writes below
+	p[0] = Uint16
+	binary.BigEndian.PutUint16(p[1:3], v)
+}
+
+func (e primitiveTypes) EncUint32(p []byte, v uint32) {
+	_ = p[5] // early bounds check to guarantee safety of writes below
+	p[0] = Uint32
+	binary.BigEndian.PutUint32(p[1:5], v)
+}
+
+func (e primitiveTypes) EncUint64(p []byte, v uint64) {
+	_ = p[9] // early bounds check to guarantee safety of writes below
+	p[0] = Uint64
+	binary.BigEndian.PutUint64(p[1:9], v)
+}
+
+func (e primitiveTypes) EncFixInt(p []byte, v int) {
+	_ = p[0] // early bounds check to guarantee safety of writes below
+	if v > FixIntMax-FixInt {
+		panic("value is too large to encoded as a fix int type")
+	}
+	p[0] = uint8(FixInt | v)
+}
+
+func (e primitiveTypes) EncInt(p []byte, v int) {
+	_ = p[1] // early bounds check to guarantee safety of writes below
+	if intSize == 32 {
+		e.EncInt32(p, int32(v))
+		return
+	}
+	e.EncInt64(p, int64(v))
+}
+
+func (e primitiveTypes) EncInt8(p []byte, v int8) {
+	_ = p[1] // early bounds check to guarantee safety of writes below
+	p[0] = Int8
+	p[1] = uint8(v)
+}
+
+func (e primitiveTypes) EncInt16(p []byte, v int16) {
+	_ = p[3] // early bounds check to guarantee safety of writes below
+	p[0] = Int16
+	binary.BigEndian.PutUint16(p[1:3], uint16(v))
+}
+
+func (e primitiveTypes) EncInt32(p []byte, v int32) {
+	_ = p[5] // early bounds check to guarantee safety of writes below
+	p[0] = Int32
+	binary.BigEndian.PutUint32(p[1:5], uint32(v))
+}
+
+func (e primitiveTypes) EncInt64(p []byte, v int64) {
+	_ = p[9] // early bounds check to guarantee safety of writes below
+	p[0] = Int64
+	binary.BigEndian.PutUint64(p[1:9], uint64(v))
+}
+
+func (e primitiveTypes) DecNil(p []byte) any {
+	_ = p[0] // bounds check hint to compiler
+	if p[0] != Nil {
+		panic("cannot decode, type does not match expected type")
+	}
+	return nil
+}
+
+func (e primitiveTypes) DecBool(p []byte) bool {
+	_ = p[0] // bounds check hint to compiler
+	if p[0] != BoolTrue && p[0] != BoolFalse {
+		panic("cannot decode, type does not match expected type")
 	}
 	if p[0] == BoolTrue {
 		return true
 	}
+	return false
+}
+
+func (e primitiveTypes) DecFloat32(p []byte) float32 {
+	_ = p[5] // bounds check hint to compiler
+	if p[0] != Float32 {
+		panic("cannot decode, type does not match expected type")
+	}
+	return math.Float32frombits(binary.BigEndian.Uint32(p[1:5]))
+}
+
+func (e primitiveTypes) DecFloat64(p []byte) float64 {
+	_ = p[9] // bounds check hint to compiler
+	if p[0] != Float64 {
+		panic("cannot decode, type does not match expected type")
+	}
+	return math.Float64frombits(binary.BigEndian.Uint64(p[1:9]))
+}
+
+func (e primitiveTypes) DecUint(p []byte) uint {
+	if intSize == 32 {
+		return uint(e.DecUint32(p))
+	}
+	return uint(e.DecUint64(p))
+}
+
+func (e primitiveTypes) DecUint8(p []byte) uint8 {
+	_ = p[1] // bounds check hint to compiler
+	if p[0] != Uint8 {
+		panic("cannot decode, type does not match expected type")
+	}
+	return p[1]
+}
+
+func (e primitiveTypes) DecUint16(p []byte) uint16 {
+	_ = p[3] // bounds check hint to compiler
+	if p[0] != Uint16 {
+		panic("cannot decode, type does not match expected type")
+	}
+	return binary.BigEndian.Uint16(p[1:3])
+}
+
+func (e primitiveTypes) DecUint32(p []byte) uint32 {
+	_ = p[5] // bounds check hint to compiler
+	if p[0] != Uint32 {
+		panic("cannot decode, type does not match expected type")
+	}
+	return binary.BigEndian.Uint32(p[1:5])
+}
+
+func (e primitiveTypes) DecUint64(p []byte) uint64 {
+	_ = p[9] // bounds check hint to compiler
+	if p[0] != Uint64 {
+		panic("cannot decode, type does not match expected type")
+	}
+	return binary.BigEndian.Uint64(p[1:9])
+}
+
+func (e primitiveTypes) DecFixInt(p []byte) int {
+	_ = p[0] // bounds check hint to compiler
+	if p[0]&FixInt != FixInt {
+		panic("cannot decode, type does not match expected type")
+	}
+	return int(p[0] &^ FixInt)
+}
+
+func (e primitiveTypes) DecInt(p []byte) int {
+	if intSize == 32 {
+		return int(e.DecInt32(p))
+	}
+	return int(e.DecInt64(p))
+}
+
+func (e primitiveTypes) DecInt8(p []byte) int8 {
+	_ = p[1] // bounds check hint to compiler
+	if p[0] != Int8 {
+		panic("cannot decode, type does not match expected type")
+	}
+	return int8(p[1])
+}
+
+func (e primitiveTypes) DecInt16(p []byte) int16 {
+	_ = p[3] // bounds check hint to compiler
+	if p[0] != Int16 {
+		panic("cannot decode, type does not match expected type")
+	}
+	return int16(binary.BigEndian.Uint16(p[1:3]))
+}
+
+func (e primitiveTypes) DecInt32(p []byte) int32 {
+	_ = p[5] // bounds check hint to compiler
+	if p[0] != Int32 {
+		panic("cannot decode, type does not match expected type")
+	}
+	return int32(binary.BigEndian.Uint32(p[1:5]))
+}
+
+func (e primitiveTypes) DecInt64(p []byte) int64 {
+	_ = p[9] // bounds check hint to compiler
+	if p[0] != Int64 {
+		panic("cannot decode, type does not match expected type")
+	}
+	return int64(binary.BigEndian.Uint64(p[1:9]))
+}
+
+/*
+func WriteBool(w io.Writer, ok bool) (int, error) {
+	if ok {
+		return w.Write([]byte{BoolTrue})
+	}
+	return w.Write([]byte{BoolFalse})
+}
+
+func ReadBool(r io.Reader) (bool, error) {
+	p := make([]byte, 1)
+	_, err := r.Read(p)
+	if err != nil {
+		return false, err
+	}
+	if p[0] != BoolTrue && p[0] != BoolFalse {
+		return false, ErrInvalidType
+	}
+	if p[0] == BoolTrue {
+		return true, nil
+	}
 	if p[0] == BoolFalse {
-		return false
+		return false, nil
 	}
-	panic("byte is not a boolean byte")
+	return false, err
 }
 
-func encNil(p []byte) {
-	if !hasRoom(p, 1) {
-		panic(ErrWritingBuffer)
-	}
-	p[0] = Nil
+func WriteNil(w io.Writer) (int, error) {
+	return w.Write([]byte{Nil})
 }
 
-func decNil(p []byte) any {
+func ReadNil(r io.Reader) (any, error) {
 	if !hasRoom(p, 1) {
 		panic(ErrReadingBuffer)
 	}
+	p := make([]byte, 1)
+	_, err := r.Read(p)
 	if p[0] == Nil {
 		return nil
 	}
@@ -218,30 +443,42 @@ func decInt64(p []byte) int64 {
 
 // Float32 and Float64 types
 
-func encFloat32(p []byte, n float32) {
-	if !hasRoom(p, 5) {
-		panic(ErrWritingBuffer)
-	}
+func WriteFloat32(w io.Writer, n float32) (int, error) {
+	// if !hasRoom(p, 5) {
+	// 	panic(ErrWritingBuffer)
+	// }
+	p := make([]byte, 5)
 	p[0] = Float32
 	binary.BigEndian.PutUint32(p[1:5], math.Float32bits(n))
+	return w.Write(p)
 }
 
-func encFloat64(p []byte, n float64) {
-	if !hasRoom(p, 9) {
-		panic(ErrWritingBuffer)
-	}
+func WriteFloat64(w io.Writer, n float64) (int, error) {
+	// if !hasRoom(p, 9) {
+	// 	panic(ErrWritingBuffer)
+	// }
+	p := make([]byte, 9)
 	p[0] = Float64
 	binary.BigEndian.PutUint64(p[1:9], math.Float64bits(n))
+	return w.Write(p)
 }
 
-func decFloat32(p []byte) float32 {
-	if !hasRoom(p, 5) {
-		panic(ErrReadingBuffer)
+var ErrInvalidType = errors.New("the encoding type did not match the expected type")
+
+func ReadFloat32(r io.Reader, v *float32) (int, error) {
+	// if !hasRoom(p, 5) {
+	// 	panic(ErrReadingBuffer)
+	// }
+	p := make([]byte, 5)
+	n, err := r.Read(p)
+	if err != nil {
+		return 0, err
 	}
 	if p[0] != Float32 {
-		panic("not a float32 type")
+		return 0, ErrInvalidType
 	}
-	return math.Float32frombits(binary.BigEndian.Uint32(p[1:]))
+	*v = math.Float32frombits(binary.BigEndian.Uint32(p[1:]))
+	return n, err
 }
 
 func decFloat64(p []byte) float64 {
@@ -253,3 +490,4 @@ func decFloat64(p []byte) float64 {
 	}
 	return math.Float64frombits(binary.BigEndian.Uint64(p[1:]))
 }
+*/

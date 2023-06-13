@@ -2,71 +2,72 @@ package dopedb
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"reflect"
 )
 
-var binaryEncoding = binary.BigEndian
+type Type uint8
 
 const (
-	FixInt      = 0x00 // integer type if <= 127 (0x00 - 0x7f)
-	FixIntMax   = 0x7f
-	FixMap      = 0x80 // map type containing <= 15 elements (0x80 - 0x8f)
-	FixMapMax   = 0x8f
-	FixArray    = 0x90 // array type containing <= 15 elements (0x90 - 0x9f)
-	FixArrayMax = 0x9f
-	FixStr      = 0xa0 // string type with <= 31 characters (0xa0 - 0xbf)
-	FixStrMax   = 0xbf
+	FixInt          Type = 0x00 // integer type if <= 127 (0x00 - 0x7f)
+	FixIntMax       Type = 0x7f
+	FixMap          Type = 0x80 // map type containing <= 15 elements (0x80 - 0x8f)
+	FixMapMax       Type = 0x8f
+	FixArray        Type = 0x90 // array type containing <= 15 elements (0x90 - 0x9f)
+	FixArrayMaxType      = 0x9f
+	FixStr          Type = 0xa0 // string type with <= 31 characters (0xa0 - 0xbf)
+	FixStrMax       Type = 0xbf
 
-	Nil = 0xc0
+	Nil Type = 0xc0
 
-	Unused = 0xc1
+	Unused Type = 0xc1
 
-	BoolFalse = 0xc2 // type: store a boolean value set to false
-	BoolTrue  = 0xc3 // type: store a boolean value set to true
+	BoolFalse Type = 0xc2 // type: store a boolean value set to false
+	BoolTrue  Type = 0xc3 // type: store a boolean value set to true
 
-	Bin8  = 0xc4 // type + 1 byte: byte array where len <= 255 bytes
-	Bin16 = 0xc5 // type + 2 bytes: byte array where len <= 65535 bytes
-	Bin32 = 0xc6 // type + 4 bytes: byte array where len <= 4294967295 bytes
+	Bin8  Type = 0xc4 // type + 1 byte: byte array where len <= 255 bytes
+	Bin16 Type = 0xc5 // type + 2 bytes: byte array where len <= 65535 bytes
+	Bin32 Type = 0xc6 // type + 4 bytes: byte array where len <= 4294967295 bytes
 
-	Ext8  = 0xc7 // type + 1 byte integer + 1 byte type: byte array <= 255
-	Ext16 = 0xc8 // type + 1 byte integer + 1 byte type: byte array <= 65535
-	Ext32 = 0xc9 // type + 1 byte integer + 1 byte type: byte array <= 4294967295
+	Ext8  Type = 0xc7 // type + 1 byte integer + 1 byte type: byte array <= 255
+	Ext16 Type = 0xc8 // type + 1 byte integer + 1 byte type: byte array <= 65535
+	Ext32 Type = 0xc9 // type + 1 byte integer + 1 byte type: byte array <= 4294967295
 
-	Float32 = 0xca // type + 4 bytes: float32 value
-	Float64 = 0xcb // type + 8 bytes: float64 value
+	Float32 Type = 0xca // type + 4 bytes: float32 value
+	Float64 Type = 0xcb // type + 8 bytes: float64 value
 
-	Uint8  = 0xcc // type + 1 byte: uint8 value
-	Uint16 = 0xcd // type + 2 bytes: uint16 value
-	Uint32 = 0xce // type + 4 bytes: uint32 value
-	Uint64 = 0xcf // type + 8 bytes: uint64 value
+	Uint8  Type = 0xcc // type + 1 byte: uint8 value
+	Uint16 Type = 0xcd // type + 2 bytes: uint16 value
+	Uint32 Type = 0xce // type + 4 bytes: uint32 value
+	Uint64 Type = 0xcf // type + 8 bytes: uint64 value
 
-	Int8  = 0xd0 // type + 1 byte: int8 value
-	Int16 = 0xd1 // type + 2 bytes: int16 value
-	Int32 = 0xd2 // type + 4 bytes: int32 value
-	Int64 = 0xd3 // type + 8 bytes: int64 value
+	Int8  Type = 0xd0 // type + 1 byte: int8 value
+	Int16 Type = 0xd1 // type + 2 bytes: int16 value
+	Int32 Type = 0xd2 // type + 4 bytes: int32 value
+	Int64 Type = 0xd3 // type + 8 bytes: int64 value
 
-	FixExt1  = 0xd4 // type + 1 byte integer: 1 byte array
-	FixExt2  = 0xd5 // type + 1 byte integer: 2 byte array
-	FixExt4  = 0xd6 // type + 1 byte integer: 4 byte array
-	FixExt8  = 0xd7 // type + 1 byte integer: 8 byte array
-	FixExt16 = 0xd8 // type + 1 byte integer: 16 byte array
+	FixExt1  Type = 0xd4 // type + 1 byte integer: 1 byte array
+	FixExt2  Type = 0xd5 // type + 1 byte integer: 2 byte array
+	FixExt4  Type = 0xd6 // type + 1 byte integer: 4 byte array
+	FixExt8  Type = 0xd7 // type + 1 byte integer: 8 byte array
+	FixExt16 Type = 0xd8 // type + 1 byte integer: 16 byte array
 
-	Str8  = 0xd9 // type + 1 byte: string where len <= 255 bytes
-	Str16 = 0xda // type + 2 bytes: string where len <= 65535 bytes
-	Str32 = 0xdb // type + 4 bytes: string where len <= 4294967295 bytes
+	Str8  Type = 0xd9 // type + 1 byte: string where len <= 255 bytes
+	Str16 Type = 0xda // type + 2 bytes: string where len <= 65535 bytes
+	Str32 Type = 0xdb // type + 4 bytes: string where len <= 4294967295 bytes
 
-	Array16 = 0xdc // type + 2 bytes: array containing <= 65535 items
-	Array32 = 0xdd // type + 4 bytes: array containing <= 4294967295 items
+	Array16 Type = 0xdc // type + 2 bytes: array containing <= 65535 items
+	Array32 Type = 0xdd // type + 4 bytes: array containing <= 4294967295 items
 
-	Map16 = 0xde // type + 2 bytes: map containing <= 65535 items
-	Map32 = 0xdf // type + 4 bytes: map containing <= 4294967295 items
+	Time32 Type = 0xd6
+	Time64 Type = 0xd7
 
-	NegFixInt = 0xe0 // 111xxxxx	0xe0 - 0xff
+	Map16 Type = 0xde // type + 2 bytes: map containing <= 65535 items
+	Map32 Type = 0xdf // type + 4 bytes: map containing <= 4294967295 items
+
+	NegFixInt Type = 0xe0 // 111xxxxx	0xe0 - 0xff
 
 	bitFix  = 0x1f
 	bit8    = 0xff
@@ -128,34 +129,126 @@ func decodingError(s string) error {
 	return fmt.Errorf("decoding: there was an issue while decoding [%q]", s)
 }
 
-type Encoder struct {
-	w   *bufio.Writer
-	buf *bytes.Buffer
+type PrimitiveTypes interface {
+	EncNil(p []byte)
+	EncBool(p []byte, v bool)
+	EncFloat32(p []byte, v float32)
+	EncFloat64(p []byte, v float64)
+	EncUint(p []byte, v uint)
+	EncUint8(p []byte, v uint8)
+	EncUint16(p []byte, v uint16)
+	EncUint32(p []byte, v uint32)
+	EncUint64(p []byte, v uint64)
+	EncFixInt(p []byte, v int)
+	EncInt(p []byte, v int)
+	EncInt8(p []byte, v int8)
+	EncInt16(p []byte, v int16)
+	EncInt32(p []byte, v int32)
+	EncInt64(p []byte, v int64)
+
+	DecNil(p []byte) any
+	DecBool(p []byte) bool
+	DecFloat32(p []byte) float32
+	DecFloat64(p []byte) float64
+	DecUint(p []byte) uint
+	DecUint8(p []byte) uint8
+	DecUint16(p []byte) uint16
+	DecUint32(p []byte) uint32
+	DecUint64(p []byte) uint64
+	DecFixInt(p []byte) int
+	DecInt(p []byte) int
+	DecInt8(p []byte) int8
+	DecInt16(p []byte) int16
+	DecInt32(p []byte) int32
+	DecInt64(p []byte) int64
 }
 
-func NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{
-		w:   bufio.NewWriter(w),
-		buf: new(bytes.Buffer),
-	}
+type StringTypes interface {
+	EncStr(p []byte, v string)
+	EncFixStr(p []byte, v string)
+	EncStr8(p []byte, v string)
+	EncStr16(p []byte, v string)
+	EncStr32(p []byte, v string)
+	EncBin8(p []byte, v []byte)
+	EncBin16(p []byte, v []byte)
+	EncBin32(p []byte, v []byte)
+
+	DecStr(p []byte) string
+	DecFixStr(p []byte) string
+	DecStr8(p []byte) string
+	DecStr16(p []byte) string
+	DecStr32(p []byte) string
+	DecBin8(p []byte) []byte
+	DecBin16(p []byte) []byte
+	DecBin32(p []byte) []byte
 }
 
+type ExtendedTypes interface {
+	EncFixExt1(p []byte, t int, v [1]byte)
+	EncFixExt2(p []byte, t int, v [2]byte)
+	EncFixExt4(p []byte, t int, v [4]byte)
+	EncFixExt8(p []byte, t int, v [8]byte)
+	EncFixExt16(p []byte, t int, v [16]byte)
+	EncExt8(p []byte, t int, v []byte)
+	EncExt16(p []byte, t int, v []byte)
+	EncExt32(p []byte, t int, v []byte)
+
+	DecFixExt1(p []byte) (int, [1]byte)   // type + 1 byte
+	DecFixExt2(p []byte) (int, [2]byte)   // type + 2 bytes
+	DecFixExt4(p []byte) (int, [4]byte)   // type + 3 bytes
+	DecFixExt8(p []byte) (int, [8]byte)   // type + 8 bytes
+	DecFixExt16(p []byte) (int, [16]byte) // type + 16 bytes
+	DecExt8(p []byte) (int, []byte)       // type + 255 bytes
+	DecExt16(p []byte) (int, []byte)      // type + 65535 bytes
+	DecExt32(p []byte) (int, []byte)      // type + 4294967295 bytes
+}
+
+type SetTypes interface {
+	EncFixArray(p []byte, v []any)
+	EncArray16(p []byte, v []any)
+	EncArray32(p []byte, v []any)
+	EncFixMap(p []byte, v map[string]any)
+	EncMap16(p []byte, v map[string]any)
+	EncMap32(p []byte, v map[string]any)
+
+	DecFixArray(p []byte) []any
+	DecArray16(p []byte) []any
+	DecArray32(p []byte) []any
+	DecFixMap(p []byte) map[string]any
+	DecMap16(p []byte) map[string]any
+	DecMap32(p []byte) map[string]any
+}
+
+// type Encoder struct {
+// 	w   *bufio.Writer
+// 	buf *bytes.Buffer
+// }
+//
+// func NewEncoder(w io.Writer) *Encoder {
+// 	return &Encoder{
+// 		w:   bufio.NewWriter(w),
+// 		buf: new(bytes.Buffer),
+// 	}
+// }
+
+/*
 func (e *Encoder) Encode(v any) error {
 	e.buf.Grow(4096)
 	b := e.buf.Bytes()
+	var err error
 	switch v.(type) {
 	case bool:
 		var ok bool
 		if v == true {
 			ok = true
 		}
-		encBool(b, ok)
+		_, err = WriteBool(e.w, ok)
 	case nil:
-		encNil(b)
+		_, err = WriteNil(e.w)
 	case float32:
-		encFloat32(b, v.(float32))
+		_, err = WriteFloat32(e.w, v.(float32))
 	case float64:
-		encFloat64(b, v.(float64))
+		_, err = WriteFloat64(e.w, v.(float64))
 	case uint:
 		if intSize == 32 {
 			encUint32(b, v.(uint32))
@@ -227,12 +320,21 @@ func (e *Encoder) Encode(v any) error {
 			encArray32(b, v.([]any))
 		}
 	}
-	_, err := e.w.Write(b)
 	if err != nil {
 		return err
 	}
+	err = e.w.Flush()
+	if err != nil {
+		return err
+	}
+	// _, err := e.w.Write(b)
+	// if err != nil {
+	// 	return err
+	// }
 	return nil
 }
+
+*/
 
 type Decoder struct {
 	r *bufio.Reader
@@ -242,70 +344,104 @@ func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{r: bufio.NewReader(r)}
 }
 
-func (d *Decoder) Decode(v any) error {
-	b := make([]byte, 4096)
-	_, err := d.r.Read(b)
+/*
+func (d *Decoder) Decode(v *any) error {
+	b, err := d.r.Peek(1)
 	if err != nil {
 		return err
 	}
+	var ptr []byte
+	fmt.Printf(">>> READ TYPE: %s\n", typeToString[int(b[0])])
+	switch b[0] {
+	// Primitive 1 byte types
+	case BoolTrue, BoolFalse, Nil, b[0] & FixInt:
+		ptr = make([]byte, 1)
+		break
+	// Primitive 2 byte types
+	case Uint8, Int8:
+		ptr = make([]byte, 2)
+		break
+	// Primitive 3 byte types
+	case Uint16, Int16:
+		ptr = make([]byte, 3)
+		break
+		// Primitive 5 byte types
+	case Uint32, Int32, Float32:
+		ptr = make([]byte, 5)
+		break
+		// Primitive 9 byte types
+	case Uint64, Int64, Float64:
+		ptr = make([]byte, 9)
+		break
+	}
+
 	switch b[0] {
 	case BoolTrue:
-		v = decBool(b)
+		out := make([]byte, 1)
+		d.r.Read(out)
+		*v, err = ReadBool(d.r)
 	case BoolFalse:
-		v = decBool(b)
+		*v, err = ReadBool(d.r)
 	case Nil:
-		v = decNil(b)
+		*v = ReadNil(b)
 	case Float32:
-		v = decFloat32(b)
+		var dat float32
+		_, err = ReadFloat32(d.r, &dat)
+		*v = dat
 	case Float64:
-		v = decFloat64(b)
+		*v = decFloat64(b)
 	case Uint8:
-		v = decUint8(b)
+		*v = decUint8(b)
 	case Uint16:
-		v = decUint16(b)
+		*v = decUint16(b)
 	case Uint32:
-		v = decUint32(b)
+		*v = decUint32(b)
 	case Uint64:
-		v = decUint64(b)
+		*v = decUint64(b)
 	case b[0] & FixInt:
-		v = decFixInt(b)
+		*v = decFixInt(b)
 	case Int8:
-		v = decInt8(b)
+		*v = decInt8(b)
 	case Int16:
-		v = decInt16(b)
+		*v = decInt16(b)
 	case Int32:
-		v = decInt32(b)
+		*v = decInt32(b)
 	case Int64:
-		v = decInt64(b)
+		*v = decInt64(b)
 	case b[0] & FixStr:
-		v = decFixStr(b)
+		*v = decFixStr(b)
 	case Str8:
-		v = decStr8(b)
+		*v = decStr8(b)
 	case Str16:
-		v = decStr16(b)
+		*v = decStr16(b)
 	case Str32:
-		v = decStr32(b)
+		*v = decStr32(b)
 	case Bin8:
-		v = decBin8(b)
+		*v = decBin8(b)
 	case Bin16:
-		v = decBin16(b)
+		*v = decBin16(b)
 	case Bin32:
-		v = decBin32(b)
+		*v = decBin32(b)
 	case b[0] & FixMap:
-		v = decFixMap(b)
+		*v = decFixMap(b)
 	case Map16:
-		v = decMap16(b)
+		*v = decMap16(b)
 	case Map32:
-		v = decMap32(b)
+		*v = decMap32(b)
 	case b[0] & FixArray:
-		v = decFixArray(b)
+		*v = decFixArray(b)
 	case Array16:
-		v = decArray16(b)
+		*v = decArray16(b)
 	case Array32:
-		v = decArray32(b)
+		*v = decArray32(b)
 	}
-	return nil
+	if err != nil {
+		*v = nil
+	}
+	return err
 }
+
+*/
 
 func hasRoom(p []byte, size int) bool {
 	return len(p) >= size

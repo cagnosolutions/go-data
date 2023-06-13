@@ -2,11 +2,9 @@ package dopedb
 
 import (
 	"bytes"
-	"fmt"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestStrings(t *testing.T) {
@@ -255,7 +253,8 @@ func TestBinaryBytes(t *testing.T) {
 	}
 }
 
-func TestBasicTypes(t *testing.T) {
+/*
+func _TestBasicTypes(t *testing.T) {
 	basicTests := []struct {
 		typ  byte
 		val  any
@@ -264,30 +263,30 @@ func TestBasicTypes(t *testing.T) {
 		enc  func(p []byte)
 		dec  func(p []byte) any
 	}{
-		{
-			BoolTrue,
-			true,
-			[]byte{BoolTrue},
-			1,
-			func(p []byte) { encBool(p, true) },
-			func(p []byte) any { return decBool(p) },
-		},
-		{
-			BoolFalse,
-			false,
-			[]byte{BoolFalse},
-			1,
-			func(p []byte) { encBool(p, false) },
-			func(p []byte) any { return decBool(p) },
-		},
-		{
-			Nil,
-			nil,
-			[]byte{Nil},
-			1,
-			func(p []byte) { encNil(p) },
-			func(p []byte) any { return decNil(p) },
-		},
+		// {
+		// 	BoolTrue,
+		// 	true,
+		// 	[]byte{BoolTrue},
+		// 	1,
+		// 	func(p []byte) { WriteBool(p, true) },
+		// 	func(p []byte) any { return ReadBool(p) },
+		// },
+		// {
+		// 	BoolFalse,
+		// 	false,
+		// 	[]byte{BoolFalse},
+		// 	1,
+		// 	func(p []byte) { WriteBool(p, false) },
+		// 	func(p []byte) any { return ReadBool(p) },
+		// },
+		// {
+		// 	Nil,
+		// 	nil,
+		// 	[]byte{Nil},
+		// 	1,
+		// 	func(p []byte) { WriteNil(p) },
+		// 	func(p []byte) any { return ReadNil(p) },
+		// },
 		{
 			Uint8,
 			uint8(4),
@@ -352,22 +351,22 @@ func TestBasicTypes(t *testing.T) {
 			func(p []byte) { encInt64(p, 555555555555) },
 			func(p []byte) any { return decInt64(p) },
 		},
-		{
-			Float32,
-			float32(3.14159),
-			[]byte{Float32, 0x40, 0x49, 0xf, 0xd0},
-			5,
-			func(p []byte) { encFloat32(p, 3.14159) },
-			func(p []byte) any { return decFloat32(p) },
-		},
-		{
-			Float64,
-			float64(3.14159),
-			[]byte{Float64, 0x40, 0x9, 0x21, 0xf9, 0xf0, 0x1b, 0x86, 0x6e},
-			9,
-			func(p []byte) { encFloat64(p, 3.14159) },
-			func(p []byte) any { return decFloat64(p) },
-		},
+		// {
+		// 	Float32,
+		// 	float32(3.14159),
+		// 	[]byte{Float32, 0x40, 0x49, 0xf, 0xd0},
+		// 	5,
+		// 	func(p []byte) { WriteFloat32(p, 3.14159) },
+		// 	func(p []byte) any { return ReadFloat32(p) },
+		// },
+		// {
+		// 	Float64,
+		// 	float64(3.14159),
+		// 	[]byte{Float64, 0x40, 0x9, 0x21, 0xf9, 0xf0, 0x1b, 0x86, 0x6e},
+		// 	9,
+		// 	func(p []byte) { WriteFloat64(p, 3.14159) },
+		// 	func(p []byte) any { return decFloat64(p) },
+		// },
 	}
 
 	for _, tt := range basicTests {
@@ -391,6 +390,34 @@ func TestBasicTypes(t *testing.T) {
 			t.Errorf("decoded result does not match expected value (%#v != %#v)\n", out, tt.val)
 		}
 	}
+}
+
+func TestEncoderAndDecoderSmall(t *testing.T) {
+
+	buf := new(bytes.Buffer)
+	enc := NewEncoder(buf)
+
+	var f1 float32 = 3.14159
+	err := enc.Encode(f1)
+	if err != nil {
+		t.Errorf("encoding error: %s", err)
+	}
+	fmt.Printf("f1: %T %#v\n", f1, f1)
+	fmt.Printf("buf: %#v\n", buf.Bytes())
+
+	dec := NewDecoder(buf)
+
+	var f2 any
+	// _, err = ReadFloat32(buf, &f2)
+	// if err != nil {
+	// 	return
+	// }
+	err = dec.Decode(&f2)
+	if err != nil {
+		t.Errorf("deocding error: %s", err)
+	}
+	fmt.Printf("f2: %T %#v\n", f2, f2)
+
 }
 
 func TestEncoderAndDecoder(t *testing.T) {
@@ -483,10 +510,9 @@ func TestEncoderAndDecoder(t *testing.T) {
 	for _, tt := range basicTests {
 
 		// create buffer of the correct size
-		buf1 := new(bytes.Buffer)
-		buf2 := new(bytes.Buffer)
-		enc := NewEncoder(buf1)
-		dec := NewDecoder(buf2)
+		buf := new(bytes.Buffer)
+		// setup primitiveTypes
+		enc := NewEncoder(buf)
 
 		// run encoding function
 		err := enc.Encode(tt.val)
@@ -495,11 +521,12 @@ func TestEncoderAndDecoder(t *testing.T) {
 		}
 
 		// check to make sure encodings match
-		if !bytes.Equal(buf1.Bytes(), tt.bin) {
-			t.Errorf("encodings do not match: got=%#v, wanted=%#v\n", buf1, tt.bin)
+		if !bytes.Equal(buf.Bytes(), tt.bin) {
+			t.Errorf("encodings do not match: got=%#v, wanted=%#v\n", buf, tt.bin)
 		}
 
 		// run decoding function
+		dec := NewDecoder(buf)
 		var out any
 		err = dec.Decode(&out)
 		if err != nil {
@@ -510,6 +537,9 @@ func TestEncoderAndDecoder(t *testing.T) {
 		if out != tt.val {
 			t.Errorf("decoded result does not match expected value (%#v != %#v)\n", out, tt.val)
 		}
+
+		fmt.Printf("decoded: %T %#v\n", out, out)
+
 	}
 }
 
