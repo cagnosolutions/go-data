@@ -8,7 +8,7 @@ import (
 	"reflect"
 )
 
-type Type uint8
+type Type = uint8
 
 const (
 	FixInt          Type = 0x00 // integer type if <= 127 (0x00 - 0x7f)
@@ -76,7 +76,7 @@ const (
 	intSize = 32 << (^uint(0) >> 63)
 )
 
-var typeToString = map[int]string{
+var typeToString = map[Type]string{
 	FixInt:    "fix int",
 	FixMap:    "fix map",
 	FixArray:  "fix array",
@@ -447,7 +447,7 @@ func hasRoom(p []byte, size int) bool {
 	return len(p) >= size
 }
 
-func getType(v any) int {
+func getType(v any) Type {
 	switch v.(type) {
 	case bool:
 		if v == true {

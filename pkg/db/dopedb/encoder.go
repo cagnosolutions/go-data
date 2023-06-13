@@ -46,6 +46,7 @@ func (e *Encoder) check(n int) {
 	// First check to see if we can fit n bytes in the
 	// current buffer
 	if n < len(e.buf[e.off:]) {
+		log.Printf("DEBUG: check(%d), we have room in buffer\n", n)
 		// Looks like we can, so we just return
 		return
 	}
@@ -58,6 +59,7 @@ func (e *Encoder) check(n int) {
 		if err != nil {
 			panic("error writing buffer")
 		}
+		log.Printf("DEBUG: check(%d), just called write, resetting buffer\n", n)
 		// Reset the buffer after writing.
 		e.buf = e.buf[:0]
 		e.off = 0
@@ -67,6 +69,7 @@ func (e *Encoder) check(n int) {
 	// have available in the buffer, we will need to grow
 	// the buffer.
 	if n > bufSize {
+		log.Printf("DEBUG: check(%d), growing buffer\n", n)
 		// Add e.off to account for e.buf[:e.off] being sliced off the front.
 		e.buf = growSlice(e.buf[e.off:], e.off+n)
 	}
@@ -102,20 +105,20 @@ func growSlice(b []byte, n int) []byte {
 	return b2[:len(b)]
 }
 
-func (e *Encoder) Encode(v any) error {
-	switch v.(type) {
+func (e *Encoder) encodeValue(v any) error {
+	switch t := v.(type) {
 	case nil:
 		e.writeNil()
 	case bool:
 		var ok bool
-		if v == true {
+		if t == true {
 			ok = true
 		}
 		e.writeBool(ok)
 	case float32:
-		e.writeFloat32(v.(float32))
+		e.writeFloat32(t)
 	case float64:
-		e.writeFloat64(v.(float64))
+		e.writeFloat64(t)
 	case uint:
 		if intSize == 32 {
 			e.writeUint32(v.(uint32))
@@ -123,83 +126,104 @@ func (e *Encoder) Encode(v any) error {
 		}
 		e.writeUint64(v.(uint64))
 	case uint8:
-		e.writeUint8(v.(uint8))
+		e.writeUint8(t)
 	case uint16:
-		e.writeUint16(v.(uint16))
+		e.writeUint16(t)
 	case uint32:
-		e.writeUint32(v.(uint32))
+		e.writeUint32(t)
 	case uint64:
-		e.writeUint64(v.(uint64))
+		e.writeUint64(t)
 	case int:
+		if t < 128 {
+			e.writeFixInt(t)
+			break
+		}
 		if intSize == 32 {
 			e.writeInt32(v.(int32))
 			break
 		}
 		e.writeInt64(v.(int64))
 	case int8:
-		e.writeInt8(v.(int8))
+		e.writeInt8(t)
 	case int16:
-		e.writeInt16(v.(int16))
+		e.writeInt16(t)
 	case int32:
-		e.writeInt32(v.(int32))
+		e.writeInt32(t)
 	case int64:
-		e.writeInt64(v.(int64))
+		e.writeInt64(t)
 	case string:
-		n := len(v.(string))
+		n := len(t)
 		switch {
 		case n <= bitFix:
-			e.writeFixStr(v.(string))
+			e.writeFixStr(t)
 		case n <= bit8:
-			e.writeStr8(v.(string))
+			e.writeStr8(t)
 		case n <= bit16:
-			e.writeStr16(v.(string))
+			e.writeStr16(t)
 		case n <= bit32:
-			e.writeStr32(v.(string))
+			e.writeStr32(t)
 		}
 	case []byte:
-		n := len(v.([]byte))
+		n := len(t)
 		switch {
 		case n <= bit8:
-			e.writeBin8(v.([]byte))
+			e.writeBin8(t)
 		case n <= bit16:
-			e.writeBin16(v.([]byte))
+			e.writeBin16(t)
 		case n <= bit32:
-			e.writeBin32(v.([]byte))
+			e.writeBin32(t)
 		}
-		// case map[string]any:
-		// 	n := len(v.(map[string]any))
-		// 	switch {
-		// 	case n <= (bitFix / 2):
-		// 		encFixMap(b, v.(map[string]any))
-		// 	case n <= bit16:
-		// 		encMap16(b, v.(map[string]any))
-		// 	case n <= bit32:
-		// 		encMap32(b, v.(map[string]any))
-		// 	}
-		// case []any:
-		// 	n := len(v.([]any))
-		// 	switch {
-		// 	case n <= (bitFix / 2):
-		// 		encFixArray(b, v.([]any))
-		// 	case n <= bit16:
-		// 		encArray16(b, v.([]any))
-		// 	case n <= bit32:
-		// 		encArray32(b, v.([]any))
-		// 	}
+	case []any:
+		n := len(t)
+		switch {
+		case n <= (bitFix / 2):
+			e.writeFixArray(t)
+		case n <= bit16:
+			e.writeArray16(t)
+		case n <= bit32:
+			e.writeArray32(t)
+			break
+		}
+	case map[string]any:
+		n := len(t)
+		switch {
+		case n <= (bitFix / 2):
+			e.writeFixMap(t)
+		case n <= bit16:
+			e.writeMap16(t)
+		case n <= bit32:
+			e.writeMap32(t)
+		}
 	}
-	// Write the contents of the buffer
-	_, err := e.w.Write(e.buf[:e.off])
+	return nil
+}
+
+func (e *Encoder) Reset() {
+	e.reset()
+	e.w.Reset(e.w)
+}
+
+func (e *Encoder) Encode(v any) error {
+	err := e.encodeValue(v)
 	if err != nil {
 		return err
 	}
+	// Write the contents of the buffer
+	_, err = e.w.Write(e.buf[:e.off])
+	if err != nil {
+		return err
+	}
+	log.Printf("DEBUG: encoded value (%T=%#v) and called write\n", v, v)
 	// Flush to disk
 	err = e.w.Flush()
 	if err != nil {
 		return err
 	}
+	log.Printf("DEBUG: called flush on underlying writer\n")
 	// Reset the buffer
-	e.buf = e.buf[:0]
-	e.off = 0
+	// e.buf = e.buf[:0]
+	// e.off = 0
+	// log.Printf("DEBUG: reset buffer after successful encoding\n")
 	return nil
 }
 
@@ -216,6 +240,7 @@ func (e *Encoder) writeBytes(v []byte) {
 }
 
 func (e *Encoder) write1(t Type, v uint8) {
+	log.Printf("DEBUG: len(e.buf)=%d, e.off=%d\n", len(e.buf), e.off)
 	e.check(1)
 	e.buf[e.off] = byte(t | v)
 	e.off += 1
@@ -287,6 +312,10 @@ func (e *Encoder) writeUint32(v uint32) {
 
 func (e *Encoder) writeUint64(v uint64) {
 	e.write9(Uint64, v)
+}
+
+func (e *Encoder) writeFixInt(v int) {
+	e.write1(FixInt, uint8(v))
 }
 
 func (e *Encoder) writeInt8(v int8) {
@@ -362,53 +391,14 @@ func (e *Encoder) writeBin32(v []byte) {
 	e.writeBytes(v)
 }
 
-func (e *Encoder) writeFixArray(v []any) {
-	if len(v) > bitFix/2 { // 15
-		panic("cannot encode, type does not match expected encoding")
-	}
-	e.write1(FixArray, uint8(len(v)))
-	for i := range v {
-		err := e.Encode(v[i])
-		if err != nil {
-			log.Panicf("error encoding fix array element [%T]: %s\n", v[i], err)
-		}
-	}
-}
-
-func (e *Encoder) writeArray16(v []any) {
-	if len(v) > bit16 {
-		panic("cannot encode, type does not match expected encoding")
-	}
-	e.write3(Array16, uint16(len(v)))
-	for i := range v {
-		err := e.Encode(v[i])
-		if err != nil {
-			log.Panicf("error encoding array 16 element [%T]: %s\n", v[i], err)
-		}
-	}
-}
-
-func (e *Encoder) writeArray32(v []any) {
-	if len(v) > bit32 {
-		panic("cannot encode, type does not match expected encoding")
-	}
-	e.write5(Array32, uint32(len(v)))
-	for i := range v {
-		err := e.Encode(v[i])
-		if err != nil {
-			log.Panicf("error encoding array 32 element [%T]: %s\n", v[i], err)
-		}
-	}
-}
-
 func (e *Encoder) writeFixMap(m map[string]any) {
 	if len(m) > bitFix/2 { // 15
-		panic("cannot encode, type does not match expected encoding")
+		panic("cannot encodeValue, type does not match expected encoding")
 	}
 	e.write1(FixMap, uint8(len(m)))
 	for k, v := range m {
 		e.writeStr(k)
-		err := e.Encode(v)
+		err := e.encodeValue(v)
 		if err != nil {
 			log.Panicf("error encoding fix map value [%T]: %s\n", v, err)
 		}
@@ -417,12 +407,12 @@ func (e *Encoder) writeFixMap(m map[string]any) {
 
 func (e *Encoder) writeMap16(m map[string]any) {
 	if len(m) > bit16 {
-		panic("cannot encode, type does not match expected encoding")
+		panic("cannot encodeValue, type does not match expected encoding")
 	}
 	e.write3(Map16, uint16(len(m)))
 	for k, v := range m {
 		e.writeStr(k)
-		err := e.Encode(v)
+		err := e.encodeValue(v)
 		if err != nil {
 			log.Panicf("error encoding map 16 value [%T]: %s\n", v, err)
 		}
@@ -431,12 +421,12 @@ func (e *Encoder) writeMap16(m map[string]any) {
 
 func (e *Encoder) writeMap32(m map[string]any) {
 	if len(m) > bit32 {
-		panic("cannot encode, type does not match expected encoding")
+		panic("cannot encodeValue, type does not match expected encoding")
 	}
 	e.write5(Map32, uint32(len(m)))
 	for k, v := range m {
 		e.writeStr(k)
-		err := e.Encode(v)
+		err := e.encodeValue(v)
 		if err != nil {
 			log.Panicf("error encoding map 32 value [%T]: %s\n", v, err)
 		}
@@ -450,7 +440,7 @@ func (e *Encoder) writeFixExt1(t uint8, d byte) {
 
 func (e *Encoder) writeFixExt2(t uint8, d []byte) {
 	if len(d) > 2 {
-		panic("cannot encode, type does not match expected encoding")
+		panic("cannot encodeValue, type does not match expected encoding")
 	}
 	e.write2(FixExt2, t)
 	e.writeBytes(d)
@@ -458,7 +448,7 @@ func (e *Encoder) writeFixExt2(t uint8, d []byte) {
 
 func (e *Encoder) writeFixExt4(t uint8, d []byte) {
 	if len(d) > 4 {
-		panic("cannot encode, type does not match expected encoding")
+		panic("cannot encodeValue, type does not match expected encoding")
 	}
 	e.write2(FixExt4, t)
 	e.writeBytes(d)
@@ -466,7 +456,7 @@ func (e *Encoder) writeFixExt4(t uint8, d []byte) {
 
 func (e *Encoder) writeFixExt8(t uint8, d []byte) {
 	if len(d) > 8 {
-		panic("cannot encode, type does not match expected encoding")
+		panic("cannot encodeValue, type does not match expected encoding")
 	}
 	e.write2(FixExt8, t)
 	e.writeBytes(d)
@@ -474,7 +464,7 @@ func (e *Encoder) writeFixExt8(t uint8, d []byte) {
 
 func (e *Encoder) writeExt8(t uint8, d []byte) {
 	if len(d) > bit8 {
-		panic("cannot encode, type does not match expected encoding")
+		panic("cannot encodeValue, type does not match expected encoding")
 	}
 	e.write2(Ext8, uint8(len(d)))
 	e.writeByte(t)
@@ -483,7 +473,7 @@ func (e *Encoder) writeExt8(t uint8, d []byte) {
 
 func (e *Encoder) writeExt16(t uint8, d []byte) {
 	if len(d) > bit16 {
-		panic("cannot encode, type does not match expected encoding")
+		panic("cannot encodeValue, type does not match expected encoding")
 	}
 	e.write3(Ext16, uint16(len(d)))
 	e.writeByte(t)
@@ -492,7 +482,7 @@ func (e *Encoder) writeExt16(t uint8, d []byte) {
 
 func (e *Encoder) writeExt32(t uint8, d []byte) {
 	if len(d) > bit32 {
-		panic("cannot encode, type does not match expected encoding")
+		panic("cannot encodeValue, type does not match expected encoding")
 	}
 	e.write5(Ext32, uint32(len(d)))
 	e.writeByte(t)
@@ -520,13 +510,13 @@ func (e *Encoder) writeExt(t uint8, d []byte) {
 }
 
 func (e *Encoder) writeTime32(t time.Time) {
-	e.write2(Time32, -1)
+	e.write2(Time32, 0)
 	binary.BigEndian.PutUint32(e.buf[e.off:e.off+4], uint32(t.Unix()))
 	e.off += 4
 }
 
 func (e *Encoder) writeTime64(t time.Time) {
-	e.write2(Time64, -1)
+	e.write2(Time64, 0)
 	binary.BigEndian.PutUint64(e.buf[e.off:e.off+4], uint64(t.Unix()))
 	e.off += 8
 }

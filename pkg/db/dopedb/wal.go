@@ -534,7 +534,7 @@ func (l *WAL) Write(e []byte) (int64, error) {
 	// lock
 	l.lock.Lock()
 	defer l.lock.Unlock()
-	// first, encode entry
+	// first, encodeValue entry
 	offset, err := encodeEntry(l.file, e)
 	if err != nil {
 		return -1, err
@@ -905,9 +905,9 @@ func encodeEntry(w io.WriteSeeker, e []byte) (int64, error) {
 	}
 	// make buffer
 	buf := make([]byte, 12)
-	// encode entry length
+	// encodeValue entry length
 	binary.LittleEndian.PutUint64(buf, uint64(len(e)))
-	// compute and encode checksum
+	// compute and encodeValue checksum
 	checksum := crc32.ChecksumIEEE(e)
 	binary.LittleEndian.PutUint32(buf[8:], checksum)
 	// write header
