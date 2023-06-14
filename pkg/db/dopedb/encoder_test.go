@@ -140,3 +140,18 @@ func TestEncoder2(t *testing.T) {
 	}
 
 }
+
+func TestDecoder(t *testing.T) {
+
+	buf := new(bytes.Buffer)
+	enc := NewEncoder(buf)
+	dat := []any{float32(3.14159), "this is a test"}
+	enc.Encode(dat)
+	fmt.Printf("encoded data: %#v\n", buf.Bytes())
+
+	dec := NewDecoder(buf)
+	var out any
+	dec.Decode(&out)
+
+	fmt.Printf("decoded data: (%T) %#v\n", out, out)
+}

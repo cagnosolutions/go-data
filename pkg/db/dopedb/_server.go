@@ -58,7 +58,7 @@ func (s *DBServer) ListenAndServe(host string) error {
 		if err != nil {
 			log.Printf("set deadline: %v\n", err)
 		}
-		// And now, we will hand it off to the handler (in its own
+		// And now, we will hand it end to the handler (in its own
 		// goroutine) and promptly get back to the accepting state
 		log.Printf("accepted conn: %q\n", conn.RemoteAddr())
 		go s.handleTCPConn(conn)
