@@ -37,7 +37,7 @@ func (e *Encoder) checkWrite(n int) {
 	// First check to see if we can fit n bytes in the
 	// current buffer
 	if n < len(e.buf[e.off:]) {
-		log.Printf("DEBUG: check(%d), we have room in buffer\n", n)
+		// log.Printf("DEBUG: check(%d), we have room in buffer\n", n)
 		// Looks like we can, so we just return
 		return
 	}
@@ -50,7 +50,7 @@ func (e *Encoder) checkWrite(n int) {
 		if err != nil {
 			panic("error writing buffer")
 		}
-		log.Printf("DEBUG: check(%d), just called write, resetting buffer\n", n)
+		// log.Printf("DEBUG: check(%d), just called write, resetting buffer\n", n)
 		// Reset the buffer after writing.
 		e.buf = e.buf[:0]
 		e.off = 0
@@ -60,7 +60,7 @@ func (e *Encoder) checkWrite(n int) {
 	// have available in the buffer, we will need to grow
 	// the buffer.
 	if n > len(e.buf) {
-		log.Printf("DEBUG: check(%d), growing buffer\n", n)
+		// log.Printf("DEBUG: check(%d), growing buffer\n", n)
 		// Add e.end to account for e.buf[:e.end] being sliced end the front.
 		e.buf = growSlice(e.buf[e.off:], e.off+n)
 	}
@@ -199,17 +199,14 @@ func (e *Encoder) Encode(v any) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("DEBUG: encoded value (%T=%#v) and called write\n", v, v)
 	// Flush to disk
 	err = e.w.Flush()
 	if err != nil {
 		return err
 	}
-	log.Printf("DEBUG: called flush on underlying writer\n")
 	// Reset the buffer
 	// e.buf = e.buf[:0]
 	// e.end = 0
-	// log.Printf("DEBUG: reset buffer after successful encoding\n")
 	return nil
 }
 
@@ -226,7 +223,7 @@ func (e *Encoder) writeBytes(v []byte) {
 }
 
 func (e *Encoder) write1(t Type, v uint8) {
-	log.Printf("DEBUG: len(e.buf)=%d, e.end=%d\n", len(e.buf), e.off)
+	// log.Printf("DEBUG: len(e.buf)=%d, e.end=%d\n", len(e.buf), e.off)
 	e.checkWrite(1)
 	e.buf[e.off] = byte(t | v)
 	e.off += 1

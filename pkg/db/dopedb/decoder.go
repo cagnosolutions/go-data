@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/binary"
 	"io"
-	"log"
 	"math"
 	"time"
 )
@@ -23,17 +22,17 @@ func NewDecoder(r io.Reader) *Decoder {
 		buf: make([]byte, bufSize),
 		end: 0,
 	}
-	for {
-		read, err := d.r.Read(d.buf)
-		if err != nil {
-			if err == io.EOF {
-				d.eof = true
-				break
-			}
-			log.Panicf("error reading into buffer: %s\n", err)
-		}
-		d.end += read
-	}
+	// for {
+	// 	read, err := d.r.Read(d.buf)
+	// 	if err != nil {
+	// 		if err == io.EOF {
+	// 			d.eof = true
+	// 			break
+	// 		}
+	// 		log.Panicf("error reading into buffer: %s\n", err)
+	// 	}
+	// 	d.end += read
+	// }
 	return d
 }
 
@@ -44,31 +43,31 @@ func (d *Decoder) unread() int {
 // checkRead checks to see if we have n bytes in the buffer
 // we can read from. If not, we read more into the buffer.
 func (d *Decoder) checkRead(n int) {
-	// if at eof, panic
-	if d.eof == true {
-		// panic("cannot read any more, reached EOF")
-		log.Println("cannot read any more, reached EOF")
-	}
-	// buffer is empty, attempt to read data into buffer.
-	if d.end == 0 {
-		for {
-			read, err := d.r.Read(d.buf)
-			if err != nil {
-				if err == io.EOF {
-					d.eof = true
-					break
-				}
-				log.Panicf("error reading into buffer: %s\n", err)
-			}
-			d.end += read
-		}
-		return
-	}
+	// // if at eof, panic
+	// if d.eof == true {
+	// 	// panic("cannot read any more, reached EOF")
+	// 	log.Println("cannot read any more, reached EOF")
+	// }
+	// // buffer is empty, attempt to read data into buffer.
+	// if d.end == 0 {
+	// 	for {
+	// 		read, err := d.r.Read(d.buf)
+	// 		if err != nil {
+	// 			if err == io.EOF {
+	// 				d.eof = true
+	// 				break
+	// 			}
+	// 			log.Panicf("error reading into buffer: %s\n", err)
+	// 		}
+	// 		d.end += read
+	// 	}
+	// 	return
+	// }
 	// buffer does not have n bytes to read from, so read n more bytes
 	available := len(d.buf[:d.end])
-	empty := len(d.buf[d.end:])
+	// empty := len(d.buf[d.end:])
 	if n > available && n+available < cap(d.buf) {
-		log.Printf("[DEBUG]: checkRead(%d) available=%d, empty=%d", n, available, empty)
+		// log.Printf("[DEBUG]: checkRead(%d) available=%d, empty=%d", n, available, empty)
 		read, err := d.r.Read(d.buf[d.end : d.end+n])
 		if err != nil {
 			if err == io.EOF {
@@ -79,7 +78,7 @@ func (d *Decoder) checkRead(n int) {
 	}
 }
 
-func (d *Decoder) decodeValue() any {
+func (d *Decoder) readValue() any {
 	d.checkRead(1)
 	typ := d.buf[d.at]
 	var v any = -1
@@ -140,22 +139,20 @@ func (d *Decoder) decodeValue() any {
 	return v
 }
 
-func (d *Decoder) Decode(v *any) error {
-	got := d.decodeValue()
-	*v = got
-	return nil
-	// for {
-	// 	left := d.unread()
-	// 	if left <= 1 {
-	// 		break
-	// 	}
-	// 	got := d.decodeValue()
-	// 	fmt.Printf("decoded: remaining=%d, (%T) %#v\n", left, got, got)
-	// 	if got != -1 {
-	// 		v = got
-	// 	}
-	// }
-	// return errors.New("encountered error decoding")
+func (d *Decoder) Decode() (any, error) {
+	// Read the contents into the buffer
+	for {
+		read, err := d.r.Read(d.buf)
+		if err != nil {
+			if err == io.EOF {
+				d.eof = true
+				break
+			}
+			return nil, err
+		}
+		d.end += read
+	}
+	return d.readValue(), nil
 }
 
 func (d *Decoder) readByte() byte {
@@ -373,7 +370,10 @@ func (d *Decoder) readInt64() int64 {
 
 func (d *Decoder) readStr() string {
 	d.checkRead(1)
-	b := d.buf[d.end]
+	b := d.buf[d.at]
+	// n := b &^ FixStr
+	// fmt.Printf("FixStr=0x%.2x, FixStrMax=0x%.2x, got=0x%.2x, isFixStr=%v\n",
+	//	FixStr, FixStrMax, b, FixStr <= b && b <= FixStrMax)
 	switch {
 	case FixStr <= b && b <= FixStrMax:
 		return d.readFixStr()
@@ -472,7 +472,7 @@ func (d *Decoder) readFixArray() []any {
 	n := int(v)
 	arr := make([]any, n)
 	for i := 0; i < n; i++ {
-		arr[i] = d.decodeValue()
+		arr[i] = d.readValue()
 	}
 	return arr
 }
@@ -485,7 +485,7 @@ func (d *Decoder) readArray16() []any {
 	n := int(v)
 	arr := make([]any, n)
 	for i := 0; i < n; i++ {
-		arr[i] = d.decodeValue()
+		arr[i] = d.readValue()
 	}
 	return arr
 }
@@ -498,7 +498,7 @@ func (d *Decoder) readArray32() []any {
 	n := int(v)
 	arr := make([]any, n)
 	for i := 0; i < n; i++ {
-		arr[i] = d.decodeValue()
+		arr[i] = d.readValue()
 	}
 	return arr
 }
@@ -511,7 +511,9 @@ func (d *Decoder) readFixMap() map[string]any {
 	n := int(v)
 	m := make(map[string]any, n)
 	for i := 0; i < n; i++ {
-		m[d.readStr()] = d.decodeValue()
+		key := d.readStr()
+		val := d.readValue()
+		m[key] = val
 	}
 	return m
 }
@@ -524,7 +526,7 @@ func (d *Decoder) readMap16() map[string]any {
 	n := int(v)
 	m := make(map[string]any, n)
 	for i := 0; i < n; i++ {
-		m[d.readStr()] = d.decodeValue()
+		m[d.readStr()] = d.readValue()
 	}
 	return m
 }
@@ -537,7 +539,7 @@ func (d *Decoder) readMap32() map[string]any {
 	n := int(v)
 	m := make(map[string]any, n)
 	for i := 0; i < n; i++ {
-		m[d.readStr()] = d.decodeValue()
+		m[d.readStr()] = d.readValue()
 	}
 	return m
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 )
 
 var jsonData = []byte(`[
@@ -145,13 +146,125 @@ func TestDecoder(t *testing.T) {
 
 	buf := new(bytes.Buffer)
 	enc := NewEncoder(buf)
-	dat := []any{float32(3.14159), "this is a test"}
-	enc.Encode(dat)
+	// dat := []any{float32(3.14159), "this is a test"}
+	dat := map[string]any{
+		"foo": []any{1, 2, 3},
+		"bar": "this is a test",
+		"baz": float32(3.14159),
+	}
+
+	err := enc.Encode(dat)
+	if err != nil {
+		t.Errorf("error encoding: %s", err)
+	}
 	fmt.Printf("encoded data: %#v\n", buf.Bytes())
 
 	dec := NewDecoder(buf)
-	var out any
-	dec.Decode(&out)
-
+	out, err := dec.Decode()
+	if err != nil {
+		t.Errorf("error decoding: %s", err)
+	}
 	fmt.Printf("decoded data: (%T) %#v\n", out, out)
+}
+
+func BenchmarkEncoder(b *testing.B) {
+
+	checkMap := func(in, out map[string]any) bool {
+		if len(in) != len(out) {
+			return false
+		}
+		for k, _ := range in {
+			if _, has := out[k]; !has {
+				return false
+			}
+		}
+		return true
+	}
+	in := map[string]any{
+		"foo": []any{1, 2, 3},
+		"bar": "this is a test",
+		"baz": float32(3.14159),
+	}
+	in2 := map[string]any{
+		"baz": float32(3.14159),
+		"bar": "this is a test",
+		"foo": []any{1, 2, 3},
+	}
+	fmt.Printf("maps match: %v\n", checkMap(in, in2))
+
+	var buf *bytes.Buffer
+	var data []byte
+
+	b.Run(
+		"json encoding", func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				buf = new(bytes.Buffer)
+				enc := json.NewEncoder(buf)
+				err := enc.Encode(in)
+				if err != nil {
+					b.Errorf("error encoding (json): %s", err)
+				}
+				data = buf.Bytes()
+				buf.Reset()
+			}
+		},
+	)
+
+	b.Run(
+		"json decoding", func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				dec := json.NewDecoder(bytes.NewBuffer(data))
+				var out map[string]any
+				err := dec.Decode(&out)
+				if err != nil {
+					b.Errorf("error decoding (json): %s", err)
+				}
+				if !checkMap(in, out) {
+					b.Errorf("error decoding (json): maps don't match\n in=%#v\nout=%#v\n", in, out)
+				}
+			}
+		},
+	)
+
+	time.Sleep(3 * time.Second)
+	buf.Reset()
+	buf = nil
+	data = nil
+
+	b.ResetTimer()
+
+	b.Run(
+		"my encoding", func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				buf = new(bytes.Buffer)
+				enc := NewEncoder(buf)
+				err := enc.Encode(in)
+				if err != nil {
+					b.Errorf("error encoding (mine): %s", err)
+				}
+				data = buf.Bytes()
+				buf.Reset()
+			}
+		},
+	)
+
+	b.Run(
+		"my decoding", func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				dec := NewDecoder(bytes.NewBuffer(data))
+				out, err := dec.Decode()
+				if err != nil {
+					b.Errorf("error decoding: %s", err)
+				}
+				if !checkMap(in, out.(map[string]any)) {
+					b.Errorf("error decoding: maps don't match")
+				}
+			}
+		},
+	)
+
 }
