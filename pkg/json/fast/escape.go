@@ -63,14 +63,15 @@ func unescapeToUTF8(in, out []byte) (inLen int, outLen int) {
 		return 2, 1
 	case 'u':
 		// Unicode escape
-		if r, inLen := decodeUnicodeEscape(in); inLen == -1 {
+		r, inLen := decodeUnicodeEscape(in)
+		if inLen == -1 {
 			// Invalid Unicode escape
 			return -1, -1
-		} else {
-			// Valid Unicode escape; re-encode as UTF8
-			outLen := utf8.EncodeRune(out, r)
-			return inLen, outLen
 		}
+		// Valid Unicode escape; re-encode as UTF8
+		outLen := utf8.EncodeRune(out, r)
+		return inLen, outLen
+
 	}
 
 	return -1, -1
@@ -88,22 +89,26 @@ var backslashCharEscapeTable = [...]byte{
 }
 
 func decodeUnicodeEscape(in []byte) (rune, int) {
-	if r, ok := decodeSingleUnicodeEscape(in); !ok {
+	r, ok := decodeSingleUnicodeEscape(in)
+	if !ok {
 		// Invalid Unicode escape
 		return utf8.RuneError, -1
-	} else if r <= basicMultilingualPlaneOffset && !isUTF16EncodedRune(r) {
+	}
+	if r <= basicMultilingualPlaneOffset && !isUTF16EncodedRune(r) {
 		// Valid Unicode escape in Basic Multilingual Plane
 		return r, 6
-	} else if r2, ok := decodeSingleUnicodeEscape(in[6:]); !ok { // Note: previous decodeSingleUnicodeEscape success guarantees at least 6 bytes remain
+	}
+	r2, ok := decodeSingleUnicodeEscape(in[6:])
+	if !ok { // Note: previous decodeSingleUnicodeEscape success guarantees at least 6 bytes remain
 		// UTF16 "high surrogate" without manditory valid following Unicode escape for the "low surrogate"
 		return utf8.RuneError, -1
-	} else if r2 < lowSurrogateOffset {
+	}
+	if r2 < lowSurrogateOffset {
 		// Invalid UTF16 "low surrogate"
 		return utf8.RuneError, -1
-	} else {
-		// Valid UTF16 surrogate pair
-		return combineUTF16Surrogates(r, r2), 12
 	}
+	// Valid UTF16 surrogate pair
+	return combineUTF16Surrogates(r, r2), 12
 }
 
 // isUTF16EncodedRune checks if a rune is in the range for non-BMP characters,

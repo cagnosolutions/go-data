@@ -1,6 +1,7 @@
 package ohmap
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"strconv"
@@ -83,4 +84,77 @@ func PrintBits(b []byte) {
 	// var res string = "16" // set this to the "bit resolution" you'd like to see
 	var res = strconv.Itoa(8)
 	log.Printf("%."+res+"b (%s bits)", b, res)
+}
+
+func Benchmark_ShardedHashMap(b *testing.B) {
+
+	// number of entries
+	const count = 100000
+
+	fmt.Printf("Benchmarking %d entries...\n", count)
+
+	// initialize our data
+	data := [count]struct {
+		key string
+		val []byte
+	}{}
+
+	// fill out our data to insert
+	for j := 0; j < count; j++ {
+		data[j] = struct {
+			key string
+			val []byte
+		}{
+			key: fmt.Sprintf("key:%4d", j),
+			val: []byte(fmt.Sprintf("value-%.6d", j)),
+		}
+	}
+
+	// create a new hashmap
+	hm := NewShardedHashMap(64)
+
+	// load up hashmap with some our data
+	for _, entry := range data {
+		_, overwrote := hm.Set(entry.key, entry.val)
+		if overwrote {
+			b.Errorf("overwrote existing value, something went wrong...")
+		}
+	}
+
+	// benchmark hashing and locating speed
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, entry := range data {
+			val, found := hm.Get(entry.key)
+			if !found {
+				b.Errorf("could not find entry: %q\n", entry.key)
+			}
+			if !bytes.Equal(val, entry.val) {
+				b.Errorf("value does not match: got=%q, wanted=%q\n", val, entry.val)
+			}
+		}
+	}
+
+	// delete all the entries in the hashmap...
+	// for j := 0; j < count; j++ {
+	// 	key := fmt.Sprintf("key:%.4d", j)
+	// 	val := []byte(fmt.Sprintf("value-%.6d", j))
+	// 	_, overwrote := hm.Set(key, val)
+	// 	if overwrote {
+	// 		fmt.Errorf("overwrote existing value, something went wrong...")
+	// 	}
+	// }
+
+	// range the hashmap and print the data...
+	// hm.Range(func(key string, value []byte) bool {
+	// 	fmt.Printf("key=%q, value=%q\n", key, value)
+	// 	return true
+	// })
+
+	// close the hashmap
+
+	fmt.Printf("size: %s", hm.Size())
+
+	hm.Close()
 }

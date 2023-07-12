@@ -5,6 +5,7 @@ import (
 	"fmt"
 	mathbits "math/bits"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/cagnosolutions/go-data/pkg/bits"
@@ -61,6 +62,22 @@ func initialMapShardSize(x uint16) uint {
 
 func (s *ShardedHashMap) getShard(key string) (uint64, uint64) {
 	// calculate the hashkey value
+	hashkey := s.hash(key)
+	// mask the hashkey to get the initial index
+	i := hashkey & s.mask
+	return i, hashkey
+}
+
+func (s *ShardedHashMap) getShardCompound(key string) (uint64, uint64) {
+	// check for compound key first
+	if n := strings.IndexByte(key, ':'); n != -1 {
+		// get the initial hash key
+		hashkey := s.hash(key[:n])
+		// mask the hashk ey to get the initial index
+		i := hashkey & s.mask
+		return i, hashkey
+	}
+	// otherwise just perform normal operation and grab the hash key
 	hashkey := s.hash(key)
 	// mask the hashkey to get the initial index
 	i := hashkey & s.mask
@@ -192,6 +209,14 @@ func (s *ShardedHashMap) Stats() {
 		}
 		s.shards[i].mu.Unlock()
 	}
+}
+
+func (s *ShardedHashMap) Size() string {
+	format := "sharded map (%d shards) containing %d entries is using %d bytes (%.2f kb, %.2f mb) of ram\n"
+	sz := Sizeof(s)
+	kb := float64(sz / 1024)
+	mb := float64(sz / 1024 / 1024)
+	return fmt.Sprintf(format, len(s.shards), s.Len(), sz, kb, mb)
 }
 
 func (s *ShardedHashMap) Close() {

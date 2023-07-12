@@ -2,6 +2,7 @@ package ohmap
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"hash/maphash"
 	"math/rand"
@@ -265,4 +266,197 @@ func TestHashMapMillionEntriesSize(t *testing.T) {
 		t.Errorf("error: incorrect count of entries\n")
 	}
 	hm.Close()
+}
+
+func Benchmark_HashMapVsStdMap(b *testing.B) {
+
+	const count = 10000
+
+	data := [count]struct {
+		key string
+		val uint32
+	}{}
+
+	for i := range data {
+		data[i] = struct {
+			key string
+			val uint32
+		}{
+			key: fmt.Sprintf("key:%.4d", i),
+			val: uint32(i),
+		}
+	}
+
+	mapSize := func(m map[string][]byte) string {
+		format := "map containing %d entries is using %d bytes (%.2f kb, %.2f mb) of ram\n"
+		sz := Sizeof(m)
+		kb := float64(sz / 1024)
+		mb := float64(sz / 1024 / 1024)
+		return fmt.Sprintf(format, len(m), sz, kb, mb)
+	}
+
+	tests := []struct {
+		name string
+		fn   func(b *testing.B)
+	}{
+		{
+			"stdMapBench",
+			func(b *testing.B) {
+
+				// initialize
+				m := make(map[string][]byte, 64)
+				var buf [4]byte
+
+				// bench
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					for _, entry := range data {
+						binary.LittleEndian.PutUint32(buf[:], entry.val)
+						m[entry.key] = nil // buf[:]
+					}
+
+				}
+				fmt.Printf(mapSize(m))
+			},
+		},
+		{
+			"rhhMapBench",
+			func(b *testing.B) {
+
+				// initialize
+				m := NewHashMap(64)
+				var buf [4]byte
+
+				// bench
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					for _, entry := range data {
+						binary.LittleEndian.PutUint32(buf[:], entry.val)
+						m.Set(entry.key, nil) // buf[:])
+					}
+
+				}
+				fmt.Println(m.Size())
+			},
+		},
+	}
+
+	for _, test := range tests {
+		b.Run(test.name, test.fn)
+	}
+}
+
+func TestBasicFuncs(t *testing.T) {
+
+	N := 100
+
+	m := NewHashMap(32)
+
+	// setting data...
+	for i := 0; i < N; i++ {
+		key := fmt.Sprintf("key-%.4d", i)
+		_, updated := m.Set(key, nil)
+		if updated {
+			t.Fatalf("should not have been a previous value to updated...\n")
+		}
+	}
+
+	fmt.Println("Map Details...\n", m.Details())
+
+	var keys []string
+	var ki int
+
+	// ranging data...
+	m.Range(
+		func(key string, val []byte) bool {
+			if key == "key-0000" {
+				ki = len(keys)
+			}
+			keys = append(keys, key)
+			fmt.Printf("key=%q, val=%v\n", key, val)
+			return true
+		},
+	)
+
+	if len(keys) != m.Len() {
+		t.Fatalf("ranged %d keys, but map says it has %d keys...\n", len(keys), m.Len())
+	}
+
+	for i := 0; i < 25; i++ {
+		key := keys[ki]
+		hashkey := m.hash(key)
+		idx := hashkey & m.mask
+		buk := m.getBucket(idx)
+		hash := buk.getHash()
+		fmt.Printf("key=%q, hashkey=%v, hash=%v, index=%d, bucket=%s\n", key, hashkey, hash, idx, buk)
+	}
+
+	// getting data...
+	for i := 0; i < N; i++ {
+		key := fmt.Sprintf("key-%.4d", i)
+		val, found := m.Get(key)
+		if !found {
+			t.Fatalf("should have been able to find %q... (val=%v, found=%v)\n", key, val, found)
+		}
+		if val != nil {
+			t.Fatalf("incorrect value: got=%v, wanted=%v\n", val, i)
+		}
+	}
+
+	// ranging data...
+	m.Range(
+		func(key string, val []byte) bool {
+			fmt.Printf("key=%q, val=%v\n", key, val)
+			return true
+		},
+	)
+
+	// deleting 1/2 the data...
+	for i := 0; i < N; i++ {
+		// just delete the even entries
+		if i%2 == 0 {
+			_, removed := m.Del(fmt.Sprintf("key-%.4d", i))
+			if !removed {
+				t.Fatalf("should have been able to find and remove...\n")
+			}
+		}
+	}
+
+	fmt.Println("[Removed 1/2 of the Data]\n", m.Details())
+
+	// // ranging data again...
+	// m.Range(
+	// 	func(key string, val []byte) bool {
+	// 		fmt.Printf("key=%q, val=%v\n", key, val)
+	// 		return true
+	// 	},
+	// )
+
+	// deleting the remaining 1/2 of the data...
+	for i := 0; i < N; i++ {
+		// just delete the odd entries
+		if i%2 != 0 {
+			_, removed := m.Del(fmt.Sprintf("key-%.4d", i))
+			if !removed {
+				t.Fatalf("should have been able to find and remove...\n")
+			}
+		}
+	}
+
+	m.Set("one", []byte{1})
+	m.Set("two", []byte{2})
+	m.Set("three", []byte{3})
+
+	// ranging data again (there should only be three entries)...
+	// m.Range(
+	// 	func(key string, val []byte) bool {
+	// 		fmt.Printf("key=%q, val=%v\n", key, val)
+	// 		return true
+	// 	},
+	// )
+
+	fmt.Println("[Removed Remaining Data]\n", m.Details())
+
 }
