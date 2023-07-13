@@ -19,13 +19,13 @@ func init() {
 
 func TestHashDIB(t *testing.T) {
 	var b bucket[string, interface{}]
-	b.setDIB(100)
-	b.setHash(90000)
-	if b.getDIB() != 100 {
-		t.Fatalf("expected %v, got %v", 100, b.getDIB())
+	b.dib = 100
+	b.hashkey = 90000
+	if b.dib != 100 {
+		t.Fatalf("expected %v, got %v", 100, b.dib)
 	}
-	if b.getHash() != 90000 {
-		t.Fatalf("expected %v, got %v", 90000, b.getHash())
+	if b.hashkey != 90000 {
+		t.Fatalf("expected %v, got %v", 90000, b.hashkey)
 	}
 }
 
@@ -276,7 +276,7 @@ func TestBench(t *testing.T) {
 	// 	fmt.Printf("Enable benchmarks with MAPBENCH=1000000\n")
 	// 	return
 	// }
-	const N = 10000
+	const N = 1000000
 
 	var pnums []int
 	for i := 0; i < int(N); i++ {

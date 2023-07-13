@@ -16,7 +16,7 @@ type shard[K comparable, V any] struct {
 }
 
 type ShardedMap[K comparable, V any] struct {
-	mask   uint64
+	mask   uint32
 	hash   hashFunc[K]
 	shards []*shard[K, V]
 }
@@ -33,7 +33,7 @@ func newShardedMap[K comparable, V any](size uint, fn hashFunc[K]) *ShardedMap[K
 		fn = defaultHashFunc[K]
 	}
 	shm := &ShardedMap[K, V]{
-		mask:   shCount - 1,
+		mask:   uint32(shCount - 1),
 		hash:   fn,
 		shards: make([]*shard[K, V], shCount),
 	}
@@ -59,7 +59,7 @@ func initialMapShardSize(x uint16) uint {
 	return uint(mathbits.Reverse16(x)) / 2
 }
 
-func (s *ShardedMap[K, V]) getHash(key K) (uint64, uint64) {
+func (s *ShardedMap[K, V]) getHash(key K) (uint32, uint32) {
 	// calculate the hashkey value
 	hashkey := s.hash(key)
 	// mask the hashkey to get the initial index
@@ -71,12 +71,12 @@ func hashStr(k string) uint64 {
 	return murmur3.Sum64([]byte(k))
 }
 
-func (s *ShardedMap[K, V]) getShard(key K) (buk uint64, hashkey uint64) {
+func (s *ShardedMap[K, V]) getShard(key K) (buk uint32, hashkey uint32) {
 	skey := stringOf[K](key)
 	// check for compound key first
 	if n := strings.IndexByte(skey, ':'); n != -1 {
 		// get the initial hash key
-		hashkey = hashStr(skey[:n])
+		hashkey = uint32(hashStr(skey[:n]))
 		// mask the hashk ey to get the initial index
 		buk = hashkey & s.mask
 		return buk, hashkey
@@ -209,7 +209,7 @@ func (s *ShardedMap[K, V]) Details() string {
 		ss += fmt.Sprintf("shard[%d]\n", i)
 		ss += "\tdetails:\n"
 		for i := 0; i < len(sh.hm.buckets); i++ {
-			if sh.hm.buckets[i].getDIB() > 0 {
+			if sh.hm.buckets[i].dib > 0 {
 				ss += fmt.Sprintf("\t\tbucket[%d]=%s", i, sh.hm.buckets[i].String())
 			}
 		}

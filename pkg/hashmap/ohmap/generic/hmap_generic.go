@@ -9,10 +9,6 @@ import (
 )
 
 const (
-	dibBitSize        = 16 // 0xffff
-	dibBitMask        = ^uint64(0) >> hashBitSize
-	hashBitSize       = 64 - dibBitSize // 0xffffffffffff
-	hashBitMask       = ^uint64(0) >> dibBitSize
 	defaultLoadFactor = 0.85 // must be between 55% and 95%
 	defaultCapacity   = 32
 )
@@ -23,68 +19,29 @@ type entry[K comparable, V any] struct {
 	val V
 }
 
-func newBucket[K comparable, V any](hash uint64, key K, value V) bucket[K, V] {
-	return bucket[K, V]{
-		bitfield: makeBitField(hash, 1),
-		entry: entry[K, V]{
-			key: key,
-			val: value,
-		},
-	}
-}
-
 // bucket represents a single slot in the Map table
 type bucket[K comparable, V any] struct {
-	bitfield uint64 // bitfield storing dib in 16 bits, and the hash key in 48 bits
+	dib     uint8
+	hashkey uint32
 	entry[K, V]
 }
 
-func (b *bucket[K, V]) getDIB() int {
-	return int(b.bitfield & dibBitMask)
-	// return int(b.dib)
-}
-
-func (b *bucket[K, V]) getHash() uint64 {
-	return b.bitfield >> dibBitSize
-	// return b.hash
-}
-
-func (b *bucket[K, V]) setDIB(dib int) {
-	b.bitfield = b.bitfield>>dibBitSize<<dibBitSize | uint64(dib)&dibBitMask
-	// b.dib = uint16(dib)
-}
-
-func (b *bucket[K, V]) setHash(hash int) {
-	b.bitfield = uint64(hash)<<dibBitSize | b.bitfield&dibBitMask
-	// b.hash = uint64(hash)
-}
-
-// checkHashAndKey checks if this bucket matches the specified hk and key
-func (b *bucket[K, V]) checkHashAndKey(hashkey uint64, key K) bool {
-	// return uint64(b.getHash()) == hashkey && b.entry.key == key
-	return b.getHash() == hashkey && b.key == key
-}
-
-func (b *bucket[K, V]) clear() {
-	b.bitfield = 0
-	b.entry = entry[K, V]{}
+// matches checks if this bucket matches the specified hk and key
+func (b *bucket[K, V]) matches(hashkey uint32, key K) bool {
+	return b.hashkey == hashkey && b.key == key
 }
 
 func (b *bucket[K, V]) String() string {
 	return fmt.Sprintf(
-		"{bitfield:%d, dib:%d, hash:%d, key:%v, val:%v}\n",
-		b.bitfield, b.getDIB(), b.getHash(), b.key, b.val,
+		"{dib:%d, hash:%d, key:%v, val:%v}\n",
+		b.dib, b.hashkey, b.key, b.val,
 	)
-}
-
-func makeBitField(hash, dib uint64) uint64 {
-	return hash<<dibBitSize | dib&dibBitMask
 }
 
 // Map represents a closed hashing hashtable implementation
 type Map[K comparable, V any] struct {
 	hash    hashFunc[K]
-	mask    uint64
+	mask    uint32
 	expand  uint
 	shrink  uint
 	keys    uint
@@ -94,12 +51,12 @@ type Map[K comparable, V any] struct {
 
 // defaultHashFunc is the default hashFunc used. This is here mainly as
 // a convenience for the sharded hashmap to utilize
-func defaultHashFunc[K comparable](key K) uint64 {
-	return murmur3.Sum64([]byte(stringOf[K](key)))
+func defaultHashFunc[K comparable](key K) uint32 {
+	return uint32(murmur3.Sum64([]byte(stringOf[K](key))))
 }
 
 // hashFunc is a type definition for what a hash function should look like
-type hashFunc[K comparable] func(key K) uint64
+type hashFunc[K comparable] func(key K) uint32
 
 func stringOf[K comparable](k K) string {
 	var r string
@@ -118,9 +75,6 @@ func stringOf[K comparable](k K) string {
 				},
 			),
 		)
-
-		// new way??
-		// r = unsafe.String((*byte)(unsafe.Pointer(&k)), int(unsafe.Sizeof(k)))
 	}
 	return r
 }
@@ -132,35 +86,35 @@ func NewMap[K comparable, V any](cap uint) *Map[K, V] {
 }
 
 // alignBucketCount aligns buckets to ensure all sizes are powers of two
-func alignBucketCount(size uint) uint64 {
+func alignBucketCount(size uint) uint32 {
 	count := uint(defaultCapacity)
 	for count < size {
 		count *= 2
 	}
-	return uint64(count)
+	return uint32(count)
 }
 
 // newHashMap is the internal variant of the previous function
 // and is mainly used internally
 func newHashMap[K comparable, V any](cap uint, hash hashFunc[K]) *Map[K, V] {
-	bukCnt := alignBucketCount(cap)
+	numBuckets := alignBucketCount(cap)
 	if hash == nil {
 		hash = defaultHashFunc[K]
 	}
 	m := &Map[K, V]{
 		hash:    hash,
-		mask:    bukCnt - 1, // this minus one is extremely important for using a mask over modulo
-		expand:  uint(float64(bukCnt) * defaultLoadFactor),
-		shrink:  uint(float64(bukCnt) * (1 - defaultLoadFactor)),
+		mask:    numBuckets - 1, // this minus one is extremely important for using a mask over modulo
+		expand:  uint(float64(numBuckets) * defaultLoadFactor),
+		shrink:  uint(float64(numBuckets) * (1 - defaultLoadFactor)),
 		keys:    0,
 		cap:     cap,
-		buckets: make([]bucket[K, V], bukCnt),
+		buckets: make([]bucket[K, V], numBuckets),
 	}
 	return m
 }
 
-func (m *Map[K, V]) getHashKey(key K) uint64 {
-	return m.hash(key) >> dibBitSize
+func (m *Map[K, V]) getHashKey(key K) uint32 {
+	return m.hash(key)
 }
 
 // resize grows or shrinks the Map by the newSize provided. It makes a
@@ -170,8 +124,8 @@ func (m *Map[K, V]) resize(newSize uint) {
 	var buk bucket[K, V]
 	for i := 0; i < len(m.buckets); i++ {
 		buk = m.buckets[i]
-		if buk.getDIB() > 0 {
-			newHM.insertInternal(buk.getHash(), buk.entry.key, buk.entry.val)
+		if buk.dib > 0 {
+			newHM.insertInternal(buk.hashkey, buk.entry.key, buk.entry.val)
 		}
 	}
 	tsize := m.cap
@@ -186,7 +140,7 @@ func (m *Map[K, V]) Get(key K) (V, bool) {
 }
 
 // lookup returns a value for a given key, or returns false if none could be found
-func (m *Map[K, V]) lookup(hashkey uint64, key K) (value V, ok bool) {
+func (m *Map[K, V]) lookup(hashkey uint32, key K) (value V, ok bool) {
 	// check if map is empty
 	if len(m.buckets) == 0 {
 		// hopefully this should never really happen
@@ -203,11 +157,11 @@ func (m *Map[K, V]) lookup(hashkey uint64, key K) (value V, ok bool) {
 	// search the position linearly
 	for {
 		// haven't located anything
-		if m.buckets[i].getDIB() == 0 {
+		if m.buckets[i].dib == 0 {
 			return value, false
 		}
 		// check for matching hashes and keys
-		if m.buckets[i].checkHashAndKey(hashkey, key) {
+		if m.buckets[i].matches(hashkey, key) {
 			return m.buckets[i].entry.val, true
 		}
 		// keep on probing
@@ -227,7 +181,7 @@ func (m *Map[K, V]) Set(key K, value V) (V, bool) {
 }
 
 // insert inserts a key value entry and returns the previous value, or false
-func (m *Map[K, V]) insert(hashkey uint64, key K, value V) (V, bool) {
+func (m *Map[K, V]) insert(hashkey uint32, key K, value V) (V, bool) {
 	// check if map is empty
 	if len(m.buckets) == 0 {
 		// create a new map with default cap
@@ -247,28 +201,29 @@ func (m *Map[K, V]) insert(hashkey uint64, key K, value V) (V, bool) {
 }
 
 // insertInternal inserts a key value entry and returns the previous value, or false
-func (m *Map[K, V]) insertInternal(hashkey uint64, key K, value V) (prev V, updated bool) {
+func (m *Map[K, V]) insertInternal(hashkey uint32, key K, value V) (prev V, updated bool) {
 	// create a new entry to insert
 	newb := bucket[K, V]{
-		bitfield: makeBitField(hashkey, 1),
+		dib:     1,
+		hashkey: hashkey,
 		entry: entry[K, V]{
 			key: key,
 			val: value,
 		},
 	}
 	// mask the hash to get the initial index
-	i := newb.getHash() & m.mask
+	i := newb.hashkey & m.mask
 	// search the position linearly
 	for {
 		// we found a spot, insert a new entry
-		if m.buckets[i].getDIB() == 0 {
+		if m.buckets[i].dib == 0 {
 			m.buckets[i] = newb
 			m.keys++
 			// no previous value to return, as this is a new entry
 			return prev, false
 		}
 		// found existing entry, check hashes and keys
-		if m.buckets[i].checkHashAndKey(newb.getHash(), newb.entry.key) {
+		if m.buckets[i].matches(newb.hashkey, newb.entry.key) {
 			// hashes and keys are a match--update entry and return previous values
 			prev = m.buckets[i].entry.val
 			m.buckets[i].val = newb.entry.val
@@ -276,7 +231,7 @@ func (m *Map[K, V]) insertInternal(hashkey uint64, key K, value V) (prev V, upda
 		}
 		// we did not find an empty slot or an existing matching entry
 		// so check this entries bf against our new entry's bf
-		if m.buckets[i].getDIB() < newb.getDIB() {
+		if m.buckets[i].dib < newb.dib {
 			// current position's bf is less than our new entry's, swap
 			newb, m.buckets[i] = m.buckets[i], newb
 		}
@@ -284,7 +239,7 @@ func (m *Map[K, V]) insertInternal(hashkey uint64, key K, value V) (prev V, upda
 		// increase our search index by one as well as our new
 		// entry's bf, then continue with the linear probe.
 		i = (i + 1) & m.mask
-		newb.setDIB(newb.getDIB() + 1)
+		newb.dib = newb.dib + 1
 	}
 }
 
@@ -295,7 +250,7 @@ func (m *Map[K, V]) Del(key K) (V, bool) {
 }
 
 // delete removes a value for a given key and returns the deleted value, or false
-func (m *Map[K, V]) delete(hashkey uint64, key K) (prev V, removed bool) {
+func (m *Map[K, V]) delete(hashkey uint32, key K) (prev V, removed bool) {
 	// check if map is empty
 	if len(m.buckets) == 0 {
 		// nothing to see here folks
@@ -310,11 +265,11 @@ func (m *Map[K, V]) delete(hashkey uint64, key K) (prev V, removed bool) {
 	// search the position linearly
 	for {
 		// haven't located anything
-		if m.buckets[i].getDIB() == 0 {
+		if m.buckets[i].dib == 0 {
 			return prev, false
 		}
 		// found existing entry, check hashes and keys
-		if m.buckets[i].checkHashAndKey(hashkey, key) {
+		if m.buckets[i].matches(hashkey, key) {
 			// hashes and keys are a match--delete entry and return previous values
 			prev = m.buckets[i].entry.val
 			m.deleteInternal(i)
@@ -328,21 +283,23 @@ func (m *Map[K, V]) delete(hashkey uint64, key K) (prev V, removed bool) {
 }
 
 // delete removes a value for a given key and returns the deleted value, or false
-func (m *Map[K, V]) deleteInternal(i uint64) {
+func (m *Map[K, V]) deleteInternal(i uint32) {
 	// set bf at bucket i
-	m.buckets[i].setDIB(0)
+	m.buckets[i].dib = 0
 	// tombstone index and shift
 	for {
 		pi := i
 		i = (i + 1) & m.mask
-		if m.buckets[i].getDIB() <= 1 {
-			// im as free as a bird now!
-			m.buckets[pi].clear()
+		if m.buckets[i].dib <= 1 {
+			// im as free as a bird now! (clear bucket)
+			m.buckets[pi].dib = 0
+			m.buckets[pi].hashkey = 0
+			m.buckets[pi].entry = entry[K, V]{}
 			break
 		}
 		// shift
 		m.buckets[pi] = m.buckets[i]
-		m.buckets[pi].setDIB(m.buckets[pi].getDIB() - 1)
+		m.buckets[pi].dib = m.buckets[pi].dib - 1
 	}
 	// decrement entry count
 	m.keys--
@@ -358,7 +315,7 @@ func (m *Map[K, V]) deleteInternal(i uint64) {
 // safe to perform an insert or remove operation while ranging!
 func (m *Map[K, V]) Range(f func(key K, val V) bool) {
 	for i := 0; i < len(m.buckets); i++ {
-		if m.buckets[i].getDIB() < 1 {
+		if m.buckets[i].dib < 1 {
 			continue
 		}
 		if !f(m.buckets[i].key, m.buckets[i].val) {
@@ -369,7 +326,7 @@ func (m *Map[K, V]) Range(f func(key K, val V) bool) {
 
 func (m *Map[K, V]) Filter(f func(key K) bool) (values []V) {
 	for i := 0; i < len(m.buckets); i++ {
-		if m.buckets[i].getDIB() < 1 {
+		if m.buckets[i].dib < 1 {
 			continue
 		}
 		if f(m.buckets[i].key) {
@@ -382,7 +339,7 @@ func (m *Map[K, V]) Filter(f func(key K) bool) (values []V) {
 func (m *Map[K, V]) Keys() []K {
 	keys := make([]K, 0, m.keys)
 	for i := 0; i < len(m.buckets); i++ {
-		if m.buckets[i].getDIB() > 0 {
+		if m.buckets[i].dib > 0 {
 			keys = append(keys, m.buckets[i].entry.key)
 		}
 	}
@@ -392,7 +349,7 @@ func (m *Map[K, V]) Keys() []K {
 func (m *Map[K, V]) Vals() []V {
 	vals := make([]V, 0, m.keys)
 	for i := 0; i < len(m.buckets); i++ {
-		if m.buckets[i].getDIB() > 0 {
+		if m.buckets[i].dib > 0 {
 			vals = append(vals, m.buckets[i].entry.val)
 		}
 	}
@@ -433,7 +390,7 @@ func (m *Map[K, V]) Details() string {
 	ss += fmt.Sprintf("it is currently %.2f percent full\n", m.PercentFull())
 	ss += "Bucket details...\n"
 	for i := 0; i < len(m.buckets); i++ {
-		if m.buckets[i].getDIB() > 0 {
+		if m.buckets[i].dib > 0 {
 			ss += fmt.Sprintf("\tbucket[%d]=%s", i, m.buckets[i].String())
 		}
 	}
