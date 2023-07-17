@@ -2,9 +2,9 @@ package generic
 
 import (
 	"fmt"
-	"unsafe"
+	"hash"
 
-	"github.com/cagnosolutions/go-data/pkg/hash/murmur3"
+	"github.com/cagnosolutions/go-data/pkg/hash/maphash"
 	"github.com/cagnosolutions/go-data/pkg/hashmap/ohmap"
 )
 
@@ -40,7 +40,7 @@ func (b *bucket[K, V]) String() string {
 
 // Map represents a closed hashing hashtable implementation
 type Map[K comparable, V any] struct {
-	hash    hashFunc[K]
+	hash    *Hasher64[K]
 	mask    uint32
 	expand  uint
 	shrink  uint
@@ -49,40 +49,30 @@ type Map[K comparable, V any] struct {
 	buckets []bucket[K, V]
 }
 
-// defaultHashFunc is the default hashFunc used. This is here mainly as
+// defaultHashFunc is the default HashFunc used. This is here mainly as
 // a convenience for the sharded hashmap to utilize
-func defaultHashFunc[K comparable](key K) uint32 {
-	return uint32(murmur3.Sum64([]byte(stringOf[K](key))))
-}
+// func defaultHashFunc[K comparable](key K) uint64 {
+// 	//return uint(murmur3.HashKey([]byte(stringOf[K](key))))
+// 	return murmur3.Sum64([]byte(stringOf[K](key)))
+// }
 
-// hashFunc is a type definition for what a hash function should look like
-type hashFunc[K comparable] func(key K) uint32
+var defaultHash = maphash.New64()
 
-func stringOf[K comparable](k K) string {
-	var r string
-	switch ((any)(k)).(type) {
-	case string:
-		r = *(*string)(unsafe.Pointer(&k))
-	default:
-		r = *(*string)(
-			unsafe.Pointer(
-				&struct {
-					data unsafe.Pointer
-					size int
-				}{
-					data: unsafe.Pointer(&k),
-					size: int(unsafe.Sizeof(k)),
-				},
-			),
-		)
-	}
-	return r
-}
+// // HashFunc is a type definition for what a hash function should look like
+// // type HashFunc[K comparable] func(k K) uint64
+// type HashFunc[K comparable] interface {
+// 	HashKey(k K) uint64
+// }
 
 // NewHashMap returns a new Map instantiated with the specified cap or
 // the DefaultMapSize, whichever is larger
 func NewMap[K comparable, V any](cap uint) *Map[K, V] {
-	return newHashMap[K, V](cap, defaultHashFunc[K])
+	// use out default hash func
+	return newHashMap[K, V](cap, defaultHash)
+}
+
+func NewMapWithHashFunc[K comparable, V any](cap uint, h hash.Hash64) *Map[K, V] {
+	return newHashMap[K, V](cap, h)
 }
 
 // alignBucketCount aligns buckets to ensure all sizes are powers of two
@@ -96,13 +86,13 @@ func alignBucketCount(size uint) uint32 {
 
 // newHashMap is the internal variant of the previous function
 // and is mainly used internally
-func newHashMap[K comparable, V any](cap uint, hash hashFunc[K]) *Map[K, V] {
+func newHashMap[K comparable, V any](cap uint, h hash.Hash64) *Map[K, V] {
 	numBuckets := alignBucketCount(cap)
-	if hash == nil {
-		hash = defaultHashFunc[K]
+	if h == nil {
+		h = defaultHash
 	}
 	m := &Map[K, V]{
-		hash:    hash,
+		hash:    NewHasher64[K](h),
 		mask:    numBuckets - 1, // this minus one is extremely important for using a mask over modulo
 		expand:  uint(float64(numBuckets) * defaultLoadFactor),
 		shrink:  uint(float64(numBuckets) * (1 - defaultLoadFactor)),
@@ -114,7 +104,7 @@ func newHashMap[K comparable, V any](cap uint, hash hashFunc[K]) *Map[K, V] {
 }
 
 func (m *Map[K, V]) getHashKey(key K) uint32 {
-	return m.hash(key)
+	return uint32(m.hash.HashKey(key) >> 32)
 }
 
 // resize grows or shrinks the Map by the newSize provided. It makes a

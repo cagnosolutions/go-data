@@ -2,11 +2,12 @@ package generic
 
 import (
 	"fmt"
+	"hash"
 	mathbits "math/bits"
 	"strings"
 	"sync"
+	"unsafe"
 
-	"github.com/cagnosolutions/go-data/pkg/hash/murmur3"
 	"github.com/cagnosolutions/go-data/pkg/hashmap/ohmap"
 )
 
@@ -17,34 +18,46 @@ type shard[K comparable, V any] struct {
 
 type ShardedMap[K comparable, V any] struct {
 	mask   uint32
-	hash   hashFunc[K]
+	hash   *Hasher64[K]
 	shards []*shard[K, V]
 }
 
 // NewShardedHashMap returns a new hashMap instantiated with the specified size or
 // the defaultMapSize, whichever is larger
 func NewShardedMap[K comparable, V any](size uint) *ShardedMap[K, V] {
-	return newShardedMap[K, V](size, defaultHashFunc[K])
+	return newShardedMap[K, V](size, defaultHash)
 }
 
-func newShardedMap[K comparable, V any](size uint, fn hashFunc[K]) *ShardedMap[K, V] {
+func newShardedMap[K comparable, V any](size uint, h hash.Hash64) *ShardedMap[K, V] {
 	shCount := alignShardCount(size)
-	if fn == nil {
-		fn = defaultHashFunc[K]
+	if h == nil {
+		h = defaultHash
 	}
 	shm := &ShardedMap[K, V]{
 		mask:   uint32(shCount - 1),
-		hash:   fn,
+		hash:   NewHasher64[K](h),
 		shards: make([]*shard[K, V], shCount),
 	}
 	hmSize := initialMapShardSize(uint16(shCount))
-	// log.Printf("new sharded hashmap with %d shards, each shard init with %d buckets\n", shCount, hmSize)
 	for i := range shm.shards {
 		shm.shards[i] = &shard[K, V]{
-			hm: newHashMap[K, V](hmSize, fn),
+			hm: initHM[K, V](hmSize, shm.hash),
 		}
 	}
 	return shm
+}
+
+func initHM[K comparable, V any](cap uint, hasher *Hasher64[K]) *Map[K, V] {
+	m := &Map[K, V]{
+		hash:    hasher,
+		mask:    uint32(cap - 1), // this minus one is extremely important for using a mask over modulo
+		expand:  uint(float64(cap) * defaultLoadFactor),
+		shrink:  uint(float64(cap) * (1 - defaultLoadFactor)),
+		keys:    0,
+		cap:     cap,
+		buckets: make([]bucket[K, V], cap),
+	}
+	return m
 }
 
 func alignShardCount(size uint) uint64 {
@@ -61,14 +74,31 @@ func initialMapShardSize(x uint16) uint {
 
 func (s *ShardedMap[K, V]) getHash(key K) (uint32, uint32) {
 	// calculate the hashkey value
-	hashkey := s.hash(key)
+	hashkey := uint32(s.hash.HashKey(key) >> 32)
 	// mask the hashkey to get the initial index
 	i := hashkey & s.mask
 	return i, hashkey
 }
 
-func hashStr(k string) uint64 {
-	return murmur3.Sum64([]byte(k))
+func stringOf[K comparable](k K) string {
+	var r string
+	switch ((any)(k)).(type) {
+	case string:
+		r = *(*string)(unsafe.Pointer(&k))
+	default:
+		r = *(*string)(
+			unsafe.Pointer(
+				&struct {
+					data unsafe.Pointer
+					size int
+				}{
+					data: unsafe.Pointer(&k),
+					size: int(unsafe.Sizeof(k)),
+				},
+			),
+		)
+	}
+	return r
 }
 
 func (s *ShardedMap[K, V]) getShard(key K) (buk uint32, hashkey uint32) {
@@ -76,13 +106,19 @@ func (s *ShardedMap[K, V]) getShard(key K) (buk uint32, hashkey uint32) {
 	// check for compound key first
 	if n := strings.IndexByte(skey, ':'); n != -1 {
 		// get the initial hash key
-		hashkey = uint32(hashStr(skey[:n]))
-		// mask the hashk ey to get the initial index
+		_, err := s.hash.Hash64.Write([]byte(skey[:n]))
+		if err != nil {
+			panic(err)
+		}
+		hashkey = uint32(s.hash.Hash64.Sum64() >> 32)
+		// mask the hashkey to get the initial index
 		buk = hashkey & s.mask
+		// reset the hash64 buffer
+		s.hash.Hash64.Reset()
 		return buk, hashkey
 	}
 	// otherwise just perform normal operation and grab the hash key
-	hashkey = s.hash(key)
+	hashkey = uint32(s.hash.HashKey(key) >> 32)
 	// mask the hashkey to get the initial index
 	buk = hashkey & s.mask
 	return buk, hashkey
@@ -155,7 +191,7 @@ func (s *ShardedMap[K, V]) Set(key K, val V) (prev V, updated bool) {
 	return prev, updated
 }
 
-func (s *ShardedMap[K, V]) Del(key K, val V) (prev V, removed bool) {
+func (s *ShardedMap[K, V]) Del(key K) (prev V, removed bool) {
 	// first, we need to compute the shard
 	buk, hashkey := s.getShard(key)
 	// now, we lock our shard

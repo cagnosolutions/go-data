@@ -35,11 +35,15 @@ func NewHasher32[K comparable](h32 hash.Hash32) *Hasher32[K] {
 	return h
 }
 
-func (h *Hasher32[K]) Hash(k K) uint32 {
+func (h *Hasher32[K]) HashKey(k K) uint32 {
 	if h.ktyp == keyString {
 		return hash32(h, (unsafe.Pointer(&k)))
 	}
 	return hash32(h, (unsafe.Pointer(&hdr{unsafe.Pointer(&k), uintptr(h.ksiz)})))
+}
+
+func (h *Hasher32[K]) Sum32() uint32 {
+	return h.Hash32.Sum32()
 }
 
 func hash32(h hash.Hash32, p unsafe.Pointer) (sum uint32) {
@@ -72,11 +76,34 @@ func NewHasher64[K comparable](h64 hash.Hash64) *Hasher64[K] {
 	return h
 }
 
-func (h *Hasher64[K]) Hash(k K) uint64 {
+func (h *Hasher64[K]) HashKey(k K) uint64 {
 	if h.ktyp == keyString {
 		return hash64(h, (unsafe.Pointer(&k)))
 	}
 	return hash64(h, (unsafe.Pointer(&hdr{unsafe.Pointer(&k), uintptr(h.ksiz)})))
+}
+
+func (h *Hasher64[K]) HashKey2(k K) (sum uint64) {
+	if h.ktyp == keyString {
+		_, err := h.Write([]byte(*(*string)(unsafe.Pointer(&k))))
+		if err != nil {
+			panic(err)
+		}
+		sum = h.Sum64()
+		h.Reset()
+		return sum
+	}
+	_, err := h.Write([]byte(*(*string)(unsafe.Pointer(&hdr{unsafe.Pointer(&k), uintptr(h.ksiz)}))))
+	if err != nil {
+		panic(err)
+	}
+	sum = h.Sum64()
+	h.Reset()
+	return sum
+}
+
+func (h *Hasher64[K]) Sum64() uint64 {
+	return h.Hash64.Sum64()
 }
 
 func hash64(h hash.Hash64, p unsafe.Pointer) (sum uint64) {

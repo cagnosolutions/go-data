@@ -2,6 +2,7 @@ package generic
 
 import (
 	"fmt"
+	"hash/fnv"
 	"log"
 	"math/rand"
 	"runtime"
@@ -465,5 +466,77 @@ func testPerf[K comparable, V any](nums []K, pnums []V, which string) {
 			}
 		}
 		fmt.Printf("\n")
+	}
+}
+
+func BenchmarkHashFuncs(b *testing.B) {
+	tests := []struct {
+		name string
+		fn   func(b *testing.B)
+	}{
+		{
+			"default",
+			func(b *testing.B) {
+
+				m := NewMap[string, int](64)
+
+				b.ResetTimer()
+				b.ReportAllocs()
+
+				for i := 0; i < b.N; i++ {
+					for j := 0; j < 50; j++ {
+						m.Set(strconv.Itoa(j), j)
+					}
+					for j := 0; j < 50; j++ {
+						_, found := m.Get(strconv.Itoa(j))
+						if !found {
+							b.Errorf("key %q not found", strconv.Itoa(j))
+						}
+					}
+					for j := 0; j < 50; j++ {
+						k := strconv.Itoa(j)
+						m.Del(k)
+						_, found := m.Get(k)
+						if found {
+							b.Errorf("key %q found, but should be gone", k)
+						}
+					}
+				}
+			},
+		},
+		{
+			"custom",
+			func(b *testing.B) {
+
+				m := NewMapWithHashFunc[string, int](64, NewHasher64[string](fnv.New64a()))
+
+				b.ResetTimer()
+				b.ReportAllocs()
+
+				for i := 0; i < b.N; i++ {
+					for j := 0; j < 50; j++ {
+						m.Set(strconv.Itoa(j), j)
+					}
+					for j := 0; j < 50; j++ {
+						_, found := m.Get(strconv.Itoa(j))
+						if !found {
+							b.Errorf("key %q not found", strconv.Itoa(j))
+						}
+					}
+					for j := 0; j < 50; j++ {
+						k := strconv.Itoa(j)
+						m.Del(k)
+						_, found := m.Get(k)
+						if found {
+							b.Errorf("key %q found, but should be gone", k)
+						}
+					}
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, tt.fn)
 	}
 }
