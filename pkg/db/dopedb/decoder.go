@@ -230,7 +230,7 @@ func (d *Decoder) read2() (Type, uint8) {
 	t := d.buf[d.at]
 	d.at += 1
 	v := d.buf[d.at]
-	d.at += 2
+	d.at += 1
 	return t, v
 }
 
