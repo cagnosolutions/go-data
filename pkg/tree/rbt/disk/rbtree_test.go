@@ -1,4 +1,4 @@
-package generic
+package disk
 
 import (
 	"fmt"
@@ -6,12 +6,13 @@ import (
 )
 
 func TestRbTree_Scan(t *testing.T) {
-	tree := NewTree[string, int]()
+	tree := newRBTree()
 	for i := 0; i < 32; i++ {
 		tree.Add(fmt.Sprintf("entry-%.3d", i), i)
 	}
+	fmt.Println(tree.Len())
 	tree.Scan(
-		func(key string, val int) bool {
+		func(key string, val any) bool {
 			fmt.Println(key, val)
 			return true
 		},
@@ -20,32 +21,31 @@ func TestRbTree_Scan(t *testing.T) {
 }
 
 func TestRbTree_Iter(t *testing.T) {
-	tree := NewTree[string, int]()
-	for i := 1; i < 32; i++ {
+	tree := newRBTree()
+	for i := 0; i < 32; i++ {
 		tree.Add(fmt.Sprintf("entry-%.3d", i), i)
 	}
-	var empty int
 	it := tree.Iter()
-	for v := it.First(); v != empty; v = it.Next() {
-		fmt.Println(v)
+	for e := it.First(); e != nil; e = it.Next() {
+		fmt.Println(e)
 	}
 	tree = nil
 }
 
 func BenchmarkRbTree_Scan(b *testing.B) {
-	tree := NewTree[string, int]()
-	for i := 1; i < 250; i++ {
+	tree := newRBTree()
+	for i := 0; i < 250; i++ {
 		tree.Add(fmt.Sprintf("entry-%.3d", i), i)
 	}
 	b.ReportAllocs()
-	var empty int
 	for i := 0; i < b.N; i++ {
 		tree.Scan(
-			func(key string, val int) bool {
-				if val == empty {
+			func(key string, val any) bool {
+				if key == "" {
 					b.Error("got a nil entry")
 				}
-				return val != empty
+				fmt.Printf("key=%q, val=%v\n", key, val)
+				return key != ""
 			},
 		)
 	}
@@ -53,16 +53,15 @@ func BenchmarkRbTree_Scan(b *testing.B) {
 }
 
 func BenchmarkRbTree_Iter(b *testing.B) {
-	tree := NewTree[string, int]()
-	for i := 1; i < 250; i++ {
+	tree := newRBTree()
+	for i := 0; i < 250; i++ {
 		tree.Add(fmt.Sprintf("entry-%.3d", i), i)
 	}
 	it := tree.Iter()
 	b.ReportAllocs()
-	var empty int
 	for i := 0; i < b.N; i++ {
-		for v := it.First(); v != empty; v = it.Next() {
-			if v == empty {
+		for e := it.First(); e != nil; e = it.Next() {
+			if e == nil {
 				b.Error("go a nil entry")
 			}
 		}
