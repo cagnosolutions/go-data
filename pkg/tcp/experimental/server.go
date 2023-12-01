@@ -1,4 +1,4 @@
-package tcp
+package experimental
 
 import (
 	"context"
@@ -111,6 +111,8 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) Serve(ln *net.TCPListener) error {
+	log.Printf("Listening on %q\n", ln.Addr().String())
+
 	// Check the io handler
 	handler := s.Handler
 	if handler == nil {
