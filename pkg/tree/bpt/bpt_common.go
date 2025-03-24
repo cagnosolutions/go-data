@@ -23,7 +23,7 @@ func (r *record) Size() int64 {
 	return int64(unsafe.Sizeof(r.Key.data) + unsafe.Sizeof(r.Value.data))
 }
 
-const M = 5 // 128
+const M = 256 // 128
 
 // order is the tree's order
 const order = M // 128
