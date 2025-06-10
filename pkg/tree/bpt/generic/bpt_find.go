@@ -11,7 +11,7 @@ func (t *BPTree[K, V]) find(k K) (*node[K, V], *record[K, V]) {
 	// the range of keys that would include the desired Key
 	var i int
 	for i = 0; i < leaf.numKeys; i++ {
-		if leaf.keys[i].Compare(k) == 0 {
+		if leaf.compare(leaf.keys[i], k) == 0 {
 			break
 		}
 	}
@@ -31,7 +31,7 @@ func findLeaf[K Key, V any](root *node[K, V], k K) *node[K, V] {
 	for !c.isLeaf {
 		i = 0
 		for i < c.numKeys {
-			if k.Compare(c.keys[i]) >= 0 {
+			if c.compare(k, c.keys[i]) >= 0 {
 				i++
 			} else {
 				break
@@ -57,7 +57,7 @@ func (t *BPTree[K, V]) findEntry(k K) *record[K, V] {
 	// the range of keys that would include the desired Key
 	var i int
 	for i = 0; i < leaf.numKeys; i++ {
-		if leaf.keys[i].Compare(k) == 0 {
+		if leaf.compare(leaf.keys[i], k) == 0 {
 			break
 		}
 	}

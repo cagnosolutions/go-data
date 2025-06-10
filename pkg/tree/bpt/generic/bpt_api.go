@@ -1,7 +1,7 @@
 package generic
 
 // NewTree initializes a new tree
-func NewTree[K Key, V any]() (*BPTree[K, V], error) {
+func NewTree[K Key, V any](compare func(a, b K) int) (*BPTree[K, V], error) {
 	bpt := new(BPTree[K, V])
 	return bpt, nil
 }

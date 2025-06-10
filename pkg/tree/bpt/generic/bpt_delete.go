@@ -86,7 +86,7 @@ func removeEntryFromNode[K Key, V any](n *node[K, V], k K, pointer unsafe.Pointe
 
 	// remove the Key and shift the other keys accordingly
 	var i, numPointers int
-	for n.keys[i].Compare(k) != 0 {
+	for n.compare(n.keys[i], k) != 0 {
 		i++
 	}
 	for i++; i < n.numKeys; i++ { // was for i+=1;

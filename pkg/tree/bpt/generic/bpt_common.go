@@ -5,9 +5,25 @@ import (
 	"unsafe"
 )
 
+//type Key interface {
+//	Compare(that Key) int
+//}
+
 type Key interface {
-	Compare(that Key) int
+	~string |
+		//	~[]byte | ~[8]byte | ~[16]byte |
+		~uint32 | ~uint64 | ~int32 | ~int64
 }
+
+//func Compare[T Key](a, b T) int {
+//	if a < b {
+//		return -1
+//	}
+//	if a > b {
+//		return 1
+//	}
+//	return 0
+//}
 
 // record represents a record pointed to by a leaf node
 type record[K Key, V any] struct {
@@ -19,7 +35,7 @@ func (r *record[K, V]) Size() int64 {
 	return int64(unsafe.Sizeof(r.Key) + unsafe.Sizeof(r.Value))
 }
 
-const M = 5 // 128
+const M = 32 // 128
 
 // order is the tree's order
 const order = M // 128
@@ -27,6 +43,7 @@ const order = M // 128
 // node represents a node of the BPTree
 type node[K Key, V any] struct {
 	numKeys int
+	compare func(a, b K) int
 	keys    [order - 1]K
 	ptrs    [order]unsafe.Pointer
 	parent  *node[K, V]
@@ -123,7 +140,7 @@ func (t *BPTree[K, V]) Size() int64 {
 func (n *node[K, V]) hasKey(k K) bool {
 	if n.isLeaf {
 		for i := 0; i < n.numKeys; i++ {
-			if k.Compare(n.keys[i]) == 0 {
+			if n.compare(k, n.keys[i]) == 0 {
 				return true
 			}
 		}
@@ -136,7 +153,7 @@ func (n *node[K, V]) closest(k K) (*record[K, V], bool) {
 	if n.isLeaf {
 		i := 0
 		for ; i < n.numKeys; i++ {
-			if k.Compare(n.keys[i]) == -1 {
+			if n.compare(k, n.keys[i]) == -1 {
 				break
 			}
 		}
@@ -152,7 +169,7 @@ func (n *node[K, V]) closest(k K) (*record[K, V], bool) {
 func (n *node[K, V]) record(k K) (*record[K, V], bool) {
 	if n.isLeaf {
 		for i := 0; i < n.numKeys; i++ {
-			if k.Compare(n.keys[i]) == 0 {
+			if n.compare(k, n.keys[i]) == 0 {
 				return (*record[K, V])(n.ptrs[i]), true
 			}
 		}

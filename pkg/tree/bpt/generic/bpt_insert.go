@@ -83,7 +83,7 @@ func startNewTree[K Key, V any](k K, ptr *record[K, V]) *node[K, V] {
 // corresponding Key into a leaf.
 func insertIntoLeaf[K Key, V any](leaf *node[K, V], k K, ptr *record[K, V]) /* *node */ {
 	var i, insertionPoint int
-	for insertionPoint < leaf.numKeys && leaf.keys[insertionPoint].Compare(k) < 0 {
+	for insertionPoint < leaf.numKeys && leaf.compare(leaf.keys[insertionPoint], k) < 0 {
 		insertionPoint++
 	}
 	for i = leaf.numKeys; i > insertionPoint; i-- {
@@ -103,7 +103,7 @@ func insertIntoLeafAfterSplitting[K Key, V any](root, leaf *node[K, V], k K, poi
 
 	// perform linear search to find index to insert new record
 	var insertionIndex int
-	for insertionIndex < order-1 && leaf.keys[insertionIndex].Compare(k) < 0 {
+	for insertionIndex < order-1 && leaf.compare(leaf.keys[insertionIndex], k) < 0 {
 		insertionIndex++
 	}
 

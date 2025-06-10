@@ -14,16 +14,6 @@ const (
 
 type KEY uint32
 
-func (k KEY) Compare(that Key) int {
-	if k < that.(KEY) {
-		return -1
-	}
-	if k > that.(KEY) {
-		return +1
-	}
-	return 0
-}
-
 func TestBPTree_Print(t *testing.T) {
 
 	tree := new(BPTree[KEY, string])
